@@ -1,0 +1,128 @@
+@use '../abstracts/mixins' as *;
+
+// .steps — wizard progress indicator: rail + filled progress + textual label.
+// Используется в Welcome / Pair / Alice setup wizards.
+.steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+
+  &__rail {
+    flex: 1;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+    position: relative;
+  }
+
+  &__fill {
+    height: 100%;
+    background: var(--gradient-brand);
+    border-radius: inherit;
+    transition: width var(--dur-medium) var(--ease-out);
+    box-shadow: 0 0 16px rgba(var(--color-brand-violet-rgb), 0.5);
+  }
+
+  &__dots {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.16);
+    transition: all var(--dur-fast) var(--ease-out);
+
+    &--active {
+      width: 22px;
+      border-radius: var(--radius-pill);
+      background: var(--gradient-brand);
+      box-shadow: 0 0 10px rgba(var(--color-brand-violet-rgb), 0.6);
+    }
+
+    &--done {
+      background: var(--color-brand-violet);
+    }
+  }
+
+  &__label {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-micro);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-micro);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// .step-card — один шаг wizard: kicker + title + lead + body + actions.
+// Vertical rhythm построен на --space-* для одинакового breathing на всех wizard'ах.
+.step-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+
+  &__head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  &__kicker {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-micro);
+    color: var(--color-brand-violet);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-micro);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__title {
+    font-family: var(--font-family-display);
+    font-size: var(--font-size-display-2);
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-display);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  &__lead {
+    font-size: var(--font-size-h3);
+    line-height: var(--leading-relaxed);
+    color: var(--color-text-secondary);
+    max-width: 64ch;
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+
+    @media (max-width: 720px) {
+      flex-direction: column-reverse;
+      gap: 8px;
+      :deep(.btn),
+      :deep(.base-button) {
+        width: 100%;
+      }
+    }
+  }
+}
