@@ -1,0 +1,205 @@
+{
+  "name": "@smarthome/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist-electron/main/index.js",
+  "description": "SmartHome Hub — local-first Electron desktop client",
+  "author": {
+    "name": "SmartHome Hub",
+    "email": "noreply@smarthome.local"
+  },
+  "homepage": "https://github.com/smarthome/hub",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "icons": "tsx scripts/build-icons.ts",
+    "dist": "pnpm icons && pnpm build && electron-builder --publish never",
+    "dist:win": "pnpm icons && pnpm build && electron-builder --win --publish never",
+    "dist:win:portable": "pnpm icons && pnpm build && electron-builder --win portable --publish never",
+    "dist:win:installer": "pnpm icons && pnpm build && electron-builder --win nsis --publish never",
+    "dist:mac": "pnpm icons && pnpm build && electron-builder --mac --publish never",
+    "dist:linux": "pnpm icons && pnpm build && electron-builder --linux --publish never",
+    "package": "pnpm dist",
+    "package:dir": "pnpm icons && pnpm build && electron-builder --dir",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint --ext .ts,.vue src electron",
+    "clean": "rimraf dist dist-electron release",
+    "postinstall": "electron-builder install-app-deps",
+    "rebuild": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "@fontsource-variable/manrope": "^5.2.8",
+    "axios": "^1.7.7",
+    "better-sqlite3": "^11.10.0",
+    "bonjour-service": "^1.2.1",
+    "electron-log": "^5.2.0",
+    "electron-store": "^8.2.0",
+    "gsap": "^3.12.5",
+    "mqtt": "^5.10.1",
+    "node-ssdp": "^4.0.1",
+    "p-limit": "^7.3.0",
+    "p-retry": "^8.0.0",
+    "pinia": "^2.2.4",
+    "three": "^0.184.0",
+    "tuyapi": "^7.7.1",
+    "vue": "^3.5.12",
+    "vue-router": "^4.4.5",
+    "ws": "^8.18.0",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@smarthome/shared": "workspace:*",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.0",
+    "@types/node-ssdp": "^4.0.5",
+    "@types/three": "^0.184.0",
+    "@types/ws": "^8.5.13",
+    "@types/xml2js": "^0.4.14",
+    "@vitejs/plugin-vue": "^5.1.4",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^2.1.8",
+    "png2icons": "^2.0.1",
+    "rimraf": "^6.0.1",
+    "sass": "^1.80.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.10",
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vue-tsc": "^2.1.10"
+  },
+  "build": {
+    "appId": "com.smarthome.hub",
+    "productName": "SmartHome Hub",
+    "copyright": "© 2026 ${author}",
+    "directories": {
+      "output": "release/${version}",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist",
+      "dist-electron",
+      "build/tray.png",
+      "build/tray@2x.png",
+      "build/tray-16.png",
+      "build/icon.png",
+      "build/icons/**/*.png",
+      "!**/*.map",
+      "!**/*.d.ts",
+      "!**/{.eslintrc,.prettierrc,tsconfig*}"
+    ],
+    "asarUnpack": [
+      "**/*.{node,dll}",
+      "build/tray*.png",
+      "build/icon.png",
+      "build/icons/**"
+    ],
+    "compression": "maximum",
+    "removePackageScripts": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "verifyUpdateCodeSignature": false,
+      "requestedExecutionLevel": "asInvoker",
+      "signtoolOptions": {
+        "publisherName": "SmartHome Hub"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "shortcutName": "SmartHome Hub",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "menuCategory": false,
+      "runAfterFinish": true,
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}",
+      "requestExecutionLevel": "user",
+      "unicode": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.utilities",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "${productName} ${version}",
+      "icon": "build/icon.icns",
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icons",
+      "category": "Utility",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "synopsis": "Локальный desktop hub для умного дома и Алисы",
+      "description": "SmartHome Hub — локальный (без облака) hub для управления Wi-Fi устройствами умного дома и колонкой Алисы.",
+      "maintainer": "SmartHome Hub <noreply@smarthome.local>",
+      "vendor": "SmartHome Hub"
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
+  }
+}

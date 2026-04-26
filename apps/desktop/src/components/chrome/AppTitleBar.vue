@@ -1,0 +1,497 @@
+<template>
+  <header
+    class="title-bar"
+    :class="{ 'title-bar--blurred': !windowFocused, 'title-bar--maximized': isMaximized }"
+  >
+    <!-- Lead: hamburger + brand -->
+    <div class="title-bar__lead">
+      <button
+        v-if="bp.isMobile.value"
+        class="title-bar__burger"
+        :class="{ 'is-open': ui.mobileDrawerOpen }"
+        type="button"
+        aria-label="Меню"
+        @click="ui.toggleMobileDrawer()"
+      >
+        <span class="title-bar__burger-line" />
+        <span class="title-bar__burger-line" />
+        <span class="title-bar__burger-line" />
+      </button>
+
+      <div class="title-bar__brand">
+        <BaseIcon name="logo" :size="24" class="title-bar__mark" aria-label="SmartHome" />
+        <span class="title-bar__wordmark">
+          <span class="title-bar__wordmark-name">SmartHome</span>
+          <span class="title-bar__wordmark-suffix">Hub</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Drag-area + live-status pill по центру -->
+    <div class="title-bar__center">
+      <Transition name="title-pill" mode="out-in">
+        <div
+          :key="hubState"
+          class="title-bar__status"
+          :class="`title-bar__status--${hubState}`"
+          data-tour="titlebar-status"
+        >
+          <span class="title-bar__status-dot" />
+          <span class="title-bar__status-label">{{ statusCopy.label }}</span>
+          <span class="title-bar__status-sep" aria-hidden="true">·</span>
+          <span class="title-bar__status-detail">{{ statusCopy.detail }}</span>
+        </div>
+      </Transition>
+    </div>
+
+    <!-- Window controls -->
+    <div class="title-bar__controls">
+      <button class="title-bar__btn" aria-label="Свернуть окно" type="button" @click="minimize">
+        <BaseIcon name="window-minimize" :size="11" />
+      </button>
+      <button
+        class="title-bar__btn"
+        :aria-label="isMaximized ? 'Восстановить размер' : 'Развернуть на весь экран'"
+        type="button"
+        @click="toggleMaximize"
+      >
+        <BaseIcon :name="isMaximized ? 'window-restore' : 'window-maximize'" :size="11" />
+      </button>
+      <button
+        class="title-bar__btn title-bar__btn--close"
+        aria-label="Закрыть"
+        type="button"
+        @click="closeWindow"
+      >
+        <BaseIcon name="close" :size="11" />
+      </button>
+    </div>
+  </header>
+</template>
+
+<script setup lang="ts">
+// Custom chrome для frameless-окна (BrowserWindow `frame: false`).
+
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { gsap } from 'gsap';
+import { useDevicesStore } from '@/stores/devices';
+import { useYandexStationStore } from '@/stores/yandexStation';
+import { useUiStore } from '@/stores/ui';
+import { useBreakpoint } from '@/composables/useBreakpoint';
+import BaseIcon from '@/components/base/BaseIcon.vue';
+
+const devices = useDevicesStore();
+const station = useYandexStationStore();
+const ui = useUiStore();
+const bp = useBreakpoint();
+
+const isMaximized = ref(false);
+const windowFocused = ref(true);
+
+// Window-controls лежат на `smarthome.window`. `window.chrome` занят DevTools API
+// и contextBridge туда не пишет.
+const minimize = (): Promise<void> => window.smarthome.window.minimize();
+const toggleMaximize = async (): Promise<void> => {
+  await window.smarthome.window.toggleMaximize();
+  isMaximized.value = !isMaximized.value;
+};
+const closeWindow = (): Promise<void> => window.smarthome.window.close();
+
+// ---- Live hub status ------------------------------------------------------
+
+type HubState = 'online' | 'syncing' | 'offline';
+
+const hubState = computed<HubState>(() => {
+  if (devices.isLoading) return 'syncing';
+  return 'online';
+});
+
+const aliceLabel = computed(() => {
+  const c = station.status?.connection;
+  if (c === 'connected') return 'Алиса в сети';
+  if (c === 'connecting' || c === 'authenticating') return 'Алиса подключается';
+  return null;
+});
+
+const statusCopy = computed(() => {
+  if (hubState.value === 'syncing') {
+    return { label: 'Синхронизация', detail: 'Опрашиваем устройства' };
+  }
+  const total = devices.devices.length;
+  const onlineN = devices.onlineCount;
+  const offlineN = devices.offlineCount;
+
+  let detail: string;
+  if (total === 0) detail = aliceLabel.value ?? 'Готов к подключению устройств';
+  else if (offlineN === 0) detail = `${onlineN} ${pluralizeDevice(onlineN)} в сети`;
+  else detail = `${onlineN} в сети · ${offlineN} оффлайн`;
+
+  return { label: 'Хаб онлайн', detail };
+});
+
+function pluralizeDevice(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m100 >= 11 && m100 <= 14) return 'устройств';
+  if (m10 === 1) return 'устройство';
+  if (m10 >= 2 && m10 <= 4) return 'устройства';
+  return 'устройств';
+}
+
+// ---- Window focus listeners ----------------------------------------------
+
+function onFocus(): void {
+  windowFocused.value = true;
+}
+function onBlur(): void {
+  windowFocused.value = false;
+}
+
+onMounted(() => {
+  if (!ui.reduceMotion) {
+    gsap.from('.title-bar__mark', {
+      scale: 0.5,
+      opacity: 0,
+      duration: 0.4,
+      ease: 'power2.out',
+    });
+    gsap.from('.title-bar__wordmark > *', {
+      x: -6,
+      opacity: 0,
+      stagger: 0.05,
+      duration: 0.32,
+      delay: 0.08,
+    });
+  }
+
+  window.addEventListener('focus', onFocus);
+  window.addEventListener('blur', onBlur);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', onFocus);
+  window.removeEventListener('blur', onBlur);
+});
+</script>
+
+<style scoped lang="scss">
+@use '@/styles/abstracts/mixins' as *;
+
+.title-bar {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: stretch;
+  height: var(--titlebar-height);
+  background: rgba(15, 15, 26, 0.78);
+  backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturation));
+  // Border-bottom не нужен — сепаратор строится разницей яркости + blur.
+  -webkit-app-region: drag;
+  z-index: var(--z-sticky);
+  transition: background 320ms var(--ease-out);
+
+  // Window blur — bg бледнее.
+  &--blurred {
+    background: rgba(15, 15, 26, 0.55);
+    .title-bar__wordmark-name {
+      color: var(--color-text-secondary);
+    }
+    .title-bar__status {
+      opacity: 0.55;
+    }
+  }
+
+  // ---- Lead: hamburger + brand --------------------------------------------
+  &__lead {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 4px 0 16px;
+    -webkit-app-region: no-drag;
+  }
+
+  // Hamburger (mobile only)
+  &__burger {
+    width: 36px;
+    height: 32px;
+    margin-right: 4px;
+    border: 0;
+    background: transparent;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    transition: color 160ms var(--ease-out);
+
+    &:hover {
+      color: var(--color-text-primary);
+    }
+
+    &-line {
+      width: 16px;
+      height: 1.4px;
+      border-radius: 1px;
+      background: currentColor;
+      transform-origin: center;
+      transition:
+        transform 280ms var(--ease-out),
+        opacity 180ms var(--ease-out);
+    }
+
+    &.is-open {
+      .title-bar__burger-line:nth-child(1) {
+        transform: translateY(5.4px) rotate(45deg);
+      }
+      .title-bar__burger-line:nth-child(2) {
+        opacity: 0;
+        transform: scaleX(0);
+      }
+      .title-bar__burger-line:nth-child(3) {
+        transform: translateY(-5.4px) rotate(-45deg);
+      }
+    }
+  }
+
+  // Brand: mark + wordmark
+  &__brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__mark {
+    flex-shrink: 0;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  &__wordmark {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--font-family-display);
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    line-height: 1;
+    user-select: none;
+  }
+
+  &__wordmark-name {
+    color: var(--color-text-primary);
+    transition: color 320ms var(--ease-out);
+  }
+  &__wordmark-suffix {
+    color: var(--color-text-secondary);
+    font-weight: 400;
+  }
+
+  // ---- Center: status pill ------------------------------------------------
+  &__center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 0;
+    padding: 0 14px;
+  }
+
+  &__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 24px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    -webkit-app-region: no-drag;
+    transition:
+      background 200ms var(--ease-out),
+      opacity 240ms var(--ease-out);
+    max-width: 360px;
+    min-width: 0;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    &-dot {
+      flex-shrink: 0;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    &-label {
+      font-weight: 600;
+      letter-spacing: 0.005em;
+      flex-shrink: 0;
+      color: var(--color-text-primary);
+    }
+
+    &-sep {
+      color: var(--color-text-muted);
+      flex-shrink: 0;
+      margin: 0 -2px;
+    }
+
+    &-detail {
+      color: var(--color-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    &--online {
+      color: var(--color-success);
+    }
+    &--syncing {
+      color: var(--color-brand-purple);
+      .title-bar__status-dot {
+        animation: titleBarDotPulse 1.4s ease-in-out infinite;
+      }
+    }
+    &--offline {
+      color: var(--color-danger);
+    }
+  }
+
+  // ---- Window controls (Windows-стиль) ------------------------------------
+  &__controls {
+    display: flex;
+    align-items: stretch;
+    -webkit-app-region: no-drag;
+  }
+
+  &__btn {
+    width: 46px;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      background 140ms linear,
+      color 140ms linear;
+
+    svg {
+      width: 11px;
+      height: 11px;
+    }
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--color-text-primary);
+    }
+
+    &:active {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    &:focus-visible {
+      outline: none;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    // Close: 8px скругление под Windows 11 corner radius (иначе hover-fill
+    // выпирает за угол окна).
+    &--close {
+      border-top-right-radius: 8px;
+
+      &:hover {
+        background: var(--color-danger);
+        color: var(--color-text-primary);
+      }
+      &:active {
+        background: color-mix(in srgb, var(--color-danger) 80%, #000 20%);
+      }
+    }
+  }
+
+  // Maximized: окно без скругления → close возвращаем к прямому углу.
+  &--maximized &__btn--close {
+    border-top-right-radius: 0;
+  }
+}
+
+// Pill transition (быстрая, без spring).
+.title-pill-enter-active,
+.title-pill-leave-active {
+  transition: opacity 180ms var(--ease-out);
+}
+.title-pill-enter-from,
+.title-pill-leave-to {
+  opacity: 0;
+}
+
+@keyframes titleBarDotPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+// Reduce-motion: гасим pulse.
+.app--reduce-motion .title-bar {
+  &__status-dot {
+    animation: none !important;
+  }
+}
+
+// Mobile.
+@media (max-width: 720px) {
+  .title-bar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+
+    &__lead {
+      padding-left: 8px;
+      gap: 0;
+    }
+
+    // Wordmark «SmartHome Hub» съедал бы место у status-pill.
+    &__wordmark {
+      display: none;
+    }
+
+    &__center {
+      padding: 0 8px;
+    }
+
+    &__status {
+      padding: 0 10px;
+      max-width: none;
+      // Detail длиннее label'а — режем его.
+      &-sep,
+      &-detail {
+        display: none;
+      }
+    }
+
+    &__btn {
+      width: 40px;
+    }
+  }
+}
+
+// Tablet sm: detail status-pill'а обрезается, label остаётся.
+@media (min-width: 721px) and (max-width: 900px) {
+  .title-bar__status {
+    max-width: 240px;
+  }
+}
+</style>

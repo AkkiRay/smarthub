@@ -1,0 +1,77 @@
+// .section-deck / .section — presentation-mode со scroll-snap.
+// Опционально: списки/формы остаются в обычном flow.
+
+.section-deck {
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: var(--content-pad-y);
+
+  // Touch / reduced-motion: snap ощущается «прерывистым» — выключаем/смягчаем.
+  @media (prefers-reduced-motion: reduce) {
+    scroll-snap-type: none;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    scroll-snap-type: proximity;
+  }
+}
+
+.section {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  // svh учитывает mobile address-bar; vh бы прыгал при collapse браузера.
+  min-height: calc(100svh - var(--titlebar-height) - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 22px);
+  padding-block: clamp(8px, 1.6vw, 18px);
+
+  // auto: короткие блоки не висят в полупустом экране (floor 60svh).
+  &--auto {
+    min-height: max(60svh, 480px);
+    scroll-snap-align: start;
+  }
+
+  &--full {
+    min-height: calc(100svh - var(--titlebar-height) - 24px);
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  &__eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  &__line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--color-border-soft) 0%, transparent 100%);
+  }
+
+  &__link {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    transition: color 200ms var(--ease-out);
+    white-space: nowrap;
+
+    &:hover {
+      color: var(--color-text-primary);
+    }
+  }
+
+  &__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--content-gap);
+  }
+}

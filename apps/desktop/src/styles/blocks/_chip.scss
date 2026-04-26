@@ -1,0 +1,56 @@
+// .chip — статус-индикатор. Точка только через явный .chip__dot
+// (раньше дублировалась через ::before и выходило две).
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+
+  &__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  // Variants: tinted bg ~14% от status-token, текст — сам token. RGB-triplet
+  // обязателен: rgba() не принимает hex-CSS-переменную напрямую.
+
+  &--online {
+    background: rgba(var(--color-success-rgb), 0.14);
+    color: var(--color-brand-mint);
+    .chip__dot {
+      box-shadow: 0 0 0 4px rgba(var(--color-brand-mint-rgb), 0.18);
+    }
+  }
+
+  &--offline {
+    background: rgba(var(--color-danger-rgb), 0.14);
+    color: var(--color-danger);
+  }
+
+  &--ready {
+    background: rgba(var(--color-brand-cyan-rgb), 0.14);
+    color: var(--color-brand-cyan);
+  }
+
+  &--warn {
+    background: rgba(var(--color-warning-rgb), 0.14);
+    color: var(--color-warning);
+  }
+
+  &--brand {
+    background: var(--gradient-brand);
+    color: var(--color-text-primary);
+  }
+}

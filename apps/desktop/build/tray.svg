@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Tray-вариант лого: monochrome silhouette + accent dot. Без фона —
+       прозрачность даёт нативную интеграцию с панелью задач (Windows light
+       theme tray, macOS menubar, KDE/Gnome). Размеры 32×32 — генератор
+       сделает 16/24/32/48. -->
+  <path
+    d="M16 4 L27 13 L27 24 Q27 26 25 26 L20 26 L20 19 Q20 17 18 17 L14 17 Q12 17 12 19 L12 26 L7 26 Q5 26 5 24 L5 13 Z"
+    fill="#FFFFFF"
+  />
+  <circle cx="16" cy="11" r="2" fill="#A961FF"/>
+</svg>

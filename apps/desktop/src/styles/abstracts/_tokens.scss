@@ -1,0 +1,277 @@
+// :root = тема alice-dark. alice-midnight переопределяет background-палитру и
+// glass-tint ниже. Brand-акценты общие для обеих тем.
+
+:root {
+  // ---- Background ----
+  --color-bg-base: #0f0f1a;
+  --color-bg-surface: #16172a;
+  --color-bg-elevated: #1f2138;
+  --color-bg-overlay: rgba(15, 15, 26, 0.72);
+
+  // ---- Text ----
+  --color-text-primary: #f5f6ff;
+  --color-text-secondary: #a8aac4;
+  --color-text-muted: #6b6e8a;
+
+  // ---- Brand (Alice palette) ----
+  --color-brand-violet: #7c5bff; // primary
+  --color-brand-purple: #b85dff; // active-state accent
+  --color-brand-pink: #ff5b9e;
+  --color-brand-blue: #5b8dff;
+  --color-brand-cyan: #5bd8ff;
+  --color-brand-amber: #ffb866;
+  --color-brand-mint: #5be3ad;
+  --color-brand-coral: #ff6e66;
+  --color-brand-orange: #ff8a4d;
+
+  // RGB-triplets для `rgba(var(--color), a)` — hex в rgba() не работает.
+  --color-brand-violet-rgb: 124, 91, 255;
+  --color-brand-purple-rgb: 184, 93, 255;
+  --color-brand-pink-rgb: 255, 91, 158;
+  --color-brand-blue-rgb: 91, 141, 255;
+  --color-brand-cyan-rgb: 91, 216, 255;
+  --color-brand-amber-rgb: 255, 184, 102;
+  --color-brand-mint-rgb: 91, 227, 173;
+  --color-brand-coral-rgb: 255, 110, 102;
+  --color-brand-orange-rgb: 255, 138, 77;
+
+  // Brand-gradient: violet → purple → pink → amber.
+  --gradient-brand: linear-gradient(
+    135deg,
+    #7c5bff 0%,
+    #b85dff 32%,
+    #ff5b9e 64%,
+    #ffb866 100%
+  );
+  --gradient-brand-soft: linear-gradient(
+    135deg,
+    rgba(124, 91, 255, 0.18) 0%,
+    rgba(184, 93, 255, 0.14) 32%,
+    rgba(255, 91, 158, 0.16) 64%,
+    rgba(255, 184, 102, 0.16) 100%
+  );
+  --gradient-aura:
+    radial-gradient(60% 50% at 18% 8%, rgba(124, 91, 255, 0.55) 0%, transparent 65%),
+    radial-gradient(48% 50% at 82% 0%, rgba(255, 91, 158, 0.42) 0%, transparent 62%),
+    radial-gradient(60% 55% at 100% 90%, rgba(255, 184, 102, 0.32) 0%, transparent 68%),
+    radial-gradient(70% 60% at 0% 100%, rgba(91, 141, 255, 0.34) 0%, transparent 70%);
+
+  // ---- Status ----
+  --color-success: #2dd89a;
+  --color-warning: #ffb547;
+  --color-danger: #ff5577;
+  --color-success-rgb: 45, 216, 154;
+  --color-warning-rgb: 255, 181, 71;
+  --color-danger-rgb: 255, 85, 119;
+
+  // ---- Borders ----
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-soft: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+
+  // ---- Glass-морфизм ----
+  // Single source of truth для frosted glass — крутить тему здесь, не в блоках.
+  --glass-tint: 26, 27, 46;
+  --glass-alpha-soft: 0.42; // hero, ambient-карточки
+  --glass-alpha-medium: 0.62; // sidebar, обычные карточки
+  --glass-alpha-strong: 0.82; // модалки, popover
+  --glass-blur-soft: 18px;
+  --glass-blur-medium: 24px;
+  --glass-blur-strong: 32px;
+  --glass-saturation: 150%;
+  --glass-highlight: rgba(255, 255, 255, 0.1); // top inset bevel
+  --glass-edge: rgba(255, 255, 255, 0.08); // outer border
+  --glass-shine: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 48%);
+  --glass-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>");
+  --glass-noise-opacity: 0.04;
+
+  // ---- Radius / Spacing ----
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  // ---- Motion ----
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  // ---- Z-index scale ----
+  // 9 семантических уровней по 10. Локальный stacking (0/1/2) внутри компонента
+  // живёт в своём context, шкалу не трогает.
+  --z-deep: -1; // фоновые декорации
+  --z-base: 0; // flow
+  --z-raised: 1; // hero, panel
+  --z-sticky: 10; // titlebar
+  --z-drawer: 20; // mobile sidebar drawer
+  --z-backdrop: 30; // drawer backdrop
+  --z-modal: 40; // BaseModal
+  --z-popover: 50; // dropdown / popover
+  --z-toast: 60; // toaster
+  --z-tour: 70; // onboarding tour
+
+  // ---- Layout ----
+  --titlebar-height: 46px;
+  --sidebar-width: 240px;
+  --sidebar-width-compact: 72px;
+
+  // Fluid content padding — clamp под viewport.
+  --content-pad-x: clamp(16px, 2.4vw, 56px);
+  --content-pad-y: clamp(16px, 1.8vw, 32px);
+  --content-gap: clamp(14px, 1.4vw, 24px);
+  --grid-gap: clamp(10px, 1vw, 16px);
+
+  --content-max-prose: 920px; // ширина для статей/описаний
+  --content-max: 1680px; // hard cap view-ширины (4К + 4-col bento)
+
+  // Tap-target: 40px desktop, 44px coarse pointer (Apple HIG).
+  --tap-min: 40px;
+  --section-snap-pad: clamp(16px, 3vw, 40px);
+
+  --bento-tile-min: 240px;
+  --bento-tile-pad: clamp(16px, 1.6vw, 22px);
+  --bento-radius: clamp(18px, 1.4vw, 26px);
+
+  // Breakpoints: <720 компакт, 720-1100 гибрид, >1100 full.
+
+  // ---- Typography ----
+  // Variable-fonts грузятся через @fontsource-variable в main.ts.
+  --font-family-sans:
+    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-family-display:
+    'Manrope Variable', 'Manrope', 'Inter Variable', 'Inter', -apple-system, sans-serif;
+  --font-family-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  // Fluid type-scale через clamp.
+  --font-size-display: clamp(26px, 2.2vw + 12px, 44px);
+  --font-size-h1: clamp(20px, 1vw + 14px, 28px);
+  --font-size-h2: clamp(15px, 0.4vw + 13px, 19px);
+  --font-size-body: clamp(13.5px, 0.2vw + 12px, 14.5px);
+  --font-size-small: clamp(12px, 0.1vw + 11.5px, 13px);
+  --font-size-micro: 11px;
+
+  --tracking-display: -0.025em;
+  --tracking-h1: -0.018em;
+  --tracking-h2: -0.008em;
+  --tracking-body: -0.003em;
+  --tracking-micro: 0.06em;
+
+  // Inter OpenType features: contextual nums, single-storey a/g, open aperture.
+  --font-features-sans: 'cv11', 'ss01', 'ss03', 'cv09', 'kern', 'liga', 'calt';
+  --font-features-display: 'ss02', 'kern', 'liga', 'calt';
+  --font-features-numeric: 'tnum', 'lnum';
+
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-elev: 0 18px 48px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 32px rgba(var(--color-brand-violet-rgb), 0.45);
+
+  // ---- Aura blobs ----
+  // BackgroundAura читает эти токены, темы переопределяют под себя.
+  --aura-blob-1: rgba(var(--color-brand-violet-rgb), 0.9); // top-left
+  --aura-blob-2: rgba(var(--color-brand-pink-rgb), 0.78); // top-right
+  --aura-blob-3: rgba(var(--color-brand-amber-rgb), 0.55); // bottom-right
+
+  // ---- Sidebar surface ----
+  // Тема свапает фон одной строкой через `--sidebar-surface`. База `--color-bg-sidebar`
+  // темнее чем `--color-bg-base` — рейл «садится» под контент.
+  --color-bg-sidebar: #07080f;
+  --sidebar-surface:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035) 0%,
+      rgba(255, 255, 255, 0) 38%
+    ),
+    radial-gradient(
+      110% 50% at 0% 0%,
+      rgba(var(--color-brand-violet-rgb), 0.1) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      85% 40% at 100% 100%,
+      rgba(var(--color-brand-pink-rgb), 0.07) 0%,
+      transparent 70%
+    ),
+    var(--color-bg-sidebar);
+  --sidebar-edge: var(--color-border-subtle);
+}
+
+// alice-midnight: глубокий blue-black tint поверх brand-палитры.
+// data-theme крутится на <body> через ui store.
+[data-theme='alice-midnight'] {
+  --color-bg-base: #03040c;
+  --color-bg-surface: #08091a;
+  --color-bg-elevated: #10122a;
+  --color-bg-overlay: rgba(3, 4, 12, 0.82);
+
+  --color-text-primary: #f8f9ff;
+  --color-text-secondary: #a4a8cf;
+  --color-text-muted: #5d608a;
+
+  --color-border-subtle: rgba(180, 200, 255, 0.05);
+  --color-border-soft: rgba(180, 200, 255, 0.08);
+  --color-border-strong: rgba(180, 200, 255, 0.16);
+
+  // Glass-tint в холодный синий.
+  --glass-tint: 10, 14, 36;
+  --glass-alpha-soft: 0.5;
+  --glass-alpha-medium: 0.72;
+  --glass-alpha-strong: 0.88;
+  --glass-edge: rgba(180, 200, 255, 0.07);
+  --glass-highlight: rgba(180, 200, 255, 0.08);
+
+  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.55);
+  --shadow-elev: 0 22px 56px rgba(0, 0, 0, 0.65);
+  --shadow-glow: 0 0 32px rgba(77, 127, 255, 0.45);
+
+  // Холодная аура: blue + violet + cyan вместо тёплой violet/pink/amber.
+  --aura-blob-1: rgba(50, 70, 220, 0.68);
+  --aura-blob-2: rgba(var(--color-brand-violet-rgb), 0.55);
+  --aura-blob-3: rgba(var(--color-brand-cyan-rgb), 0.5);
+
+  --color-bg-sidebar: #010108;
+  --sidebar-surface:
+    linear-gradient(
+      180deg,
+      rgba(255, 220, 200, 0.05) 0%,
+      rgba(255, 220, 200, 0) 42%
+    ),
+    radial-gradient(
+      120% 55% at 0% 0%,
+      rgba(var(--color-brand-violet-rgb), 0.16) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      90% 45% at 100% 100%,
+      rgba(var(--color-brand-amber-rgb), 0.1) 0%,
+      transparent 70%
+    ),
+    var(--color-bg-sidebar);
+  --sidebar-edge: rgba(255, 200, 180, 0.06);
+}
+
+// Coarse pointer (touch) — крупнее tap-targets, плотнее spacing.
+@media (hover: none) and (pointer: coarse) {
+  :root {
+    --tap-min: 44px;
+    --content-pad-x: clamp(12px, 4vw, 20px);
+    --content-pad-y: 16px;
+    --content-gap: 18px;
+    --grid-gap: 12px;
+    --bento-tile-min: 100%;
+  }
+}
+
+// Tablet: compact sidebar (icons only).
+@media (min-width: 721px) and (max-width: 1100px) {
+  :root {
+    --sidebar-width: 72px;
+  }
+}
+
+// Mobile: sidebar — drawer, контент full-width.
+@media (max-width: 720px) {
+  :root {
+    --sidebar-width: 0px;
+  }
+}

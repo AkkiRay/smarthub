@@ -1,0 +1,30 @@
+@use '../abstracts/mixins' as *;
+
+// Базовый frosted-glass: noise + highlight.
+.glass {
+  @include glass();
+  @include glass-noise();
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+
+  &--strong {
+    @include glass(var(--glass-alpha-strong), var(--glass-blur-strong));
+    @include glass-noise();
+  }
+
+  &--soft {
+    @include glass(var(--glass-alpha-soft), var(--glass-blur-soft));
+    @include glass-noise();
+  }
+
+  // Brand-glow вариант для hero/welcome.
+  &--brand {
+    @include glass(var(--glass-alpha-medium), var(--glass-blur-strong));
+    @include glass-noise();
+    background:
+      var(--glass-shine),
+      radial-gradient(120% 100% at 0% 0%, rgba(var(--color-brand-violet-rgb), 0.32) 0%, transparent 60%),
+      radial-gradient(120% 100% at 100% 100%, rgba(var(--color-brand-pink-rgb), 0.22) 0%, transparent 60%),
+      rgba(var(--glass-tint), var(--glass-alpha-medium));
+  }
+}

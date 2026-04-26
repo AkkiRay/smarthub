@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- «i» в круге. -->
+  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="12" cy="8" r="1" fill="currentColor"/>
+  <path d="M12 11v6"
+        stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+</svg>

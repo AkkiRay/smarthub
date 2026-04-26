@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="logo-brand" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C5BFF"/>
+      <stop offset="35%" stop-color="#B85DFF"/>
+      <stop offset="65%" stop-color="#FF5B9E"/>
+      <stop offset="100%" stop-color="#FFB866"/>
+    </linearGradient>
+    <radialGradient id="logo-glow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#logo-brand)"/>
+  <rect width="512" height="512" rx="112" fill="url(#logo-glow)"/>
+  <path
+    d="M256 116 L408 240 L408 388 Q408 408 388 408 L324 408 L324 312 Q324 296 308 296 L204 296 Q188 296 188 312 L188 408 L124 408 Q104 408 104 388 L104 240 Z"
+    fill="#FFFFFF"
+    fill-opacity="0.96"
+  />
+  <circle cx="256" cy="226" r="14" fill="#5BD8FF"/>
+  <circle cx="256" cy="226" r="28" fill="none" stroke="#5BD8FF" stroke-width="3" stroke-opacity="0.5"/>
+</svg>

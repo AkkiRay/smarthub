@@ -1,0 +1,31 @@
+// .bento-grid — container queries вместо media: корректно работает в drawer/split-screen.
+
+.bento-grid {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--bento-tile-min)), 1fr));
+  grid-auto-rows: minmax(160px, auto);
+  gap: var(--grid-gap);
+  width: 100%;
+
+  // 4-колоночная фиксированная сетка для предсказуемого span-2/span-3.
+  @container (min-width: 960px) {
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: minmax(180px, auto);
+  }
+
+  @container (max-width: 480px) {
+    grid-auto-rows: minmax(140px, auto);
+  }
+
+  // dense: плитки перепрыгивают ряды, заполняя дыры.
+  &--dense {
+    grid-auto-flow: dense;
+  }
+
+  // hero: первая плитка занимает 2x2.
+  &--hero > :first-child {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+}

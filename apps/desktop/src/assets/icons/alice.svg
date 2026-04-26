@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Brand orb Алисы: круг + voice-эквалайзер посередине.
+       Читается одинаково хорошо в маленьком (16-22px) и крупном (44+) масштабе. -->
+  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M8 11v2M10.5 9.5v5M13.5 8.5v7M16 10.5v3"
+        stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+</svg>

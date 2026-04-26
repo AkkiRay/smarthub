@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Bluetooth glyph: ось 12,4 → 12,20 + два «крыла». -->
+  <path d="M8 8 L16 16 L12 20 L12 4 L16 8 L8 16"
+        stroke="currentColor" stroke-width="1.7"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

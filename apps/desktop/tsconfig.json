@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@main/*": ["electron/main/*"],
+      "@core/*": ["electron/core/*"],
+      "@smarthome/shared": ["../../packages/shared/src/index.ts"],
+      "@smarthome/shared/*": ["../../packages/shared/src/*"]
+    },
+    "types": ["node", "vite/client"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "src/**/*.d.ts",
+    "electron/**/*.ts",
+    "scripts/**/*.ts",
+    "../../packages/shared/src/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "dist-electron", "release"]
+}
