@@ -31,9 +31,6 @@ export const yandexIotModule: DriverModule = {
     docsUrl: 'https://yandex.ru/dev/dialogs/smart-home/',
   },
   async create({ settings }) {
-    // Активируется только после OAuth — auth даёт session cookies, без них iot API
-    // отвечает 401. Driver-registry повторно вызовет create() через reloadDriver(),
-    // когда юзер войдёт через Яндекс (см. SmartHomeHub.signIn).
     const auth = settings.get('quasarAuth');
     if (!auth?.musicToken) {
       log.info('DriverRegistry: yandex-iot disabled (no Yandex auth)');

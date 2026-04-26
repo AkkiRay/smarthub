@@ -561,11 +561,6 @@ onMounted(async () => {
   }
 });
 
-// Items-селектор намеренно сужен до `.scenes__grid > .scene` — yandex-сценарии
-// (`.scene--alice`) живут в отдельном grid'е и попадают в DOM async после
-// `station.fetchHome()`. Если включить их в mount-анимацию, GSAP `from(opacity:0)`
-// делает snapshot пустого набора, а появляющиеся позже карточки остаются с
-// «зависшей» opacity. Локальные scenes в DOM сразу — для них анимация безопасна.
 useViewMount({ scope: root.value, itemsSelector: '.scenes__grid > .scene' });
 </script>
 

@@ -62,15 +62,6 @@ export function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Capability value coercion
-//
-// `Capability.state.value` имеет тип `unknown`, потому что зависит от
-// `capability.type`. Эти helper'ы безопасно приводят к ожидаемому типу с
-// fallback'ом — driver не падает, если API внезапно прислал строку вместо
-// числа (типичная картина у Tuya / SwitchBot OEM-прошивок).
-// ──────────────────────────────────────────────────────────────────────────────
-
 /**
  * Привести unknown к boolean. Понимает строки `'true'`/`'on'`/`'1'` (cloud
  * API часто шлют именно их вместо настоящего bool) и числа (`0` → false,

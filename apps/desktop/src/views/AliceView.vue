@@ -315,7 +315,6 @@ import {
   type SegmentedOption,
 } from '@/components/base';
 
-
 const station = useYandexStationStore();
 const alice = useAliceStore();
 const speakerNav = useSpeakerNavigation();

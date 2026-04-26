@@ -558,9 +558,6 @@ const aliceStateLabel = computed(() => {
   }
 });
 
-// ---- Offline banner --------------------------------------------------------
-// Все кнопки ниже идут через glagol-WS (sendText). Если сессии нет — show
-// CTA в /alice вместо тоста-фейла на каждое нажатие.
 const isOnline = computed(() => connection.value === 'connected');
 const isConfigured = computed(() => !!station.status?.configured);
 

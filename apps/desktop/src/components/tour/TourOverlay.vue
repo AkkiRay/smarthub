@@ -465,9 +465,6 @@ const placement = computed<PlacementResult>(() => {
     return positionOnSide(best.side, v, tw, th);
   }
 
-  // 5. Inside «впритык» — даже если 32px-pad'а не хватило, пробуем влезть
-  //    с минимальным отступом 12px. Лучше чуть-чуть «обнять» края, чем потерять
-  //    halo и улететь в центр с пустым backdrop'ом.
   const TIGHT_PAD = 12;
   if (v.width >= tw + TIGHT_PAD * 2 && v.height >= th + TIGHT_PAD * 2) {
     return insidePlacement(v, tw, th, TIGHT_PAD);
@@ -614,9 +611,6 @@ watch(tooltipEl, (el) => {
   tooltipResizeObs.observe(el);
 });
 
-// Анимация входа триггерится по падающему фронту isMeasuring (когда target
-// измерен и halo+tooltip готовы показаться). До этого CSS держит opacity:0,
-// иначе GSAP бы fromTo'нул в позиции центра-фолбэка ещё до measure.
 watch(isMeasuring, async (now, prev) => {
   if (prev && !now) {
     await nextTick();

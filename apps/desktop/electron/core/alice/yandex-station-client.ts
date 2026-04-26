@@ -241,9 +241,6 @@ export function createYandexStationClient() {
           lastSeenAt: new Date().toISOString(),
           lastError: undefined,
         });
-        // Handshake-команда: если она падает — это критично, потому что станция
-        // могла принять WS, но reject'нула conversationToken (битый JWT). Логируем
-        // и эмитим event, чтобы видеть в журнале.
         void sendInternal(ws, target.token, { command: 'softwareVersion' }).catch((e) => {
           const msg = getErrorMessage(e);
           log.warn(`YandexStation: handshake softwareVersion failed: ${msg}`);
@@ -623,8 +620,6 @@ function extractInsights(msg: GlagolStateMessage & GlagolResponse): {
   }
   return out;
 }
-
-
 
 /** Сигнатура state-push'а для dedup'а (volume округлён до процентов). */
 function stateSignature(
