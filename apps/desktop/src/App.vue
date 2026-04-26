@@ -50,6 +50,7 @@ import { useDevicesStore } from '@/stores/devices';
 import { useUiStore } from '@/stores/ui';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useAliceStore } from '@/stores/alice';
+import { useTourStore } from '@/stores/tour';
 import { useBreakpoint } from '@/composables/useBreakpoint';
 import AppTitleBar from '@/components/chrome/AppTitleBar.vue';
 import AppSidebar from '@/components/chrome/AppSidebar.vue';
@@ -61,6 +62,7 @@ const ui = useUiStore();
 const devices = useDevicesStore();
 const station = useYandexStationStore();
 const alice = useAliceStore();
+const tour = useTourStore();
 const route = useRoute();
 const router = useRouter();
 const bp = useBreakpoint();
@@ -84,16 +86,35 @@ watch(
   },
 );
 
-// Push-navigation из main (например, tray-меню «Найти устройства»).
+/** Unsubscribe от push-navigation event'ов из main process'а (tray-меню). */
 let unsubscribeTrayNav: (() => void) | null = null;
+
+/**
+ * Глобальный tour-trigger: при наличии `?tour=1` в любом route запускает
+ * onboarding-тур (если ещё не пройден и не активен) и удаляет query-параметр,
+ * чтобы reload страницы не перезапускал тур. Остальные query-параметры
+ * сохраняются.
+ */
+watch(
+  () => route.query['tour'],
+  (q) => {
+    if (q !== '1') return;
+    if (ui.tourCompleted || tour.isActive) return;
+    setTimeout(() => {
+      tour.start();
+      const { tour: _tour, ...rest } = route.query;
+      void router.replace({ path: route.path, query: rest });
+    }, 700);
+  },
+  { immediate: true },
+);
 
 onMounted(async () => {
   await Promise.all([
     devices.bootstrap(),
     ui.bootstrap(),
     station.bootstrap(),
-    // Не блокируемся ошибкой alice — фича опциональна; если backend ещё не
-    // готов или нет кредов skill, store просто остаётся в idle.
+    // Alice optional — при отсутствии backend / skill creds store остаётся в idle.
     alice.bootstrap().catch(() => {
       /* idle */
     }),
@@ -140,7 +161,8 @@ onBeforeUnmount(() => {
   &__sidebar {
     transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
 
-    // Drawer спрятан слева, выезжает при mobileDrawerOpen.
+    // Drawer спрятан слева, выезжает при mobileDrawerOpen. Background opaque,
+    // чтобы content под drawer'ом не просвечивал сквозь glass-эффект sidebar'а.
     &--drawer {
       position: absolute;
       top: 0;
@@ -148,8 +170,9 @@ onBeforeUnmount(() => {
       bottom: 0;
       z-index: var(--z-drawer);
       transform: translateX(-100%);
-      width: min(78vw, 320px);
-      box-shadow: 24px 0 48px rgba(0, 0, 0, 0.45);
+      width: min(82vw, 320px);
+      box-shadow: 24px 0 48px rgba(0, 0, 0, 0.55);
+      background: var(--color-bg-base);
     }
   }
 
@@ -172,6 +195,8 @@ onBeforeUnmount(() => {
     overflow-x: hidden;
     padding: var(--content-pad-y) var(--content-pad-x) calc(var(--content-pad-y) + 16px);
     scroll-behavior: smooth;
+    // Block-flow: content стартует с верха, не центрируется по vertical axis.
+    display: block;
 
     // Writing rail: каждый view получает max-width:var(--content-max) и
     // центруется — на 4K не «утопает» в широком aura-фоне.
