@@ -27,6 +27,7 @@ import type {
   DiscoveryProgress,
 } from '@smarthome/shared';
 import { useToasterStore } from './toaster';
+import { useYandexStationStore } from './yandexStation';
 
 /** JSON-roundtrip: Vue Proxy не сериализуется через IPC structured-clone. */
 function toPlain<T>(value: T): T {
@@ -202,11 +203,7 @@ export const useDevicesStore = defineStore('devices', () => {
     if (idx !== -1) devices.value.splice(idx, 1, updated);
   }
 
-  /**
-   * Тянет устройства из «Дома с Алисой» через iot.quasar и импортирует в реестр.
-   * Backend сам разрулит pair/refresh/remove. UI получит дельту через push-events.
-   */
-  async function syncYandexHome(opts: { silent?: boolean } = {}): Promise<{
+  type SyncSummary = {
     imported: number;
     updated: number;
     removed: number;
@@ -222,7 +219,25 @@ export const useDevicesStore = defineStore('devices', () => {
       detectedAt: string;
     } | null;
     lastError?: string;
-  }> {
+  };
+
+  // Concurrent callers (RoomsView/DevicesView/AliceHomeDevices/onMount) share одну
+  // Promise — иначе HOUSEHOLD_AMBIGUOUS/NETWORK_MISMATCH плодит дубль-toast'ы.
+  let inflightSync: Promise<SyncSummary> | null = null;
+
+  /**
+   * Тянет устройства из «Дома с Алисой» через iot.quasar и импортирует в реестр.
+   * Backend сам разрулит pair/refresh/remove. UI получит дельту через push-events.
+   */
+  async function syncYandexHome(opts: { silent?: boolean } = {}): Promise<SyncSummary> {
+    if (inflightSync) return inflightSync;
+    inflightSync = runSync(opts).finally(() => {
+      inflightSync = null;
+    });
+    return inflightSync;
+  }
+
+  async function runSync(opts: { silent?: boolean }): Promise<SyncSummary> {
     const toaster = useToasterStore();
     // silent — для авто-backfill'а на маунте /devices: пользователь не нажимал
     // кнопку «Из Яндекса», ему не нужен «Синхронизация…» toast.
@@ -254,7 +269,18 @@ export const useDevicesStore = defineStore('devices', () => {
       let detail: string | undefined;
 
       if (summary.total === 0) {
-        message = 'В аккаунте Яндекса нет устройств';
+        // Если станция уже подключена локально через glagol, простое «нет
+        // устройств» врёт — у пользователя есть колонка, она просто не в
+        // облачном реестре «Дома с Алисой». Объясняем разрыв двух каналов.
+        const stationConnected =
+          useYandexStationStore().status?.connection === 'connected';
+        if (stationConnected) {
+          message = 'Колонка работает локально, но не в «Доме с Алисой»';
+          detail =
+            'Локальный канал уже подключён. Чтобы получить полный пульт через хаб, добавьте колонку в приложении «Дом с Алисой» от Яндекса.';
+        } else {
+          message = 'В аккаунте Яндекса нет устройств';
+        }
       } else if (allFailed) {
         kind = 'error';
         message = `Не удалось импортировать ${summary.total} устройств`;
