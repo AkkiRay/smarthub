@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Палитра художника + три цветные точки — сразу читается как «цвет/палитра». -->
+  <path d="M12 3a9 9 0 100 18c1 0 2-1 1-2-1-2 1-3 3-3h2a3 3 0 003-3c0-5-4-10-9-10z"
+        stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="8" cy="12" r="1.2" fill="currentColor"/>
+  <circle cx="11" cy="8" r="1.2" fill="currentColor"/>
+  <circle cx="15.5" cy="9" r="1.2" fill="currentColor"/>
+</svg>

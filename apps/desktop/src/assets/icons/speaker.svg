@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Smart-speaker: цилиндр с грилем-сеткой и LED-точкой (силуэт Яндекс Станции). -->
+  <path d="M7 4h10a1 1 0 011 1v14a1 1 0 01-1 1H7a1 1 0 01-1-1V5a1 1 0 011-1z"
+        stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M8.5 8.5h7M8.5 11h7M8.5 13.5h7"
+        stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity="0.55"/>
+  <circle cx="12" cy="17.25" r="1.25" fill="currentColor"/>
+</svg>

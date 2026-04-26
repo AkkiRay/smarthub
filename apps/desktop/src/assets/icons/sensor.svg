@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Сенсор: чип-плата + pulse-сигнал, читается как «датчик/метрики». -->
+  <rect x="3.5" y="6" width="17" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M7 12h2.5l1.5-3 2 6 1.5-3H17"
+        stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M2 9v2M2 13v2M22 9v2M22 13v2"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

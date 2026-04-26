@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Таймер: голова-кнопка + круг с обратной дугой. -->
+  <path d="M9.5 3h5M12 6v2.5"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="12" cy="14" r="7" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M12 14V10"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M18.25 7.75l1.25-1.25"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

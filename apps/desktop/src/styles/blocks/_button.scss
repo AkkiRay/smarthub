@@ -1,0 +1,98 @@
+@use '../abstracts/mixins' as *;
+
+.button {
+  --bg: rgba(255, 255, 255, 0.06);
+  --bg-hover: rgba(255, 255, 255, 0.12);
+  --fg: var(--color-text-primary);
+  --border: var(--color-border-subtle);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  transition:
+    background 200ms var(--ease-out),
+    transform 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
+  @include focus-ring;
+
+  // Нормализация SVG-иконок: verbatim v-html строки иначе разъезжаются.
+  svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  span > svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    background: var(--bg-hover);
+    transform: translateY(-1px);
+  }
+  &:active {
+    transform: translateY(0);
+  }
+
+  &--primary {
+    --bg: var(--gradient-brand);
+    --bg-hover: var(--gradient-brand);
+    --border: transparent;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(var(--color-brand-violet-rgb), 0.35);
+    &:hover {
+      box-shadow: 0 12px 32px rgba(var(--color-brand-purple-rgb), 0.45);
+    }
+  }
+
+  &--ghost {
+    --bg: transparent;
+    --bg-hover: rgba(255, 255, 255, 0.06);
+    --border: transparent;
+  }
+
+  &--danger {
+    --bg: rgba(255, 85, 119, 0.12);
+    --bg-hover: rgba(255, 85, 119, 0.22);
+    --border: rgba(255, 85, 119, 0.32);
+    --fg: #ff7a92;
+  }
+
+  &--icon {
+    width: 40px;
+    padding: 0;
+  }
+
+  &--sm {
+    height: 32px;
+    padding: 0 14px;
+    font-size: 13px;
+    &.button--icon {
+      width: 32px;
+      padding: 0;
+    }
+  }
+
+  &--lg {
+    height: 52px;
+    padding: 0 28px;
+    font-size: 15px;
+  }
+
+  &[disabled] {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+}

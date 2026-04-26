@@ -1,0 +1,12 @@
+// Re-export base-компонентов: import { BaseButton, ... } from '@/components/base';
+export { default as BaseIcon, type IconName } from './BaseIcon.vue';
+export { default as BaseButton } from './BaseButton.vue';
+export { default as BaseSwitch } from './BaseSwitch.vue';
+export { default as BaseInput } from './BaseInput.vue';
+export { default as BaseSelect, type SelectOption } from './BaseSelect.vue';
+export { default as BaseSegmented, type SegmentedOption } from './BaseSegmented.vue';
+export { default as BaseModal } from './BaseModal.vue';
+export { default as ConfirmDialog } from './ConfirmDialog.vue';
+export { default as BasePageHeader } from './BasePageHeader.vue';
+export { default as BaseEmpty } from './BaseEmpty.vue';
+export { default as BentoTile } from './BentoTile.vue';

@@ -1,0 +1,93 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-body);
+  font-weight: 420;
+  line-height: 1.55;
+  letter-spacing: var(--tracking-body);
+  font-feature-settings: var(--font-features-sans);
+  font-optical-sizing: auto;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  cursor: default;
+}
+
+// Tabular nums — иначе ширина цифр пляшет при апдейтах counters/таймеров.
+.is-numeric,
+[data-numeric],
+output,
+time,
+.text--micro {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: var(--font-features-numeric);
+}
+
+input,
+textarea {
+  user-select: text;
+  cursor: text;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  background: rgba(var(--color-brand-purple-rgb), 0.35);
+  color: #fff;
+}
+
+// Reduce-motion kill-switch. Длительности 0.001ms (не 0), чтобы UA продолжали
+// стрелять animationend/transitionend — иначе ломаются хэндлеры «после fade-out».
+@mixin reduce-motion-kill {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.app--reduce-motion {
+  @include reduce-motion-kill;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app {
+    @include reduce-motion-kill;
+  }
+}

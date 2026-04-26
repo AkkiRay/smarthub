@@ -1,0 +1,30 @@
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-md);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.6s linear infinite;
+    background-size: 200% 100%;
+  }
+
+  &--line {
+    height: 14px;
+  }
+  &--card {
+    height: 140px;
+  }
+  &--circle {
+    border-radius: 50%;
+  }
+}

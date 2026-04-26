@@ -1,0 +1,140 @@
+// State callback в Я.Диалоги: когда внутреннее устройство меняется (driver push или scene run),
+// мы оповещаем Алису, чтобы кнопка/значок в её приложении мгновенно обновлялись.
+//
+// Эндпоинты (note .net, не .ru):
+//   POST https://dialogs.yandex.net/api/v1/skills/{skill_id}/callback/state    — изменение state
+//   POST https://dialogs.yandex.net/api/v1/skills/{skill_id}/callback/discovery — list изменился
+//
+// Авторизация: `Authorization: OAuth <dialogs_oauth_token>` — токен пользователя
+// с client_id `c473ca268cd749d3a8371351a8f2bcbd` (выдаётся через oauth.yandex.com).
+//
+// Дебаунс 1с: коллапсим взрывы апдейтов от polling в одну запись на устройство.
+// Только reportable=true capability/property пушим — остальные Алиса не подписывается.
+
+import axios, { type AxiosInstance } from 'axios';
+import log from 'electron-log/main.js';
+import type { Capability, Device, DeviceProperty } from '@smarthome/shared';
+
+const DEBOUNCE_MS = 1_000;
+const STATE_URL = (skillId: string): string =>
+  `https://dialogs.yandex.net/api/v1/skills/${skillId}/callback/state`;
+const DISCOVERY_URL = (skillId: string): string =>
+  `https://dialogs.yandex.net/api/v1/skills/${skillId}/callback/discovery`;
+
+export interface StatePusherDeps {
+  /** Получить актуальный config (skillId, dialogsOauthToken). null если не настроено. */
+  getConfig: () => { skillId: string; oauthToken: string } | null;
+  /** Кому принадлежат устройства — single-user, обычно hubId. */
+  getInternalUserId: () => string;
+  /** На каждом успешном пуше дёргаем для статус-панели. */
+  onSuccess?: () => void;
+}
+
+export class StatePusher {
+  private pending = new Map<string, Device>();
+  private timer: NodeJS.Timeout | null = null;
+  private readonly http: AxiosInstance;
+
+  constructor(private readonly deps: StatePusherDeps) {
+    this.http = axios.create({
+      timeout: 4_000,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  /** Помечает устройство как изменённое — пуш уйдёт после debounce-окна. */
+  enqueue(device: Device): void {
+    this.pending.set(device.id, device);
+    if (!this.timer) {
+      this.timer = setTimeout(() => void this.flush(), DEBOUNCE_MS);
+    }
+  }
+
+  /** Принудительный flush — например, после явного действия из UI. */
+  async flushNow(): Promise<void> {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    return this.flush();
+  }
+
+  /**
+   * Сообщить Алисе «список устройств обновился» — после toggle экспозиции или паре.
+   * Алиса перечитает /v1.0/user/devices.
+   */
+  async pushDiscovery(): Promise<{ ok: boolean; error?: string }> {
+    const config = this.deps.getConfig();
+    if (!config) return { ok: false, error: 'skill_not_configured' };
+    try {
+      await this.http.post(
+        DISCOVERY_URL(config.skillId),
+        {
+          ts: Date.now() / 1000,
+          payload: { user_id: this.deps.getInternalUserId() },
+        },
+        { headers: { Authorization: `OAuth ${config.oauthToken}` } },
+      );
+      this.deps.onSuccess?.();
+      return { ok: true };
+    } catch (e) {
+      log.warn('[state-pusher] discovery callback failed', e);
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  // ============== Internals ==============
+
+  private async flush(): Promise<void> {
+    this.timer = null;
+    const batch = Array.from(this.pending.values());
+    this.pending.clear();
+    if (!batch.length) return;
+
+    const config = this.deps.getConfig();
+    if (!config) {
+      log.debug('[state-pusher] flush skipped — skill not configured');
+      return;
+    }
+
+    const payload = {
+      ts: Date.now() / 1000,
+      payload: {
+        user_id: this.deps.getInternalUserId(),
+        devices: batch.map((d) => ({
+          id: d.id,
+          capabilities: d.capabilities.filter(isReportable).map(toCapabilityState),
+          properties: d.properties.filter(isReportable).map(toPropertyState),
+        })),
+      },
+    };
+
+    try {
+      await this.http.post(STATE_URL(config.skillId), payload, {
+        headers: { Authorization: `OAuth ${config.oauthToken}` },
+      });
+      this.deps.onSuccess?.();
+    } catch (e) {
+      log.warn('[state-pusher] state callback failed', e);
+      // Не ретраим — Алиса всё равно поллит query при следующем взаимодействии.
+    }
+  }
+}
+
+function isReportable(capOrProp: Capability | DeviceProperty): boolean {
+  return capOrProp.reportable === true;
+}
+
+function toCapabilityState(cap: Capability): {
+  type: string;
+  state?: { instance: string; value: unknown };
+} {
+  return cap.state ? { type: cap.type, state: cap.state } : { type: cap.type };
+}
+
+function toPropertyState(prop: DeviceProperty): {
+  type: string;
+  state?: { instance: string; value: unknown };
+} {
+  return prop.state ? { type: prop.type, state: prop.state } : { type: prop.type };
+}
