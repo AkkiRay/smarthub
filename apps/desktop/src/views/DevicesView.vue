@@ -1,10 +1,22 @@
 <template>
   <section class="devices" ref="root">
-    <BasePageHeader
-      title="Устройства"
-      :description="`${devices.devices.length} подключено · ${devices.onlineCount} в сети`"
-    >
-      <template #actions>
+    <!-- Hero header с stat-strip -->
+    <header class="devices__hero">
+      <div class="devices__hero-copy">
+        <span class="devices__eyebrow">
+          <span class="devices__eyebrow-dot" />
+          Устройства
+        </span>
+        <h1 class="devices__title">
+          {{ devices.devices.length }} <span class="text--gradient">{{ devicePluralizeRu(devices.devices.length) }}</span>
+        </h1>
+        <p class="devices__lead">
+          {{ devices.onlineCount }} в сети ·
+          <template v-if="devices.offlineCount > 0">{{ devices.offlineCount }} офлайн · </template>
+          {{ counts.lights }} ламп · {{ counts.sockets }} розеток · {{ counts.sensors }} датчиков
+        </p>
+      </div>
+      <div class="devices__hero-actions">
         <BaseInput
           v-model="search"
           class="devices__search"
@@ -28,8 +40,8 @@
         <BaseButton variant="primary" size="sm" icon-left="plus" @click="onAdd">
           Добавить
         </BaseButton>
-      </template>
-    </BasePageHeader>
+      </div>
+    </header>
 
     <BaseSegmented
       v-model="filter"
@@ -107,10 +119,18 @@ import {
   BaseInput,
   BaseIcon,
   BaseSegmented,
-  BasePageHeader,
   BaseEmpty,
   type SegmentedOption,
 } from '@/components/base';
+
+function devicePluralizeRu(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m100 >= 11 && m100 <= 14) return 'устройств';
+  if (m10 === 1) return 'устройство';
+  if (m10 >= 2 && m10 <= 4) return 'устройства';
+  return 'устройств';
+}
 
 type FilterId = 'all' | 'lights' | 'sockets' | 'sensors' | 'on' | 'yandex' | 'local';
 /** Виртуальные значения room-filter'а — UUID-комнаты резолвятся отдельно. */
@@ -265,11 +285,95 @@ useViewMount({
 </script>
 
 <style scoped lang="scss">
+@use '@/styles/abstracts/mixins' as *;
+
 .devices {
   display: flex;
   flex-direction: column;
   gap: var(--content-gap);
   width: 100%;
+  align-self: start;
+
+  // Hero block — gradient bg + title + actions row справа.
+  &__hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-6);
+    padding: var(--pad-roomy);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    isolation: isolate;
+    @include glass(var(--glass-alpha-soft), var(--glass-blur-medium));
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(60% 80% at 0% 0%, rgba(var(--color-brand-violet-rgb), 0.28) 0%, transparent 60%),
+        radial-gradient(40% 60% at 100% 100%, rgba(var(--color-brand-pink-rgb), 0.18) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    > * { position: relative; z-index: 1; }
+
+    @media (max-width: 920px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  &__hero-copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  &__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-micro);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-micro);
+    color: var(--color-brand-violet);
+    font-weight: 600;
+
+    &-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--gradient-brand);
+      box-shadow: 0 0 12px rgba(var(--color-brand-violet-rgb), 0.6);
+    }
+  }
+
+  &__title {
+    font-family: var(--font-family-display);
+    font-size: var(--font-size-display);
+    font-weight: 720;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-display);
+    margin: 0;
+    color: var(--color-text-primary);
+  }
+
+  &__lead {
+    font-size: var(--font-size-body);
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  &__hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+  }
 
   &__search {
     width: clamp(180px, 22vw, 280px);
@@ -286,11 +390,19 @@ useViewMount({
   // .bento-grid из глобальных blocks; кастомизация через CSS-переменные.
   &__grid {
     --bento-tile-min: 220px;
+
+    @media (max-width: 720px) {
+      --bento-tile-min: 100%;
+    }
   }
 
   @media (max-width: 720px) {
+    &__hero-actions {
+      width: 100%;
+    }
     &__search {
       width: 100%;
+      flex: 1 1 100%;
     }
   }
 }

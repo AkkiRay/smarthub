@@ -1,6 +1,7 @@
 <template>
   <section class="rooms" ref="root">
     <BasePageHeader
+      eyebrow="Группировка"
       title="Комнаты"
       description="Группируйте устройства по комнатам — это ускоряет навигацию и даёт Алисе контекст («включи свет в спальне»)."
     >
@@ -385,10 +386,9 @@ const roomsWithStats = computed(() =>
 const bulkBusy = reactive<Record<string, 'on' | 'off' | undefined>>({});
 
 /**
- * Считает реальные fail'ы: rejected promise ИЛИ resolved-промис c `result.status === 'ERROR'`.
- * Возвращает `{ ok, failed, firstError }`. Раньше код считал только rejected, и любая
- * driver-ошибка проходила «успешно» — пользователь видел «всё включено» когда лампочки
- * не реагировали на самом деле.
+ * Считает реальные fail'ы из массива `Promise.allSettled` результатов:
+ * учитывает и rejected promise'ы, и resolved с `result.status === 'ERROR'`,
+ * и `undefined` value. Возвращает `{ ok, failed, firstError }` для UI-toast'а.
  */
 function summarizeBulk(
   results: PromiseSettledResult<{ status?: string; errorMessage?: string } | undefined>[],
@@ -402,8 +402,7 @@ function summarizeBulk(
       if (!firstError) firstError = (r.reason as Error)?.message ?? 'rejected';
       continue;
     }
-    // Backend сейчас всегда возвращает DeviceCommandResult, но если IPC-обёртка
-    // под нагрузкой/HMR вернёт undefined — считаем это ошибкой, а не «success».
+    // `undefined` value трактуется как failure (пустой ответ от IPC).
     const v = r.value;
     if (!v) {
       failed++;
@@ -824,14 +823,21 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
 </script>
 
 <style scoped lang="scss">
+@use '@/styles/abstracts/mixins' as *;
+
 .rooms {
   display: flex;
   flex-direction: column;
   gap: var(--content-gap);
   width: 100%;
+  align-self: start;
 
   &__grid {
     --bento-tile-min: 240px;
+
+    @media (max-width: 720px) {
+      --bento-tile-min: 100%;
+    }
   }
 }
 
@@ -844,15 +850,15 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  padding: clamp(14px, 1.2vw, 18px);
+  gap: var(--space-3);
+  padding: var(--pad-comfort);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: var(--border-thin) solid var(--color-border-subtle);
   transition:
-    background-color 220ms var(--ease-out),
-    border-color 220ms var(--ease-out),
-    transform 220ms var(--ease-out);
+    background-color var(--dur-medium) var(--ease-out),
+    border-color var(--dur-medium) var(--ease-out),
+    transform var(--dur-medium) var(--ease-out);
   overflow: hidden;
   isolation: isolate;
 
@@ -902,14 +908,14 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
   // -------- Hero: icon + name + meta + actions ------------------------------
   &__hero {
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr) auto;
-    gap: 14px;
+    grid-template-columns: var(--icon-box-xl) minmax(0, 1fr) auto;
+    gap: var(--space-4);
     align-items: center;
   }
 
   &__icon {
-    width: 52px;
-    height: 52px;
+    width: var(--icon-box-xl);
+    height: var(--icon-box-xl);
     border-radius: 14px;
     display: grid;
     place-items: center;
@@ -919,8 +925,8 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
     box-shadow: 0 4px 16px rgba(var(--color-brand-purple-rgb), 0.22);
 
     :deep(svg) {
-      width: 26px;
-      height: 26px;
+      width: var(--icon-glyph-lg);
+      height: var(--icon-glyph-lg);
     }
   }
 
@@ -933,9 +939,9 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
 
   &__name {
     font-family: var(--font-family-display);
-    font-size: clamp(15px, 0.4vw + 14px, 18px);
+    font-size: var(--font-size-h2);
     font-weight: 600;
-    letter-spacing: -0.005em;
+    letter-spacing: var(--tracking-h2);
     color: var(--color-text-primary);
     margin: 0;
     overflow: hidden;
@@ -944,11 +950,11 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
   }
 
   &__meta {
-    font-size: 12px;
+    font-size: var(--font-size-small);
     color: var(--color-text-secondary);
     margin: 0;
     display: flex;
-    gap: 5px;
+    gap: var(--space-1);
     flex-wrap: wrap;
 
     &--muted {
@@ -962,26 +968,22 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
 
   &__hero-actions {
     display: flex;
-    gap: 4px;
+    gap: var(--space-1);
     flex-shrink: 0;
     align-items: center;
   }
 
   &__yandex-badge {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    background: color-mix(in srgb, var(--color-brand-purple) 18%, transparent);
-    color: var(--color-brand-purple);
+    --icon-tone: var(--color-brand-purple);
+    --icon-tone-rgb: var(--color-brand-purple-rgb);
+    @include icon-box(var(--icon-box-xs), var(--icon-glyph-xs), 50%);
   }
 
   &__icon-btn {
     all: unset;
     width: 28px;
     height: 28px;
-    border-radius: 8px;
+    border-radius: var(--radius-xs);
     display: grid;
     place-items: center;
     background: rgba(255, 255, 255, 0.04);
@@ -989,9 +991,9 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
     cursor: pointer;
     opacity: 0.6;
     transition:
-      opacity 180ms var(--ease-out),
-      background-color 180ms var(--ease-out),
-      color 180ms var(--ease-out);
+      opacity var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
 
     &:hover {
       opacity: 1;
@@ -1220,8 +1222,6 @@ useViewMount({ scope: root.value, itemsSelector: '.room' });
     font-family: var(--font-family-mono);
     font-size: 11px;
   }
-
-  // Primary-row (Все вкл / Все выкл) удалён — toggle-кнопка-счётчик выше его заменяет.
 
   // -------- Brightness slider -----------------------------------------------
   &__bulk-bright,

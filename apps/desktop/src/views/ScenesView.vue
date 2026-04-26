@@ -1,6 +1,7 @@
 <template>
   <section class="scenes" ref="root">
     <BasePageHeader
+      eyebrow="Автоматизации"
       title="Сценарии"
       description="Объединяйте действия нескольких устройств в один тап. Сценарии с опцией «Доступно через Алису» можно запустить голосом."
     >
@@ -565,32 +566,39 @@ useViewMount({ scope: root.value, itemsSelector: '.scenes__grid > .scene' });
 </script>
 
 <style scoped lang="scss">
+@use '@/styles/abstracts/mixins' as *;
+
 .scenes {
   display: flex;
   flex-direction: column;
   gap: var(--content-gap);
   width: 100%;
+  align-self: start;
 
   &__grid {
     --bento-tile-min: 220px;
+
+    @media (max-width: 720px) {
+      --bento-tile-min: 100%;
+    }
   }
 
   // ---- Yandex scenarios block ------------------------------------------
   &__alice {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
     padding-top: var(--content-gap);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: var(--border-thin) solid var(--color-border-subtle);
   }
   &__alice-head {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
   }
   &__alice-title {
     font-family: var(--font-family-display);
-    font-size: clamp(16px, 0.6vw + 12px, 20px);
+    font-size: var(--font-size-h1);
     font-weight: 600;
     margin: 0;
     color: var(--color-text-primary);
@@ -600,9 +608,7 @@ useViewMount({ scope: root.value, itemsSelector: '.scenes__grid > .scene' });
     color: var(--color-text-muted);
   }
   &__alice-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
+    @include auto-grid(220px, var(--space-3));
   }
 }
 
