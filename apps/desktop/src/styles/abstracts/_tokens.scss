@@ -151,6 +151,9 @@
   --titlebar-height: 46px;
   --sidebar-width: 240px;
   --sidebar-width-compact: 72px;
+  // Mobile bottom-nav: 56px tap-row + 12px вертикальный padding;
+  // safe-area-inset-bottom добавляется отдельно из env() в callsite'ах.
+  --bottom-nav-height: 64px;
 
   // Fluid content padding — clamp под viewport.
   --content-pad-x: clamp(16px, 2.4vw, 56px);
@@ -164,6 +167,18 @@
   // Tap-target: 40px desktop, 44px coarse pointer (Apple HIG).
   --tap-min: 40px;
   --section-snap-pad: clamp(16px, 3vw, 40px);
+
+  // ---- Safe-area helpers (iOS notch / Android gesture bar / PWA) ----
+  // Fallback 0px для desktop: env() в Electron на Windows возвращает пустую строку,
+  // CSS-var централизует значение для calc().
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  // Закреплённый низ модального CTA / sticky-bar: высота bar'а с учётом safe-area.
+  // Используется в Welcome (sticky CTA) и любых mobile-fullscreen flow'ах.
+  --sticky-bottom-h: calc(72px + var(--safe-bottom));
 
   --bento-tile-min: 240px;
   --bento-tile-pad: clamp(16px, 1.6vw, 22px);
@@ -179,15 +194,28 @@
     'Manrope Variable', 'Manrope', 'Inter Variable', 'Inter', -apple-system, sans-serif;
   --font-family-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
 
-  // Fluid type-scale через clamp.
-  --font-size-display: clamp(26px, 2.2vw + 12px, 44px);
-  --font-size-display-2: clamp(22px, 1.6vw + 14px, 34px);
-  --font-size-h1: clamp(20px, 1vw + 14px, 28px);
-  --font-size-h2: clamp(15px, 0.4vw + 13px, 19px);
-  --font-size-h3: clamp(14px, 0.2vw + 13px, 16px);
-  --font-size-body: clamp(13.5px, 0.2vw + 12px, 14.5px);
-  --font-size-small: clamp(12px, 0.1vw + 11.5px, 13px);
-  --font-size-micro: 11px;
+  // ============================================================================
+  // Fluid type-scale: линейная интерполяция размеров от 720px до 2560px viewport.
+  // Базируется на формуле `clamp(min, base + coef*vw, max)`, где
+  //   coef = (max-min) / (range_max-range_min)            — vw-коэффициент
+  //   base = min - coef * range_min / 100                 — px-смещение
+  // Гарантирует:
+  //   - На 720px viewport (минимальный desktop) типографика стартует с min.
+  //   - На 2560px (4K @ 150% scaling) достигает max — крупные мониторы видят
+  //     ощутимо более крупный текст без жирных tablet-/desktop-breakpoint'ов.
+  //   - Между точками интерполяция линейная — нет «прыжков» при ресайзе.
+  //
+  // Mobile (<720px) перекрывает свои значения через `@media` ниже — фиксированный
+  // tighter-scale, иначе vw-formula на 360px давала бы сильно меньший min.
+  // ============================================================================
+  --font-size-display:   clamp(28px, 13.9px + 1.96vw, 64px);   // hero pages
+  --font-size-display-2: clamp(22px, 11.83px + 1.41vw, 48px);  // section heroes
+  --font-size-h1:        clamp(18px, 12.52px + 0.76vw, 32px);  // page titles
+  --font-size-h2:        clamp(15px, 12.26px + 0.38vw, 22px);  // panel titles
+  --font-size-h3:        clamp(14px, 12.44px + 0.22vw, 18px);  // card titles
+  --font-size-body:      clamp(14px, 12.83px + 0.16vw, 17px);  // long-form
+  --font-size-small:     clamp(12px, 11.22px + 0.11vw, 14px);  // hints, captions
+  --font-size-micro:     clamp(11px, 10.22px + 0.11vw, 13px);  // eyebrow, badges
 
   --tracking-display: -0.025em;
   --tracking-h1: -0.018em;
@@ -214,12 +242,17 @@
   --shadow-violet-glow: 0 18px 48px rgba(var(--color-brand-violet-rgb), 0.32);
   --shadow-pink-glow: 0 18px 48px rgba(var(--color-brand-pink-rgb), 0.28);
 
-  // ---- Motion durations ----
-  --dur-instant: 80ms;
-  --dur-fast: 160ms;
-  --dur-medium: 280ms;
-  --dur-slow: 480ms;
-  --dur-stage: 720ms;
+  // ---- Motion ----
+  // `--motion-scale` ставится на <html> store'ом ui (см. applyMotion). Все длительности
+  // ниже = base × scale. Кастомные transition'ы в компонентах должны множиться на
+  // `var(--motion-scale)` для плавного отклика на смену уровня без перерисовки SCSS.
+  // Дефолт `1` — fallback для SSR/HMR-окна, до bootstrap'а store'а.
+  --motion-scale: 1;
+  --dur-instant: calc(80ms * var(--motion-scale));
+  --dur-fast: calc(160ms * var(--motion-scale));
+  --dur-medium: calc(280ms * var(--motion-scale));
+  --dur-slow: calc(480ms * var(--motion-scale));
+  --dur-stage: calc(720ms * var(--motion-scale));
   --ease-snap: cubic-bezier(0.4, 0, 0, 1);
   --ease-emphasis: cubic-bezier(0.2, 0, 0, 1.2);
 
@@ -345,23 +378,72 @@
 @media (hover: none) and (pointer: coarse) {
   :root {
     --tap-min: 44px;
+    --control-h-sm: 36px;
+    --control-h-md: 44px;
+    --control-h-lg: 52px;
     --content-pad-x: clamp(12px, 4vw, 20px);
     --content-pad-y: 16px;
     --content-gap: 18px;
     --grid-gap: 12px;
     --bento-tile-min: 100%;
+    // Slider thumb для пальца — 24px (по Material 3 hit-target).
+    --slider-thumb: 24px;
   }
 }
 
-// Mobile width — компактные паддинги для всех views, дублируем coarse-ветку
-// поскольку windowed mobile (Electron на узком окне) — pointer: fine, но
-// layout всё равно должен быть mobile-first.
+// Mobile viewport: компактные padding'и для всех views. Дублирует coarse-ветку
+// для windowed Electron (pointer: fine на узком окне).
 @media (max-width: 720px) {
   :root {
-    --content-pad-x: 12px;
+    --content-pad-x: 14px;
     --content-pad-y: 12px;
-    --content-gap: 16px;
+    --content-gap: 14px;
     --grid-gap: 10px;
+    --pad-roomy: 16px;
+    --pad-grand: 18px;
+    --pad-comfort: 14px;
+    --bento-tile-min: 100%;
+    --cell-md: 100%;
+    --cell-lg: 100%;
+
+    // Type-scale на узких viewport'ах (≤720px) — фиксированный tighter-set вместо
+    // fluid-clamp базы. Vw-формула давала бы display 28px @ 360 (от min'а),
+    // что слишком крупно: «Один хаб для всего умного дома» ломалось в 3 строки.
+    // Здесь явный clamp(min, vw, max) с малым vw-coef → плавный рост 22→28px
+    // от 360 до 720px viewport'а.
+    --font-size-display: clamp(22px, 5vw, 28px);
+    --font-size-display-2: clamp(19px, 4.4vw, 24px);
+    --font-size-h1: clamp(17px, 4vw, 21px);
+    --font-size-h2: clamp(14px, 3.4vw, 17px);
+    --font-size-h3: clamp(13px, 3.2vw, 15px);
+    --font-size-body: clamp(13px, 3.2vw, 15px);
+    --font-size-small: clamp(12px, 3vw, 13px);
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --content-pad-x: 12px;
+    --pad-roomy: 14px;
+    --pad-grand: 14px;
+    // На совсем узких screens ещё сильнее ужимаем display, иначе hero-title
+    // в 28px сжирает 2 строки даже при `text-wrap: balance`.
+    --font-size-display: clamp(20px, 5.6vw, 25px);
+    --font-size-display-2: clamp(17px, 4.8vw, 22px);
+  }
+}
+
+// 4K-уплотнение: на ОЧЕНЬ больших viewport'ах (≥2560px CSS-pixels) —
+// типография ещё чуть крупнее, иначе на 4K@100% мониторах текст выглядит
+// «мелким» относительно физического размера. Padding'и тоже растут — не
+// заставляем глаз бегать через половину экрана между КПИ-блоками.
+@media (min-width: 2560px) {
+  :root {
+    --font-size-display: clamp(56px, 0.8vw + 40px, 80px);
+    --font-size-display-2: clamp(42px, 0.6vw + 28px, 60px);
+    --font-size-h1: clamp(28px, 0.4vw + 18px, 40px);
+    --content-pad-x: clamp(40px, 2.5vw, 80px);
+    --content-pad-y: clamp(28px, 1.6vw, 48px);
   }
 }
 

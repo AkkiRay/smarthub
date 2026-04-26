@@ -76,9 +76,8 @@
   }
 }
 
-// Numeric badge: оптическая центровка цифры. Cap-height < em — flex-центрирование
-// визуально приподнимает цифру; 1px top-padding возвращает баланс (height не растёт
-// благодаря глобальному box-sizing: border-box).
+// Numeric badge: оптическая центровка цифры через 1px top-padding,
+// tabular-nums для стабильной ширины.
 @mixin numeric-badge($pad-x: 6px) {
   display: inline-flex;
   align-items: center;
@@ -87,4 +86,74 @@
   font-variant-numeric: tabular-nums lining-nums;
   font-feature-settings: var(--font-features-numeric);
   padding: 1px $pad-x 0;
+}
+
+// Стандартная card-поверхность: surface bg, subtle border, smooth radius/transition.
+// Используется в tile, banner, list-item, panel.
+@mixin surface-card($pad: var(--pad-comfort), $radius: var(--radius-lg)) {
+  padding: $pad;
+  border-radius: $radius;
+  background: var(--color-bg-surface);
+  border: var(--border-thin) solid var(--color-border-subtle);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+// Icon-box: квадратный контейнер для иконки с tone-background. Управляется
+// `--icon-tone-rgb` локальной переменной либо `--color-brand-violet-rgb` по умолчанию.
+@mixin icon-box($size: var(--icon-box-md), $glyph: var(--icon-glyph-md), $radius: 14px) {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: $size;
+  height: $size;
+  border-radius: $radius;
+  background: rgba(var(--icon-tone-rgb, var(--color-brand-violet-rgb)), 0.16);
+  color: var(--icon-tone, var(--color-brand-violet));
+
+  svg,
+  :deep(svg) {
+    width: $glyph;
+    height: $glyph;
+  }
+}
+
+// Pill-tag: компактный inline-бейдж с tone-фоном. Eyebrow / kicker / category-метка.
+@mixin pill-tag($tone-rgb: var(--color-brand-violet-rgb), $tone: var(--color-brand-violet)) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba($tone-rgb, 0.18);
+  border: var(--border-thin) solid rgba($tone-rgb, 0.3);
+  color: $tone;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-micro);
+  font-weight: 600;
+  letter-spacing: var(--tracking-micro);
+  text-transform: uppercase;
+}
+
+// Auto-fit grid: одинаковая логика для tile/card grids. min-cell — токен `--cell-*`.
+@mixin auto-grid($min: var(--cell-md), $gap: var(--grid-gap)) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, #{$min}), 1fr));
+  gap: $gap;
+}
+
+// Custom scrollbar: тонкая полоска без изменения ширины контента.
+@mixin slim-scrollbar($w: 6px, $thumb: rgba(255, 255, 255, 0.08)) {
+  &::-webkit-scrollbar {
+    width: $w;
+    height: $w;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: $thumb;
+    border-radius: $w;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
 }

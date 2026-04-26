@@ -30,7 +30,7 @@ body {
   cursor: default;
 }
 
-// Tabular nums — иначе ширина цифр пляшет при апдейтах counters/таймеров.
+// Tabular nums: фиксированная ширина цифр для counters / таймеров.
 .is-numeric,
 [data-numeric],
 output,
@@ -67,9 +67,9 @@ svg {
   color: #fff;
 }
 
-// Reduce-motion kill-switch. Длительности 0.001ms (не 0), чтобы UA продолжали
-// стрелять animationend/transitionend — иначе ломаются хэндлеры «после fade-out».
-@mixin reduce-motion-kill {
+// Reduce-motion kill-switch: длительности 0.001ms сохраняют animationend /
+// transitionend события для downstream хэндлеров. Класс ставит ui store.
+.app--reduce-motion {
   *,
   *::before,
   *::after {
@@ -79,15 +79,5 @@ svg {
     transition-duration: 0.001ms !important;
     transition-delay: 0ms !important;
     scroll-behavior: auto !important;
-  }
-}
-
-.app--reduce-motion {
-  @include reduce-motion-kill;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app {
-    @include reduce-motion-kill;
   }
 }

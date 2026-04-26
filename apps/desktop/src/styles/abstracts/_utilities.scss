@@ -69,3 +69,66 @@
     background-position: 200% 0;
   }
 }
+
+@keyframes float-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ring-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--color-brand-violet-rgb), 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 24px rgba(var(--color-brand-violet-rgb), 0);
+  }
+}
+
+@keyframes orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Stack-fade-in для контейнеров с children: каждый child делает float-up
+// со staggered delay через nth-child.
+.stack-in > * {
+  opacity: 0;
+  animation: float-up 480ms var(--ease-out) forwards;
+}
+.stack-in > :nth-child(1) { animation-delay: 60ms; }
+.stack-in > :nth-child(2) { animation-delay: 120ms; }
+.stack-in > :nth-child(3) { animation-delay: 180ms; }
+.stack-in > :nth-child(4) { animation-delay: 240ms; }
+.stack-in > :nth-child(5) { animation-delay: 300ms; }
+.stack-in > :nth-child(6) { animation-delay: 360ms; }
+.stack-in > :nth-child(7) { animation-delay: 420ms; }
+.stack-in > :nth-child(8) { animation-delay: 480ms; }
+.stack-in > :nth-child(9) { animation-delay: 540ms; }
+.stack-in > :nth-child(10) { animation-delay: 600ms; }
+
+.app--reduce-motion .stack-in > * {
+  opacity: 1;
+  animation: none;
+}

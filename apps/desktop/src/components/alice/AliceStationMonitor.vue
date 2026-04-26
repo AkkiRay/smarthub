@@ -175,7 +175,7 @@ function truncate(s: string, n: number): string {
 
   &__title {
     font-family: var(--font-family-display);
-    font-size: clamp(16px, 0.6vw + 12px, 20px);
+    font-size: var(--font-size-h2);
     font-weight: 600;
     letter-spacing: var(--tracking-h1);
     color: var(--color-text-primary);

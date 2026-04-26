@@ -1,18 +1,11 @@
 /**
- * Единая точка навигации к пульту колонки. Любая ссылка / кнопка «Открыть колонку»
- * в UI идёт через этот composable — иначе мы плодим три разных способа найти
- * speaker-Device, каждый со своими краевыми случаями и багами.
+ * @fileoverview Единая точка навигации к пульту колонки.
  *
- * Логика:
- *   1. Если Я.Станция подключена ПО WS и совпадает с Device в реестре → push на
- *      `/devices/<id>` (там SpeakerControlSurface).
- *   2. Если станция подключена, но Device-записи нет (юзер не сделал sync ИЛИ
- *      iot.quasar не вернул её в households[].all[]) → попробовать sync, потом
- *      снова искать. Если опять нет — toast «не найдено» + push на /devices.
- *   3. Если станция не подключена вовсе → push на /alice (там OAuth/setup).
- *
- * Замена для прямого `router.push('/speaker')` в AliceView/Sidebar/DeviceDetail —
- * `/speaker` route остаётся как legacy redirect, но новый код использует это.
+ * Логика `openSpeaker`:
+ *  1. Device-запись для активной станции есть → push `/devices/<id>`.
+ *  2. Станция подключена, Device отсутствует → `syncYandexHome`, retry поиск.
+ *     Если по-прежнему нет — info-toast и push `/alice`.
+ *  3. Станция не подключена → push `/alice` (OAuth / setup).
  */
 
 import { useRouter } from 'vue-router';
@@ -22,8 +15,8 @@ import { useToasterStore } from '@/stores/toaster';
 
 interface OpenSpeakerOptions {
   /**
-   * Если true (default) — при отсутствии Device запустит `syncYandexHome` и
-   * попробует снова. Disable чтобы избежать каскадных sync'ов из background-кнопок.
+   * При `true` (default) — запускает `syncYandexHome` если Device не найден,
+   * затем повторяет поиск. `false` — без sync'а, для background-callsite'ов.
    */
   autoSync?: boolean;
 }
@@ -47,34 +40,46 @@ export function useSpeakerNavigation(): SpeakerNavigation {
   function findSpeakerDeviceId(): string | null {
     const stationDeviceId = station.status?.station?.deviceId;
     if (!stationDeviceId) return null;
-    const found = devices.devices.find(
-      (d) => d.driver === 'yandex-iot' && d.externalId === stationDeviceId,
+    // Match key — `meta.quasarDeviceId` (== glagol mDNS `deviceId`).
+    // `Device.externalId` хранит quasar UUID и не совпадает с mDNS id.
+    const list = devices.devices.filter((d) => d.driver === 'yandex-iot');
+    const byQuasarId = list.find((d) => d.meta?.['quasarDeviceId'] === stationDeviceId);
+    if (byQuasarId) return byQuasarId.id;
+    // Legacy snapshot без `quasar_info` — match по `externalId`.
+    const byExt = list.find((d) => d.externalId === stationDeviceId);
+    if (byExt) return byExt.id;
+    // Fallback: единственная yandex-iot media-station без `quasarDeviceId`.
+    const speakers = list.filter(
+      (d) =>
+        d.type.startsWith('devices.types.media_device') &&
+        !d.meta?.['quasarDeviceId'],
     );
-    return found?.id ?? null;
+    if (speakers.length === 1) return speakers[0]!.id;
+    return null;
   }
 
   async function openSpeaker(options: OpenSpeakerOptions = {}): Promise<boolean> {
     const { autoSync = true } = options;
 
-    // Быстрый путь: запись уже есть в реестре.
+    // Fast path: Device-запись есть в реестре.
     const direct = findSpeakerDeviceId();
     if (direct) {
       await router.push({ name: 'device', params: { id: direct } });
       return true;
     }
 
-    // Станция не подключена — отправляем на onboarding.
+    // Станция не подключена — onboarding.
     if (station.status?.connection !== 'connected') {
       await router.push('/alice');
       return false;
     }
 
-    // Станция подключена, но Device-записи нет. Можно попробовать sync.
+    // Glagol-канал активен, Device отсутствует — silent sync + retry поиск.
     if (autoSync) {
       try {
-        await devices.syncYandexHome();
+        await devices.syncYandexHome({ silent: true });
       } catch {
-        /* toast уже показан внутри syncYandexHome */
+        /* единое сообщение ниже */
       }
       const after = findSpeakerDeviceId();
       if (after) {
@@ -83,15 +88,18 @@ export function useSpeakerNavigation(): SpeakerNavigation {
       }
     }
 
-    // После sync устройства всё ещё нет — Я.Станция не возвращается в
-    // iot.quasar (бывает на новых моделях). Дальше идти некуда: показываем
-    // явный feedback + переводим на /devices.
+    // Glagol активен (WS :1961), но iot.quasar не вернул колонку в snapshot'е.
+    // Контракт Quasar API: колонка появляется в `households[].all[]` только
+    // после регистрации в приложении «Дом с Алисой».
     toaster.push({
       kind: 'info',
-      message: 'Колонка не появилась в «Доме с Алисой»',
-      detail: 'Возможно, Яндекс ещё не индексировал её. Управление через раздел «Подключение Алисы».',
+      message: 'Колонка работает локально, но не в «Доме с Алисой»',
+      detail:
+        'Локальный канал (WebSocket :1961) уже подключён. Полный пульт через хаб появится, когда колонка будет в вашем «Доме с Алисой» — добавьте её в приложении «Дом с Алисой» от Яндекса, затем синхронизируйте.',
     });
-    await router.push('/devices');
+    if (router.currentRoute.value.path !== '/alice') {
+      await router.push('/alice');
+    }
     return false;
   }
 

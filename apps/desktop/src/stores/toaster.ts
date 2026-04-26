@@ -1,15 +1,13 @@
 /**
- * @fileoverview Pinia-store toast-уведомлений. Single source of truth для
+ * @fileoverview Pinia store toast-уведомлений. Single source of truth для
  * top-right notification stack'а.
  *
  * API:
- *   - `push({ kind, message, duration? })` — поставить toast в очередь.
- *     `kind`: `'info' | 'success' | 'error'`. Default `duration` зависит
- *     от kind (error дольше — юзер должен прочитать).
- *   - `dismiss(id)` — снять toast руками (по клику на крестик).
- *
- * Используется везде где есть IPC-операции: `useDevicesStore.execute`,
- * `useScenesStore.run`, RoomsView bulk-color, etc.
+ *   - `push({ kind, message, ttlMs? })` — поставить toast в очередь.
+ *     `kind`: `'success' | 'error' | 'info' | 'pending'`.
+ *   - `update(id, patch)` — поменять kind/message существующего toast'а.
+ *   - `dismiss(id)` — снять toast руками.
+ *   - `run(promise, opts)` — async-обёртка: pending → success/error.
  */
 
 import { defineStore } from 'pinia';
@@ -21,9 +19,9 @@ export interface Toast {
   id: number;
   kind: ToastKind;
   message: string;
-  /** Sub-line: имя драйвера, текущий шаг и т.п. */
+  /** Sub-line под основным сообщением. */
   detail?: string;
-  /** Auto-dismiss через N ms. `pending` по умолчанию не закрывается. */
+  /** Auto-dismiss через N ms. `pending` не закрывается автоматически. */
   ttlMs?: number;
 }
 
@@ -39,7 +37,7 @@ export interface RunToastOptions {
 export const useToasterStore = defineStore('toaster', () => {
   const toasts = ref<Toast[]>([]);
   let nextId = 1;
-  // Live-таймеры — чтобы `update()` со сменой kind переставил TTL.
+  // Live-таймеры по id — `update()` переставляет TTL при смене kind.
   const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
   function scheduleDismiss(toast: Toast): void {
@@ -53,15 +51,31 @@ export const useToasterStore = defineStore('toaster', () => {
     );
   }
 
-  /** Возвращает id для последующего update/dismiss. */
+  /**
+   * Ставит toast в очередь, возвращает id для последующего update/dismiss.
+   *
+   * Дедупликация по паре `kind+message`: повторный push продлевает TTL
+   * существующего toast'а и возвращает его id.
+   */
   function push(input: Omit<Toast, 'id'>): number {
+    const existing = toasts.value.find(
+      (t) => t.kind === input.kind && t.message === input.message,
+    );
+    if (existing) {
+      // Merge `detail` и пере-инициация TTL.
+      const merged: Toast = { ...existing, ...input, id: existing.id };
+      const idx = toasts.value.findIndex((t) => t.id === existing.id);
+      if (idx !== -1) toasts.value.splice(idx, 1, merged);
+      scheduleDismiss(merged);
+      return existing.id;
+    }
     const toast: Toast = { id: nextId++, ...input };
     toasts.value = [...toasts.value, toast];
     scheduleDismiss(toast);
     return toast.id;
   }
 
-  /** `pending` → `success`/`error` для long-running операций (pair, scan, command). */
+  /** Меняет kind/message существующего toast'а. Используется для pending → success/error. */
   function update(id: number, patch: Partial<Omit<Toast, 'id'>>): void {
     const idx = toasts.value.findIndex((t) => t.id === id);
     if (idx === -1) return;
@@ -80,8 +94,8 @@ export const useToasterStore = defineStore('toaster', () => {
   }
 
   /**
-   * Запустить async-операцию и автоматически показать pending → success/error toast'ы.
-   * Использовать вместо ручных `try { await ...; toaster.push(success) } catch { toaster.push(error) }`.
+   * Выполняет promise и показывает pending → success/error toast'ы по результату.
+   * Re-throw'ит исключение promise'а наружу.
    */
   async function run<T>(
     promise: Promise<T> | (() => Promise<T>),

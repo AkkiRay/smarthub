@@ -629,8 +629,8 @@ async function onBrightnessChange(v: number): Promise<void> {
 
     &::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
+      width: var(--slider-thumb, 16px);
+      height: var(--slider-thumb, 16px);
       border-radius: 50%;
       background: #fff;
       box-shadow:
@@ -644,6 +644,20 @@ async function onBrightnessChange(v: number): Promise<void> {
     }
     &::-webkit-slider-thumb:active {
       transform: scale(1.3);
+    }
+
+    // Touch — палец крупный, увеличиваем track для попадания (track высотой
+    // 6→14px, hit-area thumb автоматически тянется через --slider-thumb из tokens).
+    @media (hover: none) and (pointer: coarse) {
+      height: 14px;
+      &::-webkit-slider-thumb {
+        box-shadow:
+          0 0 0 3px rgba(255, 255, 255, 0.06),
+          0 6px 14px rgba(0, 0, 0, 0.5);
+      }
+      &::-webkit-slider-thumb:hover {
+        transform: none; // hover на touch — спам, оставляем только active
+      }
     }
   }
 }

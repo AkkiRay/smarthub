@@ -562,7 +562,7 @@ onMounted(async () => {
   }
 });
 
-useViewMount({ scope: root.value, itemsSelector: '.scenes__grid > .scene' });
+useViewMount({ scope: root, itemsSelector: '.scenes__grid > .scene' });
 </script>
 
 <style scoped lang="scss">
@@ -580,6 +580,18 @@ useViewMount({ scope: root.value, itemsSelector: '.scenes__grid > .scene' });
 
     @media (max-width: 720px) {
       --bento-tile-min: 100%;
+    }
+  }
+
+  // Mobile: всё стэкается, padding'и сжаты, alice-секция тоже single-column.
+  @media (max-width: 720px) {
+    gap: 12px;
+
+    &__alice {
+      padding-top: 12px;
+    }
+    &__alice-title {
+      font-size: var(--font-size-h2);
     }
   }
 

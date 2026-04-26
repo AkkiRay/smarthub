@@ -78,6 +78,13 @@ function onChange(e: Event): void {
   gap: 6px;
   font-size: 13px;
 
+  // Mobile: tighter gap + touch-height (44px) для удобного тапа.
+  // На coarse-pointer токены `--control-h-md` уже 44px, но `<input>` тут
+  // hardcoded 40px — обновим через media-query.
+  @media (max-width: 720px) {
+    gap: 4px;
+  }
+
   &__label {
     font-size: 12px;
     color: var(--color-text-secondary);
@@ -94,6 +101,10 @@ function onChange(e: Event): void {
       width: 100%;
       height: 40px;
       padding: 0 14px;
+      @media (hover: none) and (pointer: coarse) {
+        height: 44px;
+        font-size: 16px; // 16px+ запрещает iOS auto-zoom при focus'е
+      }
       border-radius: var(--radius-md);
       border: 1px solid var(--color-border-soft);
       background: rgba(255, 255, 255, 0.04);

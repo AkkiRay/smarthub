@@ -1,12 +1,17 @@
 /**
- * @fileoverview
- * HomeKit Accessory Protocol (HAP) controller: discovery `_hap._tcp` через mDNS.
- * Полный controller flow (PIN-pairing → SRP-3072 → Ed25519 long-term keys → HAP characteristics)
- * требует hap-controller или hap-nodejs — большая зависимость. Здесь discovery + распознавание
- * типа аксессуара по category-id, control возвращает CONTROLLER_MISSING (как Matter).
+ * @fileoverview HomeKit Accessory Protocol (HAP) discovery через mDNS
+ * `_hap._tcp`. Driver реализует только discovery + классификацию по
+ * category-id; `execute()` возвращает `CONTROLLER_MISSING` до установки
+ * `hap-controller`.
+ *
+ * TXT schema:
+ *   id   accessory ID (MAC-формат `aa:bb:cc:dd:ee:ff`)
+ *   ci   category id (см. `HAP_CATEGORIES`)
+ *   sf   status flags: bit0 = unpaired discoverable
+ *   sh   setup hash
+ *   c#   config number (incrementится при изменении схемы)
  */
 
-import { Bonjour } from 'bonjour-service';
 import log from 'electron-log/main.js';
 import type {
   Device,
@@ -16,6 +21,7 @@ import type {
   DeviceType,
   DiscoveredDevice,
 } from '@smarthome/shared';
+import { browseMdns } from '../_shared/mdns-browse.js';
 
 const HAP_CATEGORIES: Record<string, DeviceType> = {
   '5': 'devices.types.light',
@@ -43,48 +49,34 @@ export class HomeKitDriver implements DeviceDriver {
   readonly displayName = 'HomeKit (Discovery)';
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    const bonjour = new Bonjour();
+    const services = await browseMdns({
+      type: 'hap',
+      protocol: 'tcp',
+      timeoutMs: 5000,
+      signal,
+    });
     const found = new Map<string, DiscoveredDevice>();
-    const browser = bonjour.find({ type: 'hap', protocol: 'tcp' });
-
-    browser.on('up', (svc) => {
-      const host = svc.referer?.address ?? svc.host;
-      if (!host) return;
-      const txt = svc.txt ?? {};
+    for (const svc of services) {
+      const txt = svc.txt;
       const ci = String(txt['ci'] ?? '');
-      const sf = String(txt['sf'] ?? '0'); // sf=0 — paired (shared), sf=1 — unpaired discoverable
+      const sf = String(txt['sf'] ?? '0');
       const type = HAP_CATEGORIES[ci] ?? 'devices.types.other';
       found.set(svc.name, {
         driver: 'homekit',
         externalId: String(txt['id'] ?? svc.name),
         type,
         name: svc.name,
-        address: `${host}:${svc.port ?? 0}`,
+        address: `${svc.host}:${svc.port ?? 0}`,
         meta: {
           categoryId: ci,
           paired: sf === '0',
-          setupHash: txt['sh'],
-          configNumber: txt['c#'],
+          ...(txt['sh'] ? { setupHash: txt['sh'] } : {}),
+          ...(txt['c#'] ? { configNumber: txt['c#'] } : {}),
         } satisfies HomeKitMeta,
       });
-    });
-
-    return await new Promise((resolve) => {
-      const finish = (): void => {
-        try {
-          browser.stop();
-          bonjour.destroy();
-        } catch {
-          /* stopped */
-        }
-        resolve(Array.from(found.values()));
-      };
-      const timer = setTimeout(finish, 3500);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        finish();
-      });
-    });
+    }
+    log.info(`homekit: ${found.size} accessories on LAN`);
+    return Array.from(found.values());
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
@@ -114,7 +106,7 @@ export class HomeKitDriver implements DeviceDriver {
   }
 
   async execute(device: Device, command: DeviceCommand): Promise<DeviceCommandResult> {
-    log.warn('HomeKit: full HAP controller missing — install hap-controller for actual control.');
+    log.warn('homekit: execute requires hap-controller package');
     return {
       deviceId: device.id,
       capability: command.capability,

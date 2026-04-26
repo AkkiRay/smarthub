@@ -1,15 +1,12 @@
 <template>
   <article class="panel" data-tour="alice-station-panel">
-    <!-- ========================== Header ============================== -->
-    <!-- Alice-state chip убран отсюда — он уже виден в speaker-hero выше
-         (SpeakerControlSurface.vue), иначе одна и та же надпись «Готова слушать»
-         появлялась дважды на одном экране. -->
+    <!-- Header: title + % громкости. Alice-state chip живёт в SpeakerControlSurface. -->
     <header class="panel__head">
       <h3 class="panel__title">Управление колонкой</h3>
       <span class="panel__vol-pct" v-if="volumeKnown">{{ volumePercent }}%</span>
     </header>
 
-    <!-- ========================== Now playing ========================= -->
+    <!-- Now playing. -->
     <section class="panel__now" :class="{ 'panel__now--idle': !trackTitle }">
       <div class="panel__now-icon" aria-hidden="true">
         <BaseIcon name="music" :size="18" />
@@ -28,7 +25,7 @@
       </div>
     </section>
 
-    <!-- ========================== Volume ============================== -->
+    <!-- Volume: mute toggle + slider. -->
     <section class="panel__vol">
       <button
         class="panel__vol-mute"
@@ -49,13 +46,13 @@
               <stop offset="100%" stop-color="var(--color-brand-pink)" />
             </linearGradient>
           </defs>
-          <!-- Корпус динамика -->
+          <!-- Speaker body. -->
           <path
             class="vol-ico__body"
             d="M5 9v6h4l5 4V5L9 9H5z"
             fill="currentColor"
           />
-          <!-- Три волны: появляются последовательно по уровню громкости -->
+          <!-- Три волны: stagger по уровню громкости. -->
           <path
             class="vol-ico__wave vol-ico__wave--1"
             d="M16 9.5a3.5 3.5 0 0 1 0 5"
@@ -80,7 +77,7 @@
             stroke-width="1.8"
             stroke-linecap="round"
           />
-          <!-- Перечёркивание для мута -->
+          <!-- Mute strike. -->
           <path
             class="vol-ico__mute"
             d="M16 9l8 6M24 9l-8 6"
@@ -106,10 +103,7 @@
       />
     </section>
 
-    <!-- ========================== Transport =========================== -->
-    <!-- Transport: prev / play-pause toggle / next. Раньше было 4 кнопки (Play+Pause
-         отдельно), но это сбивало — пользователь не понимал, какая «активна». Теперь
-         один центральный toggle, иконка которого зеркалит фактический playerState. -->
+    <!-- Transport: prev / play-pause toggle / next. Иконка центральной кнопки отражает playerState. -->
     <section class="panel__transport">
       <button
         type="button"
@@ -155,11 +149,7 @@
       </button>
     </section>
 
-    <!-- Quick TTS-чипы убраны отсюда — те же команды (Привет / Что играет /
-         Время / Погода) есть в категории «Инфо» SpeakerControlSurface, два набора
-         одного и того же только сбивали с толку. -->
-
-    <!-- ========================== Brief log =========================== -->
+    <!-- Brief log: outgoing commands + lifecycle. -->
     <section class="panel__log">
       <header class="panel__log-head">
         <h4 class="panel__log-title">Последние команды</h4>
@@ -204,9 +194,8 @@
 </template>
 
 <script setup lang="ts">
-// Панель управления колонкой: now-playing, громкость, transport, лог команд.
-// Alice-state и Quick-TTS chips перенесены в speaker-hero / category-карточки —
-// см. SpeakerControlSurface.vue.
+// Панель управления колонкой: now-playing, громкость, transport, command log.
+// Alice-state chip и Quick-TTS живут в SpeakerControlSurface.vue.
 
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { YandexStationCommand, YandexStationEvent } from '@smarthome/shared';
@@ -251,17 +240,16 @@ const volumePercent = computed(() =>
 );
 
 /**
- * Локальное значение слайдера. Держится пока колонка не подтвердит её state-push'ом
- * с тем же значением (в пределах VOLUME_MATCH_TOLERANCE). Без этого слайдер дёргался
- * между интентом пользователя и устаревшим echo-state'ом колонки.
+ * Локальное значение слайдера: держится до подтверждения state-push'ом
+ * в пределах VOLUME_MATCH_TOLERANCE.
  */
 const localValue = ref<number | null>(null);
 const sliderValue = computed(() => localValue.value ?? volumePercent.value);
 const isMuted = computed(() => sliderValue.value === 0);
-/** Громкость до mute — для восстановления при unmute. */
+/** Громкость до mute для восстановления при unmute. */
 const preMuteVolume = ref<number | null>(null);
 
-/** Уровень для иконки: mute / low / med / high. */
+/** Уровень иконки: mute / low / med / high. */
 const volumeLevel = computed<'mute' | 'low' | 'med' | 'high'>(() => {
   const v = sliderValue.value;
   if (v === 0) return 'mute';
@@ -271,7 +259,7 @@ const volumeLevel = computed<'mute' | 'low' | 'med' | 'high'>(() => {
 });
 const isSpeaking = computed(() => aliceState.value === 'SPEAKING');
 
-/** Кратковременная анимация bump при изменении громкости. */
+/** Bump-анимация при изменении громкости. */
 const bump = ref(false);
 let bumpTimer: ReturnType<typeof setTimeout> | null = null;
 function triggerBump(): void {
@@ -301,7 +289,7 @@ const SEND_FALLBACK_MS = 4000;
 let sendTimer: ReturnType<typeof setTimeout> | null = null;
 let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Отправка `setVolume` с debounce — клавиатурные стрелки не спамят IPC. */
+/** Debounced `setVolume`: клавиатурные стрелки не спамят IPC. */
 function scheduleVolumeSend(percent: number): void {
   if (sendTimer) clearTimeout(sendTimer);
   if (fallbackTimer) clearTimeout(fallbackTimer);
@@ -309,14 +297,14 @@ function scheduleVolumeSend(percent: number): void {
     sendTimer = null;
     void send({ kind: 'setVolume', volume: percent / 100 });
   }, SEND_DEBOUNCE_MS);
-  // Safety: если колонка не подтвердит state-push'ом — отпускаем lock.
+  // Fallback: отпустить lock без подтверждения от колонки.
   fallbackTimer = setTimeout(() => {
     fallbackTimer = null;
     localValue.value = null;
   }, SEND_FALLBACK_MS);
 }
 
-/** Echo от колонки совпал с интентом → отпускаем lock, слайдер «приземляется» на правду. */
+/** Echo от колонки в пределах tolerance → release lock. */
 watch(volumePercent, (next) => {
   if (localValue.value === null) return;
   if (Math.abs(localValue.value - next) <= VOLUME_MATCH_TOLERANCE) {
@@ -338,7 +326,7 @@ function onSliderCommit(e: Event): void {
   const v = Number((e.target as HTMLInputElement).value);
   localValue.value = v;
   triggerBump();
-  // На release сразу шлём — debounce съест дубль если уже было запланировано.
+  // На release шлём сразу, отменяя debounced send.
   if (sendTimer) clearTimeout(sendTimer);
   sendTimer = null;
   void send({ kind: 'setVolume', volume: v / 100 });
@@ -397,10 +385,8 @@ async function onTransport(kind: TransportButton['kind']): Promise<void> {
 }
 
 /**
- * Эвристика «играет ли сейчас»: SPEAKING (Алиса говорит) или есть текущий трек,
- * пока state не пришёл с явным флагом — оптимистично показываем pause-иконку.
- * После каждого toggle переписывается локально (см. `localPlayingOverride`),
- * чтобы UI реагировал мгновенно, а не ждал push'а от станции.
+ * Эвристика isPlaying: SPEAKING / LISTENING или наличие trackTitle.
+ * `localPlayingOverride` — optimistic toggle до прихода state-push'а.
  */
 const localPlayingOverride = ref<boolean | null>(null);
 const isPlaying = computed<boolean>(() => {
@@ -411,8 +397,7 @@ const isPlaying = computed<boolean>(() => {
 
 async function onPlayPause(): Promise<void> {
   const next = !isPlaying.value;
-  // Optimistic: переключаем UI сразу, отменяем override через 4s — за это время
-  // станция успевает прислать актуальный state и computed возьмёт его.
+  // Optimistic toggle: override снимается через 4s, после чего computed читает state-push.
   localPlayingOverride.value = next;
   await send({ kind: next ? 'play' : 'stop' });
   setTimeout(() => {
@@ -429,7 +414,7 @@ interface CommandLogEntry {
   statusKind: 'ok' | 'err' | 'warn' | 'info' | null;
 }
 
-/** Outgoing-команды + lifecycle. State-push'и идут в подробный журнал. */
+/** Outgoing-команды + lifecycle-события. State-push'и — в подробный журнал. */
 const commandLog = computed<CommandLogEntry[]>(() => {
   const out: CommandLogEntry[] = [];
   const responsesByReq = new Map<string, YandexStationEvent>();
@@ -518,9 +503,7 @@ function truncate(s: string, n: number): string {
   gap: clamp(16px, 1.6vw, 22px);
   overflow: hidden;
 
-  // ---- Header --------------------------------------------------------
-  // Один title слева, % громкости справа. Раньше был ещё `__chip` с aliceState —
-  // вынесен в speaker-hero, остатки `&__chip` стилей удалены вместе с шаблоном.
+  // Header: title слева, % громкости справа.
   &__head {
     display: flex;
     align-items: center;
@@ -530,7 +513,7 @@ function truncate(s: string, n: number): string {
 
   &__title {
     font-family: var(--font-family-display);
-    font-size: clamp(18px, 0.6vw + 14px, 22px);
+    font-size: var(--font-size-h1);
     font-weight: 600;
     letter-spacing: var(--tracking-h1);
     color: var(--color-text-primary);
@@ -545,7 +528,7 @@ function truncate(s: string, n: number): string {
     font-variant-numeric: tabular-nums;
   }
 
-  // ---- Now playing ---------------------------------------------------
+  // Now playing.
   &__now {
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr);
@@ -604,7 +587,7 @@ function truncate(s: string, n: number): string {
     }
   }
 
-  // ---- Volume slider -------------------------------------------------
+  // Volume slider.
   &__vol {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -676,7 +659,7 @@ function truncate(s: string, n: number): string {
       }
     }
 
-    // ---- Состояния по уровню ---------------------------------------------
+    // States by level.
     &--low .vol-ico__wave--1,
     &--med .vol-ico__wave--1,
     &--med .vol-ico__wave--2,
@@ -709,7 +692,7 @@ function truncate(s: string, n: number): string {
       }
     }
 
-    // ---- Hover / focus ---------------------------------------------------
+    // Hover / focus.
     &:hover:not(:disabled) {
       background: rgba(255, 255, 255, 0.08);
       transform: translateY(-1px);
@@ -738,12 +721,12 @@ function truncate(s: string, n: number): string {
       outline-offset: 2px;
     }
 
-    // ---- Bump (на изменение громкости) -----------------------------------
+    // Bump на изменение громкости.
     &--bump .vol-ico {
       animation: volBump 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
-    // ---- Speaking (Алиса говорит) — постоянная пульсация волн ----------
+    // Speaking: постоянная пульсация волн.
     &--speaking:not(.panel__vol-mute--mute) {
       .vol-ico__wave {
         animation: volSpeak 1.2s ease-in-out infinite;
@@ -802,7 +785,7 @@ function truncate(s: string, n: number): string {
     }
   }
 
-  // ---- Transport -----------------------------------------------------
+  // Transport.
   &__transport {
     display: flex;
     gap: 10px;
@@ -858,8 +841,7 @@ function truncate(s: string, n: number): string {
       }
     }
 
-    // Активное «играет» состояние — пульсирующий glow + чуть больший shadow,
-    // чтобы пользователь сразу понимал «эта кнопка сейчас ставит на паузу».
+    // Playing state: пульсирующий glow + усиленный shadow.
     &--is-playing {
       box-shadow:
         0 6px 24px rgba(var(--color-brand-pink-rgb), 0.45),
@@ -868,7 +850,7 @@ function truncate(s: string, n: number): string {
     }
   }
 
-  // ---- Log -----------------------------------------------------------
+  // Log.
   &__log {
     display: flex;
     flex-direction: column;

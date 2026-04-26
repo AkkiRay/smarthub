@@ -160,17 +160,18 @@ function iconFor(kind: Exclude<ToastKind, 'pending'>): string {
   }
 }
 
-// ---- Mobile: full-width стек снизу ----
+// Mobile: full-width стек снизу.
 @media (max-width: 720px) {
   .toaster {
     right: 12px;
     left: 12px;
-    bottom: 12px;
-    bottom: max(12px, env(safe-area-inset-bottom));
     width: auto;
     max-width: none;
 
-    // Прячем тосты, когда mobile-drawer открыт — иначе они мешают навигации.
+    // Bottom offset = AppBottomNav (64px) + safe-area + 10px gap.
+    bottom: calc(var(--bottom-nav-height, 64px) + var(--safe-bottom, 0px) + 10px);
+
+    // Hide toasts при открытом mobile-drawer.
     .app__shell--drawer-open & {
       opacity: 0;
       pointer-events: none;

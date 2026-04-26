@@ -2,15 +2,13 @@
  * yandex-iot driver — все устройства из «Дома с Алисой».
  *
  * discover()    → GET iot.quasar.yandex.ru/m/v3/user/devices; полный YandexHomeDevice
- *                 (включая capabilities + state) кладётся в `candidate.meta.raw`,
- *                 чтобы probe() не делал лишний HTTP.
+ *                 (включая capabilities + state) кладётся в `candidate.meta.raw`.
  * probe()       → читает `candidate.meta.raw`, мапит capabilities в каноническую схему.
- * readState()   → snapshot-cache с TTL 30s — N устройств читаются за один HTTP.
+ * readState()   → snapshot-cache c TTL 5s — N устройств читаются за один HTTP.
  * execute()     → POST iot.quasar.yandex.ru/m/v3/user/devices/actions.
  *
- * Per-device endpoint /m/v3/user/devices/{id} в текущей версии iot.quasar отвечает
- * 404/redirect — поэтому источник истины — общий snapshot. Это совпадает с подходом
- * AlexxIT/YandexStation (см. yandex_quasar.py).
+ * Источник истины — общий snapshot: per-device endpoint /m/v3/user/devices/{id}
+ * отвечает 404/redirect.
  *
  * Auth: session cookies партиции `persist:yandex-oauth` (общая c yandex-station).
  * Драйвер активен только когда юзер авторизован — модуль возвращает null без auth.
@@ -37,11 +35,9 @@ import {
 
 /** Yandex device.type → канонический DeviceType. Неизвестные → OTHER. */
 function mapDeviceType(yandexType: string): DeviceType {
-  // Yandex использует те же `devices.types.*` строки, что и наша схема —
-  // достаточно проверить, входит ли значение в наш enum.
   const known = Object.values(DEVICE_TYPE) as string[];
   if (known.includes(yandexType)) return yandexType as DeviceType;
-  // Префиксные — берём ближайшего родителя (`media_device.tv` → `media_device`).
+  // Префиксные типы → ближайший родитель (`media_device.tv` → `media_device`).
   if (yandexType.startsWith('devices.types.media_device')) return DEVICE_TYPE.MEDIA;
   if (yandexType.startsWith('devices.types.cooking')) return DEVICE_TYPE.COOKING;
   if (yandexType.startsWith('devices.types.openable')) return DEVICE_TYPE.OPENABLE;
@@ -49,9 +45,8 @@ function mapDeviceType(yandexType: string): DeviceType {
 }
 
 /**
- * Yandex capability → canonical Capability. Yandex отдаёт capabilities в той же
- * схеме `devices.capabilities.*`, что и хранит хаб — поля retrievable / reportable
- * могут отсутствовать, ставим разумные дефолты.
+ * Yandex capability → canonical Capability. Схема `devices.capabilities.*` совпадает
+ * с хабом; retrievable / reportable могут отсутствовать — ставим дефолты.
  */
 function mapCapability(c: YandexHomeCapability): Capability {
   const out: Capability = {
@@ -70,7 +65,7 @@ function mapCapability(c: YandexHomeCapability): Capability {
 }
 
 function mapProperty(p: YandexHomeProperty): DeviceProperty {
-  // У `devices.properties.float|event` обязателен parameters.instance (для UI/units).
+  // `devices.properties.float|event`: parameters.instance обязателен (для UI/units).
   const params = (p.parameters ?? {}) as { instance?: string; unit?: string };
   const out: DeviceProperty = {
     type: p.type as DeviceProperty['type'],
@@ -96,7 +91,7 @@ function discoveredFromYandex(d: YandexHomeDevice): DiscoveredDevice {
     externalId: d.id,
     type: mapDeviceType(d.type),
     name: d.name,
-    // Облачное устройство — нет LAN-host'а, ставим чистый scheme-маркер.
+    // Cloud-устройство без LAN-host'а — scheme-маркер.
     address: 'yandex://iot',
     meta: {
       ...(d.room ? { room: d.room } : {}),
@@ -104,18 +99,22 @@ function discoveredFromYandex(d: YandexHomeDevice): DiscoveredDevice {
       ...(d.householdId ? { householdId: d.householdId } : {}),
       ...(d.skillId ? { skillId: d.skillId } : {}),
       ...(d.iconUrl ? { iconUrl: d.iconUrl } : {}),
+      // Glagol-style serial смарт-колонок — ключ связки cloud-Device ↔ локальная
+      // WS-сессия (`useSpeakerNavigation`).
+      ...(d.quasarDeviceId ? { quasarDeviceId: d.quasarDeviceId } : {}),
+      ...(d.quasarPlatform ? { quasarPlatform: d.quasarPlatform } : {}),
       yandexType: d.type,
-      // Дискриминатор URL'а действий: `device` или `group`. Должен пережить serialize
-      // через IPC structured-clone — кладём строкой.
+      // Дискриминатор URL'а действий: `device` либо `group`. Сериализуется
+      // через IPC structured-clone — храним строкой.
       itemType: d.itemType,
-      // Полный device-объект с capabilities/state — используется в probe(), чтобы
-      // не делать лишний HTTP-запрос и не зависеть от снапшота при pair'е.
+      // Полный device-объект с capabilities/state — используется в probe()
+      // вместо повторного HTTP при pair'е.
       raw: d as unknown as Record<string, unknown>,
     },
   };
 }
 
-/** Безопасно вытаскивает itemType из meta — на случай старых записей в БД. */
+/** Извлекает itemType из meta. Default — `device`. */
 function itemTypeFrom(meta: Record<string, unknown> | undefined): 'device' | 'group' {
   const v = meta?.['itemType'];
   return v === 'group' ? 'group' : 'device';
@@ -134,19 +133,20 @@ function buildDeviceFromYandex(
     driver: 'yandex-iot',
     type: mapDeviceType(fresh.type),
     name: fresh.name || candidate.name,
-    // Привязываем к локальной комнате через `roomId` — он же является ID импортированной
-    // room-записи в registry (см. syncYandexHome → rooms.upsert). В UI фильтр по комнате
-    // работает one-line: device.room === room.id.
+    // `roomId` — ID импортированной room-записи в registry (syncYandexHome →
+    // rooms.upsert). UI фильтрует через device.room === room.id.
     ...(fresh.roomId ? { room: fresh.roomId } : {}),
     hidden: false,
     address: candidate.address,
     meta: {
       ...candidate.meta,
       yandexType: fresh.type,
-      // roomName храним отдельно для тостов/UX; основная связь — через `room` (id).
+      // roomName — отдельное поле для UI; основная связь через `room` (id).
       ...(fresh.room ? { roomName: fresh.room } : {}),
       ...(fresh.roomId ? { roomId: fresh.roomId } : {}),
       ...(fresh.iconUrl ? { iconUrl: fresh.iconUrl } : {}),
+      ...(fresh.quasarDeviceId ? { quasarDeviceId: fresh.quasarDeviceId } : {}),
+      ...(fresh.quasarPlatform ? { quasarPlatform: fresh.quasarPlatform } : {}),
     },
     status: isOnline ? 'online' : 'offline',
     capabilities: fresh.capabilities.map(mapCapability),
@@ -164,11 +164,9 @@ export class YandexIotDriver extends BaseDriver {
   private readonly client = new YandexIotClient();
 
   /**
-   * Snapshot-cache: чтобы при `polling.runOnce()` на 50 устройствах не делать 50 HTTP-запросов.
-   * Один fetch на TTL — все readState() читают из него.
-   * TTL короткий (5s): polling раз в 30s всё равно даст fresh данные, а UI-actions
-   * (refresh-after-execute, обновление по клику) получат свежий state почти сразу.
-   * Real-time push'и (см. subscribePush ниже) дополнительно патчат cache между fetch'ами.
+   * Snapshot-cache: один fetch на TTL — все readState() читают из него.
+   * TTL 5s; polling раз в 30s даёт свежие данные, UI-actions получают state
+   * почти сразу. Real-time push'и (см. subscribePush) патчат cache между fetch'ами.
    */
   private snapshotCache: { snapshot: YandexHomeSnapshot; fetchedAt: number } | null = null;
   private static readonly SNAPSHOT_TTL_MS = 5_000;
@@ -197,8 +195,8 @@ export class YandexIotDriver extends BaseDriver {
       .fetchUserDevices()
       .then((snapshot) => {
         this.snapshotCache = { snapshot, fetchedAt: Date.now() };
-        // Real-time подписка идёт после first snapshot'а — `updates_url` приходит
-        // именно в его теле. Если URL прилетел и подписка ещё не открыта — открываем.
+        // `updates_url` приходит в теле первого snapshot'а; на нём открываем
+        // real-time подписку, если ещё не открыта.
         if (snapshot.updatesUrl && !this.updatesUnsubscribe) {
           this.startUpdatesStream(snapshot.updatesUrl);
         }
@@ -212,12 +210,10 @@ export class YandexIotDriver extends BaseDriver {
 
   /**
    * Real-time WS push: Yandex шлёт `update_states` сообщения с дельтой по device-state.
-   * Обновляем snapshot-cache (чтобы следующий readState() видел свежее) и
-   * нотифицируем подписчиков (registry → emit device:updated → renderer обновляет UI).
+   * Patches snapshot-cache и нотифицирует pushListeners (registry → device:updated → UI).
    */
   private startUpdatesStream(updatesUrl: string): void {
     this.updatesUnsubscribe = this.client.subscribeUpdates(updatesUrl, (externalId, raw) => {
-      // Patch snapshot cache, чтобы readState() возвращал свежее значение.
       const cached = this.snapshotCache?.snapshot;
       if (cached) {
         const idx = cached.devices.findIndex((d) => d.id === externalId);
@@ -237,8 +233,8 @@ export class YandexIotDriver extends BaseDriver {
         }
       }
 
-      // Партиал-патч в формате нашего Device — отдаём listener'у. Он сам найдёт
-      // device по (driver='yandex-iot', externalId) и сольёт.
+      // Partial-патч в формате Device. Listener ищет device по
+      // (driver='yandex-iot', externalId) и мерджит.
       const partial: Partial<Device> = {
         ...(Array.isArray(raw.capabilities)
           ? { capabilities: raw.capabilities.map(mapCapability) }
@@ -248,8 +244,7 @@ export class YandexIotDriver extends BaseDriver {
           ? { status: raw.state === 'online' ? 'online' : 'offline' }
           : {}),
       };
-      // Если push не принёс ни capabilities, ни properties, ни state — нет смысла
-      // эмитить (избегаем лишних device:updated → renderer re-render).
+      // Push без capabilities/properties/state — skip emit.
       if (Object.keys(partial).length === 0) return;
       for (const listener of this.pushListeners) listener(externalId, partial);
     });
@@ -257,15 +252,14 @@ export class YandexIotDriver extends BaseDriver {
   }
 
   /**
-   * Registry подписывается сюда при init'е. Возвращает unsubscribe.
-   * Driver сам открывает WS на первом snapshot'е; listener'ы получают патчи
-   * по мере приходящих push'ей.
+   * Подписка на real-time push'и. Возвращает unsubscribe. Driver открывает WS
+   * на первом snapshot'е; listener'ы получают partial-Device на каждый push.
    */
   subscribePush(
     listener: (externalId: string, partial: Partial<Device>) => void,
   ): () => void {
     this.pushListeners.add(listener);
-    // Если snapshot ещё не запрашивался — fire-and-forget, чтобы стрим открылся.
+    // Если snapshot ещё не запрашивался — fire-and-forget для открытия стрима.
     if (!this.snapshotCache && !this.snapshotInFlight) {
       void this.getSnapshot().catch((e) => {
         this.logWarn('initial snapshot for push-stream failed', e);
@@ -277,22 +271,22 @@ export class YandexIotDriver extends BaseDriver {
   }
 
   async discover(_signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    // Force-refresh — discover() это всегда явное user-действие (sync), нужен свежий snapshot.
+    // discover() — explicit user-action (sync); force fresh snapshot.
     const snapshot = await this.getSnapshot(true);
     this.logInfo(`discover: ${snapshot.devices.length} devices from Yandex`);
     return snapshot.devices.map(discoveredFromYandex);
   }
 
   /**
-   * Snapshot из кэша после discover() — нужен hub'у для импорта rooms/scenarios
-   * без второго HTTP-запроса. Возвращает null если discover() ещё не запускался.
+   * Snapshot из кэша. Hub использует для импорта rooms/scenarios без повторного
+   * HTTP. Возвращает null до первого discover().
    */
   getCachedSnapshot(): YandexHomeSnapshot | null {
     return this.snapshotCache?.snapshot ?? null;
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
-    // Сначала пробуем raw-payload, прокинутый из discover() — без лишнего HTTP.
+    // Raw-payload из discover() — без HTTP.
     const raw = candidate.meta?.['raw'];
     if (raw && typeof raw === 'object') {
       const fresh = raw as YandexHomeDevice;
@@ -301,7 +295,7 @@ export class YandexIotDriver extends BaseDriver {
       }
     }
 
-    // Fallback: подняли pairing вручную, без discover() — берём из snapshot'а.
+    // Fallback для pairing без discover() — читаем из snapshot'а.
     try {
       const snapshot = await this.getSnapshot();
       const fresh = snapshot.devices.find((d) => d.id === candidate.externalId);
@@ -318,7 +312,7 @@ export class YandexIotDriver extends BaseDriver {
       const snapshot = await this.getSnapshot();
       const fresh = snapshot.devices.find((d) => d.id === device.externalId);
       if (!fresh) {
-        // Устройство удалили из «Дома с Алисой» — пометим unreachable, sync позже его уберёт.
+        // Устройство отсутствует в snapshot — `unreachable`, sync позже удалит.
         return { ...device, status: 'unreachable', updatedAt: new Date().toISOString() };
       }
       const now = new Date().toISOString();
@@ -330,6 +324,9 @@ export class YandexIotDriver extends BaseDriver {
           ...device.meta,
           ...(fresh.roomId ? { roomId: fresh.roomId } : {}),
           ...(fresh.room ? { roomName: fresh.room } : {}),
+          // Backfill quasar_info — нужен Speaker→Device lookup в `useSpeakerNavigation`.
+          ...(fresh.quasarDeviceId ? { quasarDeviceId: fresh.quasarDeviceId } : {}),
+          ...(fresh.quasarPlatform ? { quasarPlatform: fresh.quasarPlatform } : {}),
         },
         status: fresh.online === false ? 'offline' : 'online',
         capabilities: fresh.capabilities.map(mapCapability),
@@ -364,7 +361,7 @@ export class YandexIotDriver extends BaseDriver {
           result.error ?? 'Yandex отклонил действие',
         );
       }
-      // Инвалидируем кэш — следующий readState() получит свежий state с примененным action.
+      // Invalidate cache — следующий readState() прочитает свежий state.
       this.snapshotCache = null;
       return this.ok(device, command.capability, command.instance);
     } catch (e) {

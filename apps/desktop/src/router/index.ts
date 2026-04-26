@@ -1,14 +1,11 @@
 /**
- * @fileoverview Vue Router config — hash-based history (Electron file://
- * не работает с HTML5 history, нужен hash).
+ * @fileoverview Vue Router config — hash-history для Electron `file://` шеллa.
  *
- * Маршруты: Welcome (онбординг) → Home → Devices / DeviceDetail / Discovery /
- * Rooms / Scenes / Alice / Settings.
+ * Routes: Welcome → Home / Devices / DeviceDetail / Discovery / Rooms /
+ * Scenes / Alice / Settings.
  *
- * Beforeach guard:
- *   - Перенаправляет на `/welcome` если онбординг не пройден (UI store).
- *   - Перенаправляет на `/discovery` если в хабе нет ни одного сопряжённого
- *     устройства (kick-start UX flow).
+ * `beforeEach` guard перенаправляет на `/welcome` при неоконченном онбординге
+ * и обратно на `/home` после его завершения.
  */
 
 import { createRouter, createWebHashHistory } from 'vue-router';
@@ -18,6 +15,8 @@ import { useYandexStationStore } from '@/stores/yandexStation';
 
 export const router = createRouter({
   history: createWebHashHistory(),
+  // `scrollBehavior` не задан: window — `overflow: hidden`, scroll-target —
+  // `.app__content`. Scroll-to-top реализован программно в App.vue.
   routes: [
     {
       path: '/',
@@ -67,13 +66,9 @@ export const router = createRouter({
       meta: { title: 'Подключение Алисы' },
     },
     {
-      // Legacy alias: пульт колонки переехал в /devices/<id>. Логика:
-      //   - есть Device-запись для активной колонки → /devices/<id>
-      //   - станция не подключена → /alice (онбординг)
-      //   - станция подключена, но Device ещё не sync'нут → /devices с инфо-toast'ом
-      //     (а НЕ /alice — иначе кнопка из AliceView возвращает на ту же страницу).
-      // Sync лучше дёргать в `useSpeakerNavigation` — там есть toaster для feedback'а;
-      // здесь redirect синхронный и безопасных async-точек нет.
+      // Legacy alias `/speaker` → `/devices/<id>` для активной колонки.
+      // Sync с feedback-тостом — в `useSpeakerNavigation`; здесь только
+      // sync-redirect: Device есть → device, не подключена → alice, иначе devices.
       path: '/speaker',
       name: 'speaker',
       redirect: () => {
@@ -105,7 +100,7 @@ export const router = createRouter({
   ],
 });
 
-// Onboarding-guard: до hasSeenOnboarding гоним на /welcome. uiStore читает LS sync.
+// Onboarding-guard: до `hasSeenOnboarding` все маршруты идут на `/welcome`.
 router.beforeEach((to) => {
   const ui = useUiStore();
   if (!ui.hasSeenOnboarding && to.name !== 'welcome') {

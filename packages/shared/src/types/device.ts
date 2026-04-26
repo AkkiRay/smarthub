@@ -17,22 +17,12 @@
 import type { CAPABILITY, DEVICE_TYPE, PROPERTY } from '../constants/capabilities.js';
 
 /**
- * Whitelist driver-идентификаторов, у которых есть реальная реализация
- * в `apps/desktop/electron/core/drivers/<id>/`.
+ * Whitelist driver-идентификаторов с реализацией в
+ * `apps/desktop/electron/core/drivers/<id>/`.
  *
- * Используется:
- *   - валидаторами конфига (отвергают unknown driver в settings.json);
- *   - IPC-слоем (typed dispatch по driver id);
- *   - UI-фильтрами (Discovery view, integration marketplace).
- *
- * Как добавить новый driver:
- *   1. Добавить id в этот массив.
- *   2. Реализовать `DriverModule` в `electron/core/drivers/<id>/module.ts`.
- *   3. Зарегистрировать его в `driver-registry.ts` (`DRIVER_MODULES`).
- *
- * @remarks
- * Группировка ниже — чисто организационная (LAN → протоколы → cloud →
- * bridges → misc), порядок load'а определяется driver registry в runtime.
+ * Потребители: config-валидаторы, IPC-dispatch, UI-фильтры (Discovery,
+ * integration marketplace). Группировка ниже организационная; порядок
+ * загрузки определяется `driver-registry`.
  */
 export const KNOWN_DRIVER_IDS = [
   // ── Локальные LAN-драйверы (без cloud-roundtrip) ──────────────────────────
@@ -78,13 +68,9 @@ export const KNOWN_DRIVER_IDS = [
   'yandex-iot',
 
   /**
-   * Yandex-лампочки (модель `YNDX-*`, Tuya OEM прошивка, локальный UDP-broadcast
-   * на порту :6667). Detection-only driver: показывает их в Discovery с
-   * подсказкой что нужно привязать через приложение «Дом с Алисой» — после
-   * этого они подтянутся через cloud-driver `yandex-iot` полноценно.
-   *
-   * TODO(yandex-lamp): когда появится локальное управление через Tuya local
-   * key extraction, апгрейднуть до полного driver'а (pair + readState + execute).
+   * Yandex-лампочки (`YNDX-*`, Tuya OEM прошивка, локальный UDP-broadcast :6667).
+   * Detection-only driver: показывает кандидатов в Discovery; полноценное
+   * управление — через cloud-driver `yandex-iot` после привязки в «Доме с Алисой».
    */
   'yandex-lamp',
 ] as const;
@@ -207,10 +193,10 @@ export interface Device {
   /** Тип (свет, термостат, сенсор, …) — см. {@link DeviceType}. */
   type: DeviceType;
 
-  /** Human-readable имя. Изначально ставит driver, юзер может переименовать. */
+  /** Human-readable имя. Default ставит driver, юзер переименовывает через `rename()`. */
   name: string;
 
-  /** Опциональное free-text описание (пока не используется в UI). */
+  /** Опциональное free-text описание (зарезервировано для UI). */
   description?: string;
 
   /** ID комнаты к которой устройство привязано. Empty/undefined = unassigned. */
@@ -269,6 +255,18 @@ export interface DiscoveredDevice {
    * UI рендерит «Already added» вместо кнопки Pair.
    */
   knownDeviceId?: string;
+
+  /**
+   * Network signature на момент обнаружения. Ставится `DiscoveryService` для
+   * LAN-кандидатов и используется для prune'а при смене Wi-Fi/subnet.
+   * Cloud-кандидаты (yandex-iot и т.п.) поле не заполняют — фильтр идёт
+   * по `meta.householdId` против active household.
+   */
+  network?: {
+    gatewayMac: string | null;
+    ssid: string | null;
+    subnet: string | null;
+  };
 }
 
 /**
@@ -336,7 +334,7 @@ export interface Room {
   name: string;
   /** Ключ иконки (резолвится renderer'ом через icon-registry). */
   icon: string;
-  /** Позиция сортировки в UI; меньше = раньше. */
+  /** Sort-order в UI: меньшее значение — выше в списке. */
   order: number;
   /** Устройства в этой комнате (значения `Device.id`). */
   deviceIds: string[];

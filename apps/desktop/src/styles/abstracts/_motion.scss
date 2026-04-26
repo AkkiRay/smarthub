@@ -1,0 +1,75 @@
+// =============================================================================
+// Motion overrides
+// =============================================================================
+// Глобальные правила, привязанные к `[data-motion="..."]` на <html>. Атрибут
+// ставит ui store (stores/ui.ts → applyMotion). --motion-scale умножает --dur-*
+// токены; ниже категориальные блокировки: infinite loop'ы, transform'ы,
+// will-change, backdrop-filter. Системный prefers-reduced-motion маппится на
+// уровень `reduced` как safety-net.
+
+// ---- OFF: полный сухой режим ----
+// Все transition'ы и animation'ы обнуляются. `* !important` — global kill-switch
+// для inline-transition'ов third-party библиотек.
+[data-motion='off'] {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+// ---- REDUCED: безопасное движение ----
+// Останавливает декоративные infinite loop'ы (pulseGlow, pageHeadAccent,
+// aura-blob drift). Translate / scale для interactive feedback сохраняются.
+[data-motion='reduced'] {
+  // Infinite keyframes: ambient drift отключён.
+  *[style*='infinite'],
+  .home__hero-pulse,
+  .home__kpi-dot--pending,
+  .page-head::before,
+  .aura__blob {
+    animation: none !important;
+  }
+
+  // backdrop-filter fallback: прозрачность через rgba(), без runtime blur.
+  .glass,
+  [class*='--glass'] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+// ---- FULL: расширенный набор декораций ----
+// Hook для премиум-эффектов (parallax, 3D-tilt). Масштаб задан через
+// --motion-scale на уровне standard.
+[data-motion='full'] {
+  // Reserved.
+}
+
+// ---- Системный prefers-reduced-motion как safety-net ----
+// Срабатывает когда пользователь не задал уровень вручную (data-motion отсутствует
+// или наследует system-default). Animation iteration ограничивается единицей.
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='standard']):not([data-motion='full']) {
+    *,
+    *::before,
+    *::after {
+      animation-iteration-count: 1 !important;
+    }
+  }
+}
+
+// ---- GPU compositing hints ----
+// Элементы с `data-anim` (mount-staged через useViewMount / useGsap) получают
+// composite layer на время анимации; GSAP clearProps снимает hint после mount.
+[data-anim='header'],
+[data-anim='block'],
+[data-anim='item'],
+[data-page-header] {
+  // translateZ(0): force GPU-layer для smooth opacity-fade.
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}

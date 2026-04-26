@@ -1,13 +1,25 @@
 /**
- * @fileoverview
- * Matter-over-IP: discovery через mDNS-SD `_matter._tcp` / `_matterc._udp` (commissionable).
- * Полный controller stack (commissioning, PASE, CASE, attribute read/subscribe) требует
- * `@project-chip/matter.js` + native crypto — это ~10 MB зависимостей. Здесь реализован только
- * pass-through discovery: пользователь видит свои Matter-устройства, а UI показывает «для управления
- * требуется установить Matter Controller». Полная реализация — отдельная фича после поставки.
+ * @fileoverview Matter-over-IP discovery: mDNS-SD `_matter._tcp` (operational)
+ * + `_matterc._udp` (commissionable). Driver реализует только discovery;
+ * `execute()` возвращает `CONTROLLER_MISSING` до установки `@project-chip/matter.js`.
+ *
+ * TXT schema (Matter Core Spec 1.x §4.3, App Spec §5.4.2):
+ *   _matterc._udp:
+ *     D    Discriminator (12-bit, decimal либо hex)
+ *     SD   Short Discriminator (4-bit)
+ *     CM   Commissioning Mode: 0=closed, 1=passcode, 2=basic
+ *     VP   `vendorId+productId`, "0xFFF1+0x8000" либо "65521+32768"
+ *     DT   Device Type ID (256 = OnOff Light, etc.)
+ *     DN   Friendly Device Name (UTF-8)
+ *     RI   Rotating Identifier
+ *     PH   Pairing Hint bitmap
+ *     PI   Pairing Instruction
+ *   _matter._tcp:
+ *     SII/SAI/SAT  sleepy/active intervals
+ *     T            TCP support bitmap
+ *     ICD          Intermittently Connected Device class
  */
 
-import { Bonjour } from 'bonjour-service';
 import log from 'electron-log/main.js';
 import type {
   Device,
@@ -17,6 +29,7 @@ import type {
   DeviceType,
   DiscoveredDevice,
 } from '@smarthome/shared';
+import { browseMdns } from '../_shared/mdns-browse.js';
 
 interface MatterMeta extends Record<string, unknown> {
   vendorId?: string;
@@ -27,12 +40,13 @@ interface MatterMeta extends Record<string, unknown> {
   commissioningMode?: string;
   rotatingId?: string;
   pairingHint?: string;
-  /** true — устройство ещё не commissioned (commissionable advertise '_matterc'). */
+  pairingInstruction?: string;
+  /** true для устройств, ещё не commissioned (анонсируют `_matterc._udp`). */
   commissionable: boolean;
 }
 
+/** CHIP device-type-id → канонический `DeviceType`. */
 const MATTER_DEVICE_TYPES: Record<string, DeviceType> = {
-  // CHIP device-type-id (десятичный, hex в TXT записи) → каноническая категория.
   '256': 'devices.types.light', // OnOff Light
   '257': 'devices.types.light', // Dimmable Light
   '258': 'devices.types.light', // Color Temperature Light
@@ -44,73 +58,75 @@ const MATTER_DEVICE_TYPES: Record<string, DeviceType> = {
   '107': 'devices.types.fan',
   '769': 'devices.types.thermostat',
   '772': 'devices.types.sensor', // Pressure Sensor
+  '15': 'devices.types.sensor', // Generic Switch
+  '113': 'devices.types.openable', // Window Covering
+  '40': 'devices.types.openable', // Door Lock
+  '835': 'devices.types.sensor', // Air Quality Sensor
 };
+
+/** Нормализует TXT-значение `DT` из hex (`"0x100"`) либо decimal (`"256"`) в decimal-строку. */
+function parseDtId(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  const n = trimmed.toLowerCase().startsWith('0x')
+    ? parseInt(trimmed, 16)
+    : Number(trimmed);
+  return Number.isFinite(n) ? String(n) : null;
+}
 
 export class MatterDriver implements DeviceDriver {
   readonly id = 'matter' as const;
   readonly displayName = 'Matter (Discovery)';
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    const bonjour = new Bonjour();
-    const found = new Map<string, DiscoveredDevice>();
+    const [operational, commissionable] = await Promise.all([
+      browseMdns({ type: 'matter', protocol: 'tcp', timeoutMs: 7000, signal }),
+      browseMdns({ type: 'matterc', protocol: 'udp', timeoutMs: 7000, signal }),
+    ]);
 
+    const found = new Map<string, DiscoveredDevice>();
     const handle = (
-      svc: {
-        name: string;
-        host?: string;
-        port?: number;
-        txt?: Record<string, string>;
-        referer?: { address: string };
-      },
-      commissionable: boolean,
+      svc: { name: string; host: string; port: number; txt: Record<string, string> },
+      isCommissionable: boolean,
     ): void => {
-      const host = svc.referer?.address ?? svc.host;
-      if (!host) return;
-      const txt = svc.txt ?? {};
-      const dt = parseInt(txt['DT'] ?? '0', 16) || Number(txt['DT'] ?? 0);
-      const type = MATTER_DEVICE_TYPES[String(dt)] ?? 'devices.types.other';
+      const txt = svc.txt;
+      const dtId = parseDtId(txt['DT']);
+      const type = dtId
+        ? (MATTER_DEVICE_TYPES[dtId] ?? 'devices.types.other')
+        : 'devices.types.other';
+      const friendly = txt['DN']?.trim() || svc.name;
+      const vp = txt['VP']?.split('+');
+      const vendorId = vp?.[0];
+      const productId = vp?.[1];
+
       found.set(svc.name, {
         driver: 'matter',
         externalId: svc.name,
         type,
-        name: txt['DN'] ?? svc.name,
-        address: `${host}:${svc.port ?? 5540}`,
+        name: friendly,
+        address: `${svc.host}:${svc.port || 5540}`,
         meta: {
-          vendorId: txt['VID'],
-          productId: txt['PID'],
-          deviceType: txt['DT'],
-          longDiscriminator: txt['D'],
-          shortDiscriminator: txt['SD'],
-          commissioningMode: txt['CM'],
-          rotatingId: txt['RI'],
-          pairingHint: txt['PH'],
-          commissionable,
+          ...(vendorId ? { vendorId } : {}),
+          ...(productId ? { productId } : {}),
+          ...(dtId ? { deviceType: dtId } : {}),
+          ...(txt['D'] ? { longDiscriminator: txt['D'] } : {}),
+          ...(txt['SD'] ? { shortDiscriminator: txt['SD'] } : {}),
+          ...(txt['CM'] ? { commissioningMode: txt['CM'] } : {}),
+          ...(txt['RI'] ? { rotatingId: txt['RI'] } : {}),
+          ...(txt['PH'] ? { pairingHint: txt['PH'] } : {}),
+          ...(txt['PI'] ? { pairingInstruction: txt['PI'] } : {}),
+          commissionable: isCommissionable,
         } satisfies MatterMeta,
       });
     };
 
-    const browserOperational = bonjour.find({ type: 'matter', protocol: 'tcp' });
-    const browserCommissionable = bonjour.find({ type: 'matterc', protocol: 'udp' });
-    browserOperational.on('up', (s) => handle(s, false));
-    browserCommissionable.on('up', (s) => handle(s, true));
+    for (const svc of operational) handle(svc, false);
+    for (const svc of commissionable) handle(svc, true);
 
-    return await new Promise((resolve) => {
-      const finish = (): void => {
-        try {
-          browserOperational.stop();
-          browserCommissionable.stop();
-          bonjour.destroy();
-        } catch {
-          /* already stopped */
-        }
-        resolve(Array.from(found.values()));
-      };
-      const timer = setTimeout(finish, 4000);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        finish();
-      });
-    });
+    log.info(
+      `matter: ${found.size} accessories (operational=${operational.length}, commissionable=${commissionable.length})`,
+    );
+    return Array.from(found.values());
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
@@ -125,8 +141,6 @@ export class MatterDriver implements DeviceDriver {
       hidden: false,
       status: 'online',
       meta: candidate.meta,
-      // Без CHIP-controller'а capabilities = только onOff status placeholder.
-      // После установки @project-chip/matter.js здесь будет attribute subscription.
       capabilities: [
         {
           type: 'devices.capabilities.on_off',
@@ -146,9 +160,7 @@ export class MatterDriver implements DeviceDriver {
   }
 
   async execute(device: Device, command: DeviceCommand): Promise<DeviceCommandResult> {
-    log.warn(
-      'Matter: control requires @project-chip/matter.js controller — install it and re-init driver.',
-    );
+    log.warn('matter: execute requires @project-chip/matter.js controller');
     return {
       deviceId: device.id,
       capability: command.capability,

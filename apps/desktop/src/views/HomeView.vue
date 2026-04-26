@@ -134,13 +134,13 @@
     </Transition>
 
     <!-- Быстрые сцены: контекстуально (сейчас день — сцены подсветки/кино) -->
-    <section v-if="hasToggleable" class="home__quick">
+    <section v-if="hasOnlineToggleable" class="home__quick">
       <header class="home__head">
         <div>
           <span class="home__head-eyebrow">Быстрые действия</span>
           <h2 class="home__head-title">Управление одним кликом</h2>
         </div>
-        <RouterLink to="/scenes" class="home__head-link">
+        <RouterLink v-if="totalScenes > 0" to="/scenes" class="home__head-link">
           Все сценарии
           <BaseIcon name="arrow-right" :size="12" />
         </RouterLink>
@@ -332,9 +332,12 @@ const showOnboarding = computed(
 const topDevices = computed(() => devices.devices.slice(0, 6));
 const totalScenes = computed(() => scenes.scenes.length + (yandex.homeFiltered?.scenarios.length ?? 0));
 
-const hasToggleable = computed(() =>
-  devices.devices.some((d) =>
-    d.capabilities.some((c) => c.type === 'devices.capabilities.on_off'),
+/** True если хотя бы одно online устройство имеет on_off capability. */
+const hasOnlineToggleable = computed(() =>
+  devices.devices.some(
+    (d) =>
+      d.status === 'online' &&
+      d.capabilities.some((c) => c.type === 'devices.capabilities.on_off'),
   ),
 );
 
@@ -433,24 +436,23 @@ onMounted(async () => {
 .home {
   display: flex;
   flex-direction: column;
-  gap: clamp(20px, 2.4vw, 40px);
+  gap: var(--space-7);
   width: 100%;
-  // Защита от parent flex/grid пушащих контент вниз — home всегда top-anchored.
   align-self: start;
 
   @media (max-width: 720px) {
-    gap: 16px;
+    gap: var(--space-4);
   }
 }
 
-// HERO: glass-карточка с двумя колонками
+// HERO: glass-карточка с двумя колонками — copy слева, KPI strip справа.
 .home__hero {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) auto;
-  gap: clamp(20px, 2.6vw, 48px);
+  gap: var(--space-7);
   align-items: center;
-  padding: clamp(18px, 2.4vw, 32px);
+  padding: var(--pad-roomy);
   border-radius: var(--radius-xl);
   overflow: hidden;
   isolation: isolate;
@@ -476,9 +478,9 @@ onMounted(async () => {
   }
 
   @media (max-width: 720px) {
-    padding: 16px;
+    padding: var(--pad-comfort);
     border-radius: var(--radius-lg);
-    gap: 16px;
+    gap: var(--space-4);
   }
 }
 
@@ -492,11 +494,11 @@ onMounted(async () => {
 .home__hero-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
   border-radius: var(--radius-pill);
   background: rgba(var(--color-brand-violet-rgb), 0.16);
-  border: 1px solid rgba(var(--color-brand-violet-rgb), 0.28);
+  border: var(--border-thin) solid rgba(var(--color-brand-violet-rgb), 0.28);
   font-size: var(--font-size-micro);
   font-weight: 600;
   letter-spacing: var(--tracking-micro);
@@ -516,48 +518,47 @@ onMounted(async () => {
 
 .home__title {
   font-family: var(--font-family-display);
-  font-size: clamp(24px, 3.4vw, 44px);
+  font-size: var(--font-size-display);
   font-weight: 720;
-  line-height: 1.08;
-  letter-spacing: -0.025em;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-display);
   margin: 0;
   text-wrap: balance;
 
   @media (max-width: 720px) {
-    font-size: 26px;
     br { display: none; }
   }
 }
 
 .home__lead {
   font-size: var(--font-size-h2);
-  line-height: 1.5;
+  line-height: var(--leading-relaxed);
   color: var(--color-text-secondary);
   max-width: 60ch;
   margin: 0;
 
   @media (max-width: 720px) {
-    font-size: 14px;
-    line-height: 1.45;
+    font-size: var(--font-size-body);
+    line-height: var(--leading-normal);
   }
 }
 
 .home__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-3);
   margin-top: var(--space-3);
 
   @media (max-width: 720px) {
-    margin-top: 4px;
-    gap: 8px;
+    margin-top: var(--space-1);
+    gap: var(--space-2);
     > :deep(.btn) {
       flex: 1 1 auto;
     }
   }
 }
 
-// KPI strip справа
+// KPI strip — 4 метрики с pixel-thin разделителями.
 .home__kpis {
   display: grid;
   grid-template-columns: repeat(2, minmax(140px, 1fr));
@@ -565,7 +566,7 @@ onMounted(async () => {
   background: var(--color-border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
+  border: var(--border-thin) solid var(--color-border-subtle);
 
   @media (max-width: 1080px) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -573,6 +574,13 @@ onMounted(async () => {
 
   @media (max-width: 720px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  // На очень узких screens (iPhone SE 375 / 360) две колонки по 140px не
+  // влезают в viewport-padding — KPI value-fonts ломаются на 2 строки и
+  // блок «прыгает». Вертикальный стек надёжнее: каждая метрика на свою строку.
+  @media (max-width: 380px) {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -582,12 +590,26 @@ onMounted(async () => {
   padding: var(--space-4) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   align-items: flex-start;
   cursor: pointer;
   color: var(--color-text-primary);
   text-align: left;
   transition: background var(--dur-fast) var(--ease-out);
+
+  @media (max-width: 720px) {
+    padding: 12px;
+    gap: 2px;
+  }
+
+  // На 1-кол layout'е (≤380px) value/label идут в строку — плотнее визуально,
+  // не теряется vertical real-estate под одной длинной метрикой.
+  @media (max-width: 380px) {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
 
   &:hover {
     background: rgba(var(--glass-tint), 0.6);
@@ -602,14 +624,31 @@ onMounted(async () => {
 
   &-value {
     font-family: var(--font-family-display);
-    font-size: clamp(24px, 1.8vw + 12px, 36px);
+    font-size: var(--font-size-display-2);
     font-weight: 720;
     line-height: 1;
-    letter-spacing: -0.025em;
+    letter-spacing: var(--tracking-display);
     font-variant-numeric: tabular-nums;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
+    // Длинные value-текстовые ("на связи", "Яндекс Станция 2") при display-2
+    // ломались на 2 строки в narrow KPI-cell — KPI block прыгал по высоте.
+    // text-wrap: balance + min-width:0 позволяют SCSS-цепочке гибко сжимать.
+    min-width: 0;
+    text-wrap: balance;
+
+    @media (max-width: 720px) {
+      // В mobile token --font-size-display-2 уже clamp'нут (≤24px),
+      // но мы дополнительно режем — в 1-кол layout'е значение часто текстовое
+      // ("на связи") и должно влезть в одну строку рядом с label'ом.
+      font-size: clamp(15px, 4.4vw, 19px);
+    }
+    @media (max-width: 380px) {
+      // Single-row layout: label слева, value справа. Максимально компактно.
+      font-size: 15px;
+      gap: 6px;
+    }
   }
 
   &-hint {
@@ -654,7 +693,7 @@ onMounted(async () => {
   }
 }
 
-// Section heads
+// Section heads — eyebrow + title слева, "посмотреть всё" link справа.
 .home__head {
   display: flex;
   align-items: flex-end;
@@ -678,14 +717,14 @@ onMounted(async () => {
     font-weight: 700;
     color: var(--color-text-primary);
     letter-spacing: var(--tracking-h1);
-    margin: 4px 0 0;
+    margin: var(--space-1) 0 0;
   }
 
   &-link {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-pill);
     font-size: var(--font-size-small);
     color: var(--color-text-secondary);
@@ -699,18 +738,14 @@ onMounted(async () => {
   }
 }
 
-// Onboarding section
+// Onboarding tile grid.
 .home__onboarding-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: 12px;
+  @include auto-grid(280px, var(--space-3));
 }
 
-// Quick tiles
+// Quick scenes tile grid.
 .home__quick-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
-  gap: 12px;
+  @include auto-grid(220px, var(--space-3));
 }
 
 .quick-tile {
@@ -718,11 +753,11 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
+  border: var(--border-thin) solid var(--color-border-subtle);
   cursor: pointer;
   color: var(--color-text-primary);
   text-align: left;
@@ -754,12 +789,12 @@ onMounted(async () => {
 
   &--running {
     border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent), var(--shadow-hover);
+    box-shadow: 0 0 0 var(--border-thin) var(--accent), var(--shadow-hover);
   }
 
   &__glyph {
-    width: 40px;
-    height: 40px;
+    width: var(--icon-box-md);
+    height: var(--icon-box-md);
     border-radius: 12px;
     background: color-mix(in srgb, var(--accent) 16%, transparent);
     color: var(--accent);
@@ -792,22 +827,21 @@ onMounted(async () => {
   }
 }
 
-// Alice scenarios
+// Alice scenarios tile grid.
 .home__alice-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
-  gap: 12px;
+  @include auto-grid(var(--cell-md), var(--space-3));
 }
 
 .alice-tile {
+  --alice-accent: 255, 204, 0;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-lg);
-  background: rgba(255, 204, 0, 0.04);
-  border: 1px solid rgba(255, 204, 0, 0.2);
+  background: rgba(var(--alice-accent), 0.04);
+  border: var(--border-thin) solid rgba(var(--alice-accent), 0.2);
   cursor: pointer;
   color: var(--color-text-primary);
   text-align: left;
@@ -822,7 +856,7 @@ onMounted(async () => {
     width: 140px;
     height: 140px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 204, 0, 0.32), transparent 65%);
+    background: radial-gradient(circle, rgba(var(--alice-accent), 0.32), transparent 65%);
     filter: blur(20px);
     pointer-events: none;
   }
@@ -830,8 +864,8 @@ onMounted(async () => {
   > * { position: relative; z-index: 1; }
 
   &:hover:not(:disabled) {
-    background: rgba(255, 204, 0, 0.08);
-    border-color: rgba(255, 204, 0, 0.45);
+    background: rgba(var(--alice-accent), 0.08);
+    border-color: rgba(var(--alice-accent), 0.45);
     transform: translateY(-1px);
     .alice-tile__action { transform: translateX(2px); color: #ffd75e; }
   }
@@ -839,15 +873,15 @@ onMounted(async () => {
   &:disabled { opacity: 0.55; cursor: progress; }
 
   &--running {
-    border-color: rgba(255, 204, 0, 0.7);
-    box-shadow: 0 0 0 1px rgba(255, 204, 0, 0.4);
+    border-color: rgba(var(--alice-accent), 0.7);
+    box-shadow: 0 0 0 var(--border-thin) rgba(var(--alice-accent), 0.4);
   }
 
   &__glyph {
-    width: 40px;
-    height: 40px;
+    width: var(--icon-box-md);
+    height: var(--icon-box-md);
     border-radius: 12px;
-    background: rgba(255, 204, 0, 0.18);
+    background: rgba(var(--alice-accent), 0.18);
     color: #ffd75e;
     display: grid;
     place-items: center;
@@ -880,11 +914,9 @@ onMounted(async () => {
   }
 }
 
-// Devices
+// Devices tile grid.
 .home__device-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
-  gap: 12px;
+  @include auto-grid(var(--cell-md), var(--space-3));
 }
 
 .home-fade-enter-active,

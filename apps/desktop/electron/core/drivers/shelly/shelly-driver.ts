@@ -1,11 +1,10 @@
 /**
- * @fileoverview
- * Shelly Gen2+: HTTP RPC (`/rpc/<Method>`) + mDNS `_shelly._tcp`.
- * Bug fix: для Bulb/RGBW/Duo нужен Light.* RPC — Switch.* отдаёт 404; компонент выбирается по type.
+ * @fileoverview Shelly Gen2+ driver. Discovery через mDNS `_shelly._tcp`,
+ * control через HTTP RPC (`/rpc/<Method>`). Bulb/RGBW/Duo используют
+ * `Light.*` RPC, остальные — `Switch.*`.
  */
 
 import axios, { type AxiosInstance } from 'axios';
-import { Bonjour } from 'bonjour-service';
 import type {
   Capability,
   Device,
@@ -14,6 +13,7 @@ import type {
   DeviceType,
   DiscoveredDevice,
 } from '@smarthome/shared';
+import { browseMdns } from '../_shared/mdns-browse.js';
 import {
   CAPABILITY,
   DEVICE_TYPE,
@@ -34,7 +34,7 @@ interface ShellyMeta extends Record<string, unknown> {
   model?: string;
   gen?: string | number;
   component?: 'light' | 'switch';
-  /** RGBW лампа поддерживает оба режима — флаг для UI tabs. */
+  /** true для RGBW: лампа поддерживает оба режима (color / white). */
   hasWhiteMode?: boolean;
 }
 
@@ -45,45 +45,29 @@ export class ShellyDriver extends BaseDriver {
   private readonly http: AxiosInstance = axios.create({ timeout: SHELLY_HTTP_TIMEOUT_MS });
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    const bonjour = new Bonjour();
+    const services = await browseMdns({
+      type: 'shelly',
+      timeoutMs: SHELLY_DISCOVER_TIMEOUT_MS,
+      signal,
+    });
     const found = new Map<string, DiscoveredDevice>();
-    const browser = bonjour.find({ type: 'shelly' });
-
-    browser.on('up', (svc) => {
-      const host = svc.referer?.address ?? svc.host;
-      if (!host) return;
-      const model = String(svc.txt?.app ?? '');
+    for (const svc of services) {
+      const model = String(svc.txt['app'] ?? '');
       const isLight = isLightModel(model);
       found.set(svc.name, {
         driver: 'shelly',
         externalId: svc.name,
         type: isLight ? DEVICE_TYPE.LIGHT : DEVICE_TYPE.SOCKET,
-        name: svc.txt?.name ?? svc.name,
-        address: `${host}:${svc.port ?? 80}`,
+        name: svc.txt['name'] ?? svc.name,
+        address: `${svc.host}:${svc.port ?? 80}`,
         meta: {
           model,
-          gen: svc.txt?.gen ?? '2',
+          gen: svc.txt['gen'] ?? '2',
           component: isLight ? 'light' : 'switch',
         } satisfies ShellyMeta,
       });
-    });
-
-    return await new Promise((resolve) => {
-      const finish = (): void => {
-        try {
-          browser.stop();
-          bonjour.destroy();
-        } catch {
-          /* ignore */
-        }
-        resolve(Array.from(found.values()));
-      };
-      const timer = setTimeout(finish, SHELLY_DISCOVER_TIMEOUT_MS);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        finish();
-      });
-    });
+    }
+    return Array.from(found.values());
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
@@ -103,7 +87,7 @@ export class ShellyDriver extends BaseDriver {
         hasWhiteMode: isLight,
       };
 
-      // Сразу читаем status, чтобы UI после pair'а показал актуальную яркость/цвет.
+      // Initial status fetch: brightness / color / output для capabilities.
       let initialStatus: ShellyLightStatus | ShellySwitchStatus | null = null;
       try {
         const url = isLight
@@ -112,7 +96,7 @@ export class ShellyDriver extends BaseDriver {
         const r = await this.http.get(url);
         initialStatus = r.data as ShellyLightStatus | ShellySwitchStatus;
       } catch {
-        /* status-read не должен валить probe */
+        /* status read опционально, probe валидно без него */
       }
 
       return {
@@ -180,7 +164,7 @@ export class ShellyDriver extends BaseDriver {
       ) {
         const rgb = clamp(Number(command.value), 0, 0xffffff);
         const tuple = rgbIntToTuple(rgb);
-        // Light.Set ждёт rgb как [r,g,b]; сериализуем JSON-строкой — query params не несут вложенных структур.
+        // `Light.Set` ждёт rgb как массив `[r,g,b]`; query params не несут массивов — сериализуем JSON-строкой.
         await this.http.get(`http://${device.address}/rpc/Light.Set`, {
           params: { id: 0, rgb: JSON.stringify(tuple) },
         });
@@ -229,7 +213,7 @@ function buildShellyCaps(
   const light = (status ?? {}) as ShellyLightStatus;
   caps.push(capBrightness(typeof light.brightness === 'number' ? light.brightness : 100));
 
-  // RGBW: выставляем оба параметра, текущий mode определяет, какой instance читать.
+  // RGBW: оба instance активны одновременно, текущий `mode` определяет какой читать.
   const [r, g, b] = light.rgb ?? [0xff, 0xff, 0xff];
   const rgbInt = tupleToRgbInt(r, g, b);
   const ct = typeof light.temp === 'number' ? light.temp : 4000;

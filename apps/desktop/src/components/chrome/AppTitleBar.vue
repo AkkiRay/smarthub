@@ -3,21 +3,8 @@
     class="title-bar"
     :class="{ 'title-bar--blurred': !windowFocused, 'title-bar--maximized': isMaximized }"
   >
-    <!-- Lead: hamburger + brand -->
+    <!-- Lead: brand. Mobile-навигация — в фиксированном bottom-nav. -->
     <div class="title-bar__lead">
-      <button
-        v-if="bp.isMobile.value"
-        class="title-bar__burger"
-        :class="{ 'is-open': ui.mobileDrawerOpen }"
-        type="button"
-        aria-label="Меню"
-        @click="ui.toggleMobileDrawer()"
-      >
-        <span class="title-bar__burger-line" />
-        <span class="title-bar__burger-line" />
-        <span class="title-bar__burger-line" />
-      </button>
-
       <div class="title-bar__brand">
         <BaseIcon name="logo" :size="24" class="title-bar__mark" aria-label="SmartHome" />
         <span class="title-bar__wordmark">
@@ -27,7 +14,7 @@
       </div>
     </div>
 
-    <!-- Drag-area + live-status pill по центру -->
+    <!-- Drag-area + live-status pill по центру. -->
     <div class="title-bar__center">
       <Transition name="title-pill" mode="out-in">
         <div
@@ -44,7 +31,7 @@
       </Transition>
     </div>
 
-    <!-- Window controls -->
+    <!-- Window controls. -->
     <div class="title-bar__controls">
       <button class="title-bar__btn" aria-label="Свернуть окно" type="button" @click="minimize">
         <BaseIcon name="window-minimize" :size="11" />
@@ -70,26 +57,23 @@
 </template>
 
 <script setup lang="ts">
-// Custom chrome для frameless-окна (BrowserWindow `frame: false`).
+// Custom chrome для frameless BrowserWindow (`frame: false`).
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { gsap } from 'gsap';
 import { useDevicesStore } from '@/stores/devices';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useUiStore } from '@/stores/ui';
-import { useBreakpoint } from '@/composables/useBreakpoint';
 import BaseIcon from '@/components/base/BaseIcon.vue';
 
 const devices = useDevicesStore();
 const station = useYandexStationStore();
 const ui = useUiStore();
-const bp = useBreakpoint();
 
 const isMaximized = ref(false);
 const windowFocused = ref(true);
 
-// Window-controls лежат на `smarthome.window`. `window.chrome` занят DevTools API
-// и contextBridge туда не пишет.
+// Window controls bridge: `smarthome.window.*` (DevTools API занимает `window.chrome`).
 const minimize = (): Promise<void> => window.smarthome.window.minimize();
 const toggleMaximize = async (): Promise<void> => {
   await window.smarthome.window.toggleMaximize();
@@ -97,7 +81,7 @@ const toggleMaximize = async (): Promise<void> => {
 };
 const closeWindow = (): Promise<void> => window.smarthome.window.close();
 
-// ---- Live hub status ------------------------------------------------------
+// Live hub status.
 
 type HubState = 'online' | 'syncing' | 'offline';
 
@@ -138,7 +122,7 @@ function pluralizeDevice(n: number): string {
   return 'устройств';
 }
 
-// ---- Window focus listeners ----------------------------------------------
+// Window focus listeners.
 
 function onFocus(): void {
   windowFocused.value = true;
@@ -186,12 +170,12 @@ onBeforeUnmount(() => {
   background: rgba(15, 15, 26, 0.78);
   backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturation));
-  // Border-bottom не нужен — сепаратор строится разницей яркости + blur.
+  // Separator строится разницей яркости + blur, без border-bottom.
   -webkit-app-region: drag;
   z-index: var(--z-sticky);
   transition: background 320ms var(--ease-out);
 
-  // Window blur — bg бледнее.
+  // Window blur: dimmed bg.
   &--blurred {
     background: rgba(15, 15, 26, 0.55);
     .title-bar__wordmark-name {
@@ -202,7 +186,7 @@ onBeforeUnmount(() => {
     }
   }
 
-  // ---- Lead: hamburger + brand --------------------------------------------
+  // Lead: brand.
   &__lead {
     display: flex;
     align-items: center;
@@ -216,53 +200,7 @@ onBeforeUnmount(() => {
     }
   }
 
-  // Hamburger (mobile only) — tap target ≥44×44, видимые контрастные lines.
-  &__burger {
-    width: 44px;
-    height: 36px;
-    margin-right: 2px;
-    border: 0;
-    background: transparent;
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    cursor: pointer;
-    color: var(--color-text-primary);
-    transition: background 160ms var(--ease-out);
-    border-radius: var(--radius-sm);
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.06);
-    }
-
-    &-line {
-      width: 20px;
-      height: 2px;
-      border-radius: 2px;
-      background: currentColor;
-      transform-origin: center;
-      transition:
-        transform 280ms var(--ease-out),
-        opacity 180ms var(--ease-out);
-    }
-
-    &.is-open {
-      .title-bar__burger-line:nth-child(1) {
-        transform: translateY(7px) rotate(45deg);
-      }
-      .title-bar__burger-line:nth-child(2) {
-        opacity: 0;
-        transform: scaleX(0);
-      }
-      .title-bar__burger-line:nth-child(3) {
-        transform: translateY(-7px) rotate(-45deg);
-      }
-    }
-  }
-
-  // Brand: mark + wordmark
+  // Brand: mark + wordmark.
   &__brand {
     display: flex;
     align-items: center;
@@ -287,7 +225,7 @@ onBeforeUnmount(() => {
     user-select: none;
 
     @media (max-width: 720px) {
-      display: none; // бургер + mark достаточно identify-нет brand
+      display: none; // mark identify-нет brand на mobile
     }
   }
 
@@ -300,7 +238,7 @@ onBeforeUnmount(() => {
     font-weight: 400;
   }
 
-  // ---- Center: status pill ------------------------------------------------
+  // Center: status pill.
   &__center {
     display: flex;
     justify-content: center;
@@ -389,7 +327,7 @@ onBeforeUnmount(() => {
     }
   }
 
-  // ---- Window controls (Windows-стиль) ------------------------------------
+  // Window controls (Windows style).
   &__controls {
     display: flex;
     align-items: stretch;
@@ -430,8 +368,7 @@ onBeforeUnmount(() => {
       background: rgba(255, 255, 255, 0.08);
     }
 
-    // Close: 8px скругление под Windows 11 corner radius (иначе hover-fill
-    // выпирает за угол окна).
+    // Close: 8px corner radius под Windows 11 window.
     &--close {
       border-top-right-radius: 8px;
 
@@ -445,13 +382,13 @@ onBeforeUnmount(() => {
     }
   }
 
-  // Maximized: окно без скругления → close возвращаем к прямому углу.
+  // Maximized: square corner на close button.
   &--maximized &__btn--close {
     border-top-right-radius: 0;
   }
 }
 
-// Pill transition (быстрая, без spring).
+// Pill transition: fast, без spring.
 .title-pill-enter-active,
 .title-pill-leave-active {
   transition: opacity 180ms var(--ease-out);
@@ -471,7 +408,7 @@ onBeforeUnmount(() => {
   }
 }
 
-// Reduce-motion: гасим pulse.
+// Reduce-motion: pulse off.
 .app--reduce-motion .title-bar {
   &__status-dot {
     animation: none !important;
@@ -488,7 +425,7 @@ onBeforeUnmount(() => {
       gap: 0;
     }
 
-    // Wordmark «SmartHome Hub» съедал бы место у status-pill.
+    // Wordmark скрыт: место отдано status-pill.
     &__wordmark {
       display: none;
     }
@@ -500,7 +437,7 @@ onBeforeUnmount(() => {
     &__status {
       padding: 0 10px;
       max-width: none;
-      // Detail длиннее label'а — режем его.
+      // Mobile: только label, без detail / separator.
       &-sep,
       &-detail {
         display: none;
@@ -513,7 +450,7 @@ onBeforeUnmount(() => {
   }
 }
 
-// Tablet sm: detail status-pill'а обрезается, label остаётся.
+// Tablet sm: status-pill detail truncated.
 @media (min-width: 721px) and (max-width: 900px) {
   .title-bar__status {
     max-width: 240px;

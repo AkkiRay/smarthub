@@ -1,24 +1,48 @@
 /**
- * @fileoverview
- * Pure-renderer UI prefs: theme/reduceMotion живут только тут (без IPC), persisted в localStorage.
+ * @fileoverview Renderer-only UI prefs: theme / motionLevel, persist в localStorage.
+ *
+ * Motion — 4-уровневая шкала `'off' | 'reduced' | 'standard' | 'full'`.
+ * `data-motion` + `--motion-scale` ставятся на <html>; CSS-токены и useGsap
+ * читают их и масштабируют длительности / блокируют декоративные анимации.
  */
 
 import { defineStore } from 'pinia';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { Platform } from '@smarthome/shared';
 
 const LS_KEY = 'smarthome.ui';
 
 export type UiTheme = 'alice-dark' | 'alice-midnight';
 
+/**
+ * Шкала анимаций.
+ *
+ * - `off`      — отключает CSS transition + GSAP tween/loop. Авто-выставляется
+ *                при системном `prefers-reduced-motion: reduce`.
+ * - `reduced`  — только opacity-fade'ы (без translate/scale/rotate), без
+ *                background-loop'ов. Длительности × 0.6.
+ * - `standard` — default: stagger, springs, page-header accent, aura drift.
+ * - `full`     — все декорации, длительности × 1.15.
+ */
+export type MotionLevel = 'off' | 'reduced' | 'standard' | 'full';
+
 interface PersistedUi {
   theme: UiTheme;
-  reduceMotion: boolean;
+  /** @deprecated читается только для миграции в `motionLevel`. */
+  reduceMotion?: boolean;
+  motionLevel: MotionLevel;
   /** Welcome-flow на `/welcome` пройден. */
   hasSeenOnboarding: boolean;
   /** Coachmark-тур по `HomeView` пройден. */
   tourCompleted: boolean;
 }
+
+const MOTION_SCALE: Record<MotionLevel, number> = {
+  off: 0,
+  reduced: 0.6,
+  standard: 1,
+  full: 1.15,
+};
 
 const loadPersisted = (): Partial<PersistedUi> => {
   try {
@@ -33,33 +57,54 @@ const persist = (state: PersistedUi): void => {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(state));
   } catch {
-    /* localStorage full / disabled — silent */
+    /* localStorage недоступен */
   }
 };
 
 export const useUiStore = defineStore('ui', () => {
   const persisted = loadPersisted();
   const theme = ref<UiTheme>(persisted.theme ?? 'alice-dark');
-  const reduceMotion = ref<boolean>(persisted.reduceMotion ?? false);
+
+  // Migration legacy boolean `reduceMotion` → enum `motionLevel`.
+  const initialLevel: MotionLevel =
+    persisted.motionLevel ??
+    (persisted.reduceMotion === true
+      ? 'reduced'
+      : persisted.reduceMotion === false
+        ? 'standard'
+        : 'standard');
+  const motionLevel = ref<MotionLevel>(initialLevel);
+
+  // Boolean view над `motionLevel` для legacy callsite'ов.
+  const reduceMotion = computed<boolean>(() => motionLevel.value !== 'standard' && motionLevel.value !== 'full');
+  const motionScale = computed<number>(() => MOTION_SCALE[motionLevel.value]);
+
   const hasSeenOnboarding = ref<boolean>(persisted.hasSeenOnboarding ?? false);
   const tourCompleted = ref<boolean>(persisted.tourCompleted ?? false);
   const sidebarCollapsed = ref(false);
-  // Slide-in sidebar для <720px, открывается hamburger в titlebar.
-  const mobileDrawerOpen = ref(false);
   const platform = ref<Platform | 'browser'>('browser');
   const version = ref('');
 
-  // theme как data-attr на body, дальше CSS-токены на :root.
+  // theme — `data-theme` атрибут на <body>, CSS-токены каскадом на :root.
   const applyTheme = (next: UiTheme): void => {
     if (typeof document !== 'undefined') {
       document.body.dataset['theme'] = next;
     }
   };
 
-  applyTheme(theme.value);
+  // `data-motion` + `--motion-scale` на <html> — каскад охватывает body, modal,
+  // toast, drawer и portal-узлы за пределами #app.
+  const applyMotion = (level: MotionLevel): void => {
+    if (typeof document === 'undefined') return;
+    const el = document.documentElement;
+    el.dataset['motion'] = level;
+    el.style.setProperty('--motion-scale', String(MOTION_SCALE[level]));
+  };
 
-  // HMR-safe: bootstrap может дёрнуться повторно — без guard'а каждый
-  // matchMedia-listener стакается и реагирует N раз.
+  applyTheme(theme.value);
+  applyMotion(motionLevel.value);
+
+  // HMR-guard: bootstrap идемпотентен, matchMedia-listener регистрируется один раз.
   let subscribed = false;
 
   async function bootstrap(): Promise<void> {
@@ -69,17 +114,17 @@ export const useUiStore = defineStore('ui', () => {
     ]);
     if (subscribed) return;
     subscribed = true;
-    // Системный prefers-reduced-motion — только когда пользователь не выставил вручную.
-    if (
-      persisted.reduceMotion === undefined &&
-      typeof window !== 'undefined' &&
-      window.matchMedia
-    ) {
+    // Системный `prefers-reduced-motion` применяется только если пользователь
+    // не выставлял motionLevel вручную.
+    const userSetMotion =
+      persisted.motionLevel !== undefined || persisted.reduceMotion !== undefined;
+    if (!userSetMotion && typeof window !== 'undefined' && window.matchMedia) {
       const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-      reduceMotion.value = mq.matches;
+      if (mq.matches) motionLevel.value = 'reduced';
       mq.addEventListener('change', (e) => {
         const cur = loadPersisted();
-        if (cur.reduceMotion === undefined) reduceMotion.value = e.matches;
+        const stillUnset = cur.motionLevel === undefined && cur.reduceMotion === undefined;
+        if (stillUnset) motionLevel.value = e.matches ? 'reduced' : 'standard';
       });
     }
   }
@@ -88,20 +133,19 @@ export const useUiStore = defineStore('ui', () => {
     sidebarCollapsed.value = !sidebarCollapsed.value;
   }
 
-  function toggleMobileDrawer(): void {
-    mobileDrawerOpen.value = !mobileDrawerOpen.value;
-  }
-  function closeMobileDrawer(): void {
-    mobileDrawerOpen.value = false;
-  }
-
   function setTheme(next: UiTheme): void {
     theme.value = next;
     applyTheme(next);
   }
 
   function setReduceMotion(next: boolean): void {
-    reduceMotion.value = next;
+    // Boolean-bridge для legacy callsite'ов: true → 'reduced', false → 'standard'.
+    motionLevel.value = next ? 'reduced' : 'standard';
+  }
+
+  function setMotionLevel(next: MotionLevel): void {
+    motionLevel.value = next;
+    applyMotion(next);
   }
 
   function completeOnboarding(): void {
@@ -117,12 +161,16 @@ export const useUiStore = defineStore('ui', () => {
     tourCompleted.value = false;
   }
 
+  // Sync motionLevel в DOM: компоненты и portal'ы видят изменение в одном кадре
+  // через `var(--motion-scale)`.
+  watch(motionLevel, (lvl) => applyMotion(lvl));
+
   watch(
-    [theme, reduceMotion, hasSeenOnboarding, tourCompleted],
-    ([t, rm, hso, tc]) =>
+    [theme, motionLevel, hasSeenOnboarding, tourCompleted],
+    ([t, ml, hso, tc]) =>
       persist({
         theme: t,
-        reduceMotion: rm,
+        motionLevel: ml,
         hasSeenOnboarding: hso,
         tourCompleted: tc,
       }),
@@ -131,19 +179,19 @@ export const useUiStore = defineStore('ui', () => {
 
   return {
     theme,
+    motionLevel,
+    motionScale,
     reduceMotion,
     hasSeenOnboarding,
     tourCompleted,
     sidebarCollapsed,
-    mobileDrawerOpen,
     platform,
     version,
     bootstrap,
     toggleSidebar,
-    toggleMobileDrawer,
-    closeMobileDrawer,
     setTheme,
     setReduceMotion,
+    setMotionLevel,
     completeOnboarding,
     completeTour,
     resetOnboarding,

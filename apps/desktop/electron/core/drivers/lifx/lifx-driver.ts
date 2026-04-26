@@ -1,14 +1,13 @@
 /**
- * @fileoverview
- * LIFX LAN: UDP 56700, бинарный header (36 байт) + payload.
- * Discovery: broadcast GetService (msg=2) → LIFX отвечает StateService (msg=3) с MAC и портом.
- * Для чтения цвета используется Light::Get (101) → State (107).
+ * @fileoverview LIFX LAN driver. UDP `:56700`, binary header (36 байт) + payload.
+ * Discovery: broadcast `GetService` (msg=2) → ответ `StateService` (msg=3) с MAC
+ * и UDP-портом. Цвет/яркость: `Light::Get` (101) → `State` (107).
  *
- * Frame layout (всё little-endian):
- *   [0..2)  size (uint16)
- *   [2..4)  protocol(12) | addressable(1) | tagged(1) | origin(2)  → 0x3400 для unicast
- *   [4..8)  source (uint32, эхо в ответе)
- *   [8..16) target MAC (6 bytes + 2 padding)
+ * Frame layout (little-endian):
+ *   [0..2)   size (uint16)
+ *   [2..4)   protocol(12) | addressable(1) | tagged(1) | origin(2)
+ *   [4..8)   source (uint32, эхо в ответе)
+ *   [8..16)  target MAC (6 bytes + 2 padding)
  *   [16..22) reserved
  *   [22..23) res_required(1) | ack_required(1) | reserved(6)
  *   [23..24) sequence
@@ -36,9 +35,9 @@ import {
 } from '@smarthome/shared';
 import { hsvToRgbInt, rgbIntToHsv } from '../_shared/color.js';
 import { BaseDriver } from '../_shared/base-driver.js';
+import { broadcastDiscover } from '../_shared/udp-broadcast.js';
 
 const LIFX_PORT = 56700;
-const LIFX_BROADCAST = '255.255.255.255';
 const LIFX_DISCOVER_TIMEOUT_MS = 2500;
 const LIFX_RPC_TIMEOUT_MS = 2000;
 const LIFX_TRANSITION_MS = 400;
@@ -62,28 +61,28 @@ export class LifxDriver extends BaseDriver {
   private readonly source = Math.floor(Math.random() * 0xffffffff);
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    const sock = createSocket({ type: 'udp4', reuseAddr: true });
+    // GetService — header без payload, tagged=true для broadcast по всем устройствам.
+    const probe = buildPacket({
+      source: this.source,
+      target: '000000000000',
+      type: MSG_GET_SERVICE,
+      tagged: true,
+      payload: Buffer.alloc(0),
+    });
     const found = new Map<string, DiscoveredDevice>();
-
-    return await new Promise((resolve) => {
-      let settled = false;
-      const finish = (): void => {
-        if (settled) return;
-        settled = true;
-        try {
-          sock.close();
-        } catch {
-          /* closed */
-        }
-        resolve(Array.from(found.values()));
-      };
-
-      sock.on('message', (msg, rinfo) => {
+    await broadcastDiscover({
+      driverId: 'lifx',
+      port: LIFX_PORT,
+      payload: probe,
+      timeoutMs: LIFX_DISCOVER_TIMEOUT_MS,
+      signal,
+      onMessage: (msg, rinfo) => {
         const parsed = parseHeader(msg);
         if (!parsed || parsed.type !== MSG_STATE_SERVICE) return;
+        if (msg.length < 41) return;
         const service = msg.readUInt8(36);
         const port = msg.readUInt32LE(37);
-        if (service !== 1) return; // только UDP-сервис
+        if (service !== 1) return; // service=1 → UDP transport
         const mac = parsed.target;
         if (found.has(mac)) return;
         found.set(mac, {
@@ -94,47 +93,20 @@ export class LifxDriver extends BaseDriver {
           address: `${rinfo.address}:${port}`,
           meta: { mac, port } satisfies LifxMeta,
         });
-      });
-
-      sock.on('error', (e) => {
-        this.logWarn('discovery error', e);
-        finish();
-      });
-
-      sock.bind(0, () => {
-        try {
-          sock.setBroadcast(true);
-        } catch {
-          /* fallback */
-        }
-        const pkt = buildPacket({
-          source: this.source,
-          target: '000000000000',
-          type: MSG_GET_SERVICE,
-          tagged: true,
-          payload: Buffer.alloc(0),
-        });
-        sock.send(pkt, 0, pkt.length, LIFX_PORT, LIFX_BROADCAST);
-      });
-
-      const timer = setTimeout(finish, LIFX_DISCOVER_TIMEOUT_MS);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        finish();
-      });
+      },
     });
+    return Array.from(found.values());
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
     const meta = candidate.meta as LifxMeta;
     const now = new Date().toISOString();
 
-    // Сразу читаем initial state, иначе UI после pair'а покажет дефолтный белый.
     let state: LightState | null = null;
     try {
       state = await this.lightGet(candidate.address, meta.mac);
     } catch {
-      /* probe всё равно успешен — caps по дефолту */
+      /* probe валиден без initial state, caps собираются с дефолтами */
     }
 
     const capabilities: Capability[] = buildCaps(state);
@@ -181,7 +153,7 @@ export class LifxDriver extends BaseDriver {
         payload.writeUInt32LE(LIFX_TRANSITION_MS, 2); // duration ms
         await this.send(device.address, meta.mac, MSG_LIGHT_SET_POWER, payload);
       } else {
-        // Все цветовые/яркостные изменения шлются одним SetColor — нужен текущий state.
+        // SetColor требует hue/saturation/brightness/kelvin одновременно — читаем текущий state и патчим.
         const cur = await this.lightGet(device.address, meta.mac);
         let h = cur.hue,
           s = cur.saturation,
@@ -229,7 +201,7 @@ export class LifxDriver extends BaseDriver {
     return parseLightState(resp);
   }
 
-  // Один сокет на запрос — ack/state приходит одним unicast'ом.
+  /** Отправляет один LIFX-пакет unicast'ом и опционально ждёт response типа `expectType`. */
   private send(
     address: string,
     mac: string,
@@ -301,7 +273,7 @@ function buildCaps(state: LightState | null): Capability[] {
   return [
     capOnOff(isOn),
     capBrightness(Math.max(1, pct)),
-    // Если saturation ~0 — лампа в white-mode.
+    // saturation < 0.05 трактуется как white-mode → state читается из temperature_k вместо rgb.
     capColor(sat < 0.05 ? { kind: 'temperature_k', value: k } : { kind: 'rgb', value: rgb }, {
       rgb: true,
       temperatureK: LIFX_KELVIN,

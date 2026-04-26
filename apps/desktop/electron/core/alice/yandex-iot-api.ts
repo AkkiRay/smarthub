@@ -11,8 +11,7 @@
  * - Bearer-токен Я.Музыки этими endpoint'ами НЕ принимается, хотя и живёт в
  *   той же партиции. Cookies + CSRF обязательны.
  *
- * Endpoint map (сверено с AlexxIT/YandexStation `yandex_quasar.py`,
- * master branch, апрель 2026)
+ * Endpoint map
  * ---------------------------------------------------------------------------
  * | Method | Path                                                 | Назначение     |
  * |--------|------------------------------------------------------|----------------|
@@ -29,14 +28,14 @@
  * `itemType` — `'device'` либо `'group'`, читается литерально из
  * `device.item_type` в snapshot'е. Плюральная форма приклеивается к URL.
  *
- * NOTE: некоторые «очевидные» endpoint'ы НЕ существуют и отдают 404:
+ * Несуществующие endpoint'ы (отдают 404):
  *   - `/m/v3/user/devices/{id}`       (single-device на v3-префиксе)
  *   - `/m/v3/user/devices/actions`    (bulk action)
  *   - `/quasar/iot`                   (CSRF page — работает только `/quasar`)
  *
- * NOTE: Color/CCT (`devices.capabilities.color_setting`) идёт через выделенный
- * endpoint `/color/apply` — регулярный `/actions` для color на cloud-сопряжённых
- * Yandex-лампах отдаёт HTTP 400 BAD_REQUEST. См. {@link YandexIotClient.applyColorAction}.
+ * Color/CCT (`devices.capabilities.color_setting`) идёт через выделенный
+ * endpoint `/color/apply`; обычный `/actions` для color у cloud-ламп отдаёт
+ * HTTP 400. См. {@link YandexIotClient.applyColorAction}.
  */
 
 import { net, session } from 'electron';
@@ -45,10 +44,10 @@ import WebSocket from 'ws';
 import { safeJsonParse } from '@smarthome/shared';
 import { YANDEX_OAUTH_PARTITION } from './yandex-oauth.js';
 
-/** Страница c CSRF-токеном `csrfToken2`. AlexxIT тянет именно `/quasar`, не `/quasar/iot`. */
+/** Страница с CSRF-токеном `csrfToken2`. */
 const QUASAR_CSRF_PAGE_URL = 'https://yandex.ru/quasar';
 const IOT_DEVICES_URL = 'https://iot.quasar.yandex.ru/m/v3/user/devices';
-/** Список сценариев — без версионного префикса (AlexxIT yandex_quasar.py:271). */
+/** Список сценариев — без версионного префикса. */
 const IOT_SCENARIOS_URL = 'https://iot.quasar.yandex.ru/m/user/scenarios';
 
 export interface YandexHomeDevice {
@@ -70,6 +69,10 @@ export interface YandexHomeDevice {
   properties: YandexHomeProperty[];
   iconUrl?: string;
   online?: boolean;
+  /** Glagol-style serial (`L9402030001234567`); совпадает с mDNS deviceId.
+   *  Ключ связки cloud-Device ↔ локальная WS-сессия. */
+  quasarDeviceId?: string;
+  quasarPlatform?: string;
 }
 
 export interface YandexHomeCapability {
@@ -174,6 +177,9 @@ interface RawDevice {
   state?: string;
   capabilities?: YandexHomeCapability[];
   properties?: YandexHomeProperty[];
+  /** Meta Yandex-колонок: `device_id` совпадает с glagol mDNS,
+   *  `platform` — `yandexstation_2` и т.п. */
+  quasar_info?: { device_id?: string; platform?: string };
 }
 
 interface RawRoom {
@@ -187,9 +193,8 @@ interface RawRoom {
 }
 
 /**
- * v3 households-первая структура (актуальная). Все устройства / комнаты / сценарии
- * вложены ВНУТРЬ household-объектов; верхний уровень содержит только `households[]`.
- * См. AlexxIT/YandexStation `yandex_quasar.py` → v3-парсер.
+ * v3 households-первая схема. Все устройства / комнаты / сценарии вложены
+ * внутрь household-объектов; top-level содержит только `households[]`.
  */
 interface RawGroup {
   id: string;
@@ -264,8 +269,8 @@ interface RawUserDevicesResponse {
   scenarios?: RawScenario[];
   /**
    * WebSocket-URL для real-time push'а device state-changes. Yandex генерирует
-   * его на каждый snapshot-запрос (TTL ~ часы). См. AlexxIT yandex_quasar.py:307.
-   * Без подключения к нему UI обновляется только polling'ом раз в 30s.
+   * его на каждый snapshot-запрос (TTL ~ часы). Без него UI обновляется только
+   * polling'ом раз в 30s.
    */
   updates_url?: string;
 }
@@ -307,7 +312,24 @@ async function fetchTextWithPartitionCookies(url: string): Promise<{ body: strin
   });
 }
 
+/** Минимальный интервал между запросами к iot.quasar. */
+const IOT_REQUEST_GAP_MS = 220;
+let lastIotRequestAt = 0;
+let iotThrottleChain: Promise<void> = Promise.resolve();
+
+/** Сериализует HTTP-вызовы через promise-chain с минимальным gap'ом между ними. */
+async function awaitIotRequestGap(): Promise<void> {
+  const next = iotThrottleChain.then(async () => {
+    const gap = lastIotRequestAt + IOT_REQUEST_GAP_MS - Date.now();
+    if (gap > 0) await new Promise((r) => setTimeout(r, gap));
+    lastIotRequestAt = Date.now();
+  });
+  iotThrottleChain = next.catch(() => undefined);
+  await next;
+}
+
 async function fetchJsonWithCsrf<T>(url: string, csrfToken: string): Promise<T> {
+  await awaitIotRequestGap();
   return new Promise((resolve, reject) => {
     const sess = session.fromPartition(YANDEX_OAUTH_PARTITION);
     const req = net.request({
@@ -356,6 +378,7 @@ async function postJsonWithCsrf<T>(
   csrfToken: string,
   payload: unknown,
 ): Promise<T> {
+  await awaitIotRequestGap();
   return new Promise((resolve, reject) => {
     const sess = session.fromPartition(YANDEX_OAUTH_PARTITION);
     const req = net.request({
@@ -414,6 +437,7 @@ async function jsonWithBody<T>(
   csrfToken: string,
   payload: unknown,
 ): Promise<T> {
+  await awaitIotRequestGap();
   return new Promise((resolve, reject) => {
     const sess = session.fromPartition(YANDEX_OAUTH_PARTITION);
     const req = net.request({
@@ -425,7 +449,6 @@ async function jsonWithBody<T>(
         'user-agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
         'x-csrf-token': csrfToken,
-        // См. комментарий в postJsonWithCsrf — Origin/Referer не ставим.
         accept: 'application/json',
         'content-type': 'application/json',
       },
@@ -587,10 +610,12 @@ export class YandexIotClient {
   }
 
   /**
-   * Универсальная обёртка: дёргаем `fn(csrf)`, на 401/403 инвалидируем кэш
-   * и повторяем один раз с force-refresh. Раньше каждый caller делал свой
-   * try/catch — `fetchUserDevices` вообще без retry, и при silent CSRF-протухании
-   * пользователь видел «Сессия истекла» хотя cookies валидны.
+   * Вызывает `fn(csrf)` с актуальным CSRF-token.
+   *
+   * Retry policy:
+   *   - HTTP 5xx → один повтор с 250ms backoff на том же CSRF.
+   *   - HTTP 401/403 → invalidate CSRF cache + один повтор с force-refresh.
+   *   - другие ошибки → throw без retry.
    */
   private async withCsrfRetry<T>(fn: (csrf: string) => Promise<T>): Promise<T> {
     const csrf = await this.getCsrf();
@@ -598,6 +623,10 @@ export class YandexIotClient {
       return await fn(csrf);
     } catch (e) {
       const msg = (e as Error).message;
+      if (/HTTP 5\d\d/.test(msg)) {
+        await new Promise((r) => setTimeout(r, 250));
+        return await fn(csrf);
+      }
       if (!msg.includes('HTTP 401') && !msg.includes('HTTP 403')) throw e;
       this.invalidateCsrf();
       const fresh = await this.getCsrf(true);
@@ -732,8 +761,8 @@ export class YandexIotClient {
     }
 
     const devices: YandexHomeDevice[] = dedupedDevices.map((d) => {
-      // Yandex обычно отдаёт roomId именно в `room`, но в части ответов поле
-      // называется `room_id` (group-вложенные / unconfigured_devices). Нормализуем.
+      // roomId в большинстве ответов в `room`; в group-вложенных и
+      // unconfigured_devices — `room_id`. Нормализуем.
       const roomId = d.room ?? d.room_id;
       return {
         id: d.id,
@@ -745,17 +774,17 @@ export class YandexIotClient {
         ...(d.skill_id ? { skillId: d.skill_id } : {}),
         ...(d.icon_url ? { iconUrl: d.icon_url } : {}),
         ...(d.state ? { online: d.state === 'online' } : {}),
-        // Дедуп по (type, instance) — наблюдаем у Я.Станций по 8 одинаковых
-        // `devices.capabilities.quasar` (одна и та же `instance`, без полезной нагрузки).
-        // Без дедупа UI рисует стек идентичных карточек.
+        ...(d.quasar_info?.device_id ? { quasarDeviceId: d.quasar_info.device_id } : {}),
+        ...(d.quasar_info?.platform ? { quasarPlatform: d.quasar_info.platform } : {}),
+        // Дедуп по (type, instance): Я.Станции отдают по 8 одинаковых
+        // `devices.capabilities.quasar` с одинаковой `instance`.
         capabilities: dedupCaps(d.capabilities),
         properties: dedupProps(d.properties),
       };
     });
 
-    // Группы импортируем как виртуальные устройства c `itemType:'group'` — driver
-    // отправит команду на /m/user/groups/{id}/actions, и Yandex сам разошлёт её
-    // всем участникам группы по их capabilities.
+    // Group → виртуальное устройство с `itemType:'group'`. Driver шлёт команду
+    // на /m/user/groups/{id}/actions; Yandex broadcast'ит участникам.
     for (const g of groups) {
       if (g.capabilities.length === 0) continue;
       devices.push({
@@ -789,8 +818,8 @@ export class YandexIotClient {
     log.info(
       `YandexIot: fetched ${snapshot.devices.length} devices, ${snapshot.rooms.length} rooms, ${snapshot.groups.length} groups, ${snapshot.scenarios.length} scenarios across ${allHouseholds.length} households`,
     );
-    // Если ответ пришёл OK, но устройств 0 — это либо реально пустой аккаунт, либо неизвестная
-    // схема. Логируем top-level keys, чтобы можно было быстро увидеть в main.log.
+    // OK + 0 устройств → пустой аккаунт либо неизвестная схема. Логируем
+    // top-level keys для диагностики.
     if (snapshot.devices.length === 0) {
       log.warn(
         `YandexIot: empty device list. Top-level keys: [${Object.keys(raw).join(', ')}]; ` +
@@ -804,15 +833,11 @@ export class YandexIotClient {
   }
 
   /**
-   * Subscribe на real-time push'и device-state-changes.
-   * Open'ит WS на `updates_url` (получаем из последнего snapshot'а), парсит
-   * `update_states` сообщения и вызывает onUpdate(externalId, partialDevice)
-   * для каждого изменённого устройства.
-   *
-   * Реализация совпадает с AlexxIT yandex_quasar.py:307-328.
-   *
-   * Возвращает disconnect-функцию. Authentication — через session cookies той же
-   * партиции, что и REST.
+   * Подписка на real-time push'и device-state-changes.
+   * Открывает WS на `updates_url` из последнего snapshot'а, парсит сообщения
+   * `update_states` и вызывает onUpdate(externalId, partialDevice).
+   * Authentication — session cookies той же партиции, что у REST.
+   * Возвращает disconnect-функцию.
    */
   subscribeUpdates(
     updatesUrl: string,
@@ -829,8 +854,8 @@ export class YandexIotClient {
     const open = (): void => {
       if (manuallyClosed) return;
 
-      // net.request умеет cookies из сессии, но WebSocket из `ws` — нет; собираем
-      // Cookie-header вручную через session.cookies.get().
+      // `ws` не поддерживает session cookies — собираем Cookie-header вручную
+      // через session.cookies.get().
       void sess.cookies
         .get({ url: 'https://iot.quasar.yandex.ru' })
         .then((cookies) => {
@@ -854,7 +879,7 @@ export class YandexIotClient {
             const text = typeof raw === 'string' ? raw : raw.toString('utf8');
             const envelope = safeJsonParse<{ operation?: string; message?: string }>(text);
             if (!envelope || envelope.operation !== 'update_states') return;
-            // `message` — JSON-string внутри JSON, как у Yandex принято.
+            // `message` — JSON-string внутри JSON.
             const payload = safeJsonParse<{ updated_devices?: RawDevice[] }>(
               envelope.message ?? '',
             );
@@ -908,7 +933,7 @@ export class YandexIotClient {
     };
   }
 
-  /** GET /m/user/scenarios — без версии (см. AlexxIT yandex_quasar.py:271). */
+  /** GET /m/user/scenarios — без версионного префикса. */
   private async fetchScenariosRaw(): Promise<RawScenario[]> {
     const r = await this.withCsrfRetry((csrf) =>
       fetchJsonWithCsrf<RawScenariosResponse>(IOT_SCENARIOS_URL, csrf),
@@ -966,8 +991,8 @@ export class YandexIotClient {
 
   /**
    * Переименовать сценарий — PUT /m/v4/user/scenarios/{id}.
-   * Шаги/триггеры передаются из текущего edit-snapshot'а round-trip'ом, чтобы
-   * не потерять конфигурацию при простом rename.
+   * Шаги/триггеры round-trip'ятся из edit-snapshot'а — endpoint требует полное
+   * тело сценария.
    */
   async renameScenario(scenarioId: string, name: string): Promise<YandexIotActionResult> {
     try {
@@ -1011,7 +1036,7 @@ export class YandexIotClient {
     }
   }
 
-  /** Toggle is_active — переиспользует rename-flow с round-trip'ом. */
+  /** Toggle is_active — round-trip-PUT по той же схеме, что и rename. */
   async setScenarioActive(scenarioId: string, active: boolean): Promise<YandexIotActionResult> {
     try {
       const details = await this.fetchScenarioDetails(scenarioId);
@@ -1040,7 +1065,7 @@ export class YandexIotClient {
 
   /**
    * Свежие capabilities/properties одного устройства/группы.
-   * URL: GET /m/user/{itemType}s/{id} (БЕЗ /v3 — в актуальной схеме v3 endpoint'а нет).
+   * GET /m/user/{itemType}s/{id} (без /v3-префикса).
    */
   async fetchDeviceById(
     itemType: 'device' | 'group',
@@ -1052,7 +1077,7 @@ export class YandexIotClient {
       fetchJsonWithCsrf<RawSingleDeviceResponse>(url, csrf),
     );
     if (raw.status && raw.status !== 'ok') {
-      // Устройство удалили из «Дома с Алисой» — возвращаем null, драйвер пометит unreachable.
+      // Устройство отсутствует в «Доме с Алисой» — driver пометит unreachable.
       log.warn(`YandexIot.fetchDeviceById(${itemType}/${deviceId}): status=${raw.status}`);
       return null;
     }
@@ -1067,31 +1092,27 @@ export class YandexIotClient {
       ...(raw.skill_id ? { skillId: raw.skill_id } : {}),
       ...(raw.icon_url ? { iconUrl: raw.icon_url } : {}),
       ...(raw.state ? { online: raw.state === 'online' } : {}),
+      ...(raw.quasar_info?.device_id ? { quasarDeviceId: raw.quasar_info.device_id } : {}),
+      ...(raw.quasar_info?.platform ? { quasarPlatform: raw.quasar_info.platform } : {}),
       capabilities: raw.capabilities ?? [],
       properties: raw.properties ?? [],
     };
   }
 
   /**
-   * Выполнить одну capability-action для устройства Yandex IoT.
-   *
-   * Эндпоинты сверены с AlexxIT/YandexStation (`yandex_quasar.py` + `light.py`,
-   * master, апрель 2026):
+   * Выполнить одну capability-action.
    *
    *   1) `color_setting` + instance ∈ {rgb, hsv, temperature_k} →
    *        POST /m/v3/user/custom/group/color/apply
    *        Body: {"device_ids":[<id>], "<instance>": <value>}
-   *      Регулярный `/actions` для color_setting у Yandex-облачных ламп возвращает
-   *      400 BAD_REQUEST на любой формат payload — это НЕ payload-mismatch, а
-   *      намеренный routing: цвет/CCT идут только через `/color/apply`. См.
-   *      light.py:async_turn_on → device_color(...).
+   *      Color/CCT для cloud-ламп идёт только через `/color/apply`; обычный
+   *      `/actions` отдаёт HTTP 400.
    *
-   *   2) Остальные capability-actions (on_off, range/brightness, toggle, mode,
+   *   2) Остальные actions (on_off, range/brightness, toggle, mode,
    *      color_setting/scene-id, …) →
    *        POST /m/user/{item_type}s/{device_id}/actions
    *        Body: {"actions":[{"type":"<cap>","state":{"instance":"<i>","value":<v>}}]}
-   *      `item_type` — литерально из snapshot'а ('device' или 'group').
-   *      Префикс `/v3/` для этого endpoint'а не существует, bulk URL тоже нет.
+   *      `item_type` читается литерально из snapshot'а.
    */
   async executeAction(input: {
     /** `"device"` для обычных устройств, `"group"` для групп — определяет URL. */
@@ -1105,7 +1126,7 @@ export class YandexIotClient {
       input.capability === 'devices.capabilities.color_setting' &&
       (input.instance === 'rgb' || input.instance === 'hsv' || input.instance === 'temperature_k')
     ) {
-      return this.applyColorAction(input.deviceId, input.instance, input.value);
+      return this.applyColorAction(input.itemType, input.deviceId, input.instance, input.value);
     }
 
     const collection = input.itemType === 'group' ? 'groups' : 'devices';
@@ -1135,8 +1156,8 @@ export class YandexIotClient {
       return { ok: false, status: raw.status, error: raw.message ?? 'iot.quasar отклонил запрос' };
     }
 
-    // Per-action status: bulk-ответ кладёт результат в `devices[0].actions_results[]`
-    // (новые версии) или `devices[0].capabilities[0].state.action_result` (legacy).
+    // Per-action status: новые версии кладут в `devices[0].actions_results[]`,
+    // legacy — в `devices[0].capabilities[0].state.action_result`. Парсим оба.
     const dev = raw.devices?.[0];
     const ar = dev?.actions_results?.[0];
     const cap = dev?.capabilities?.[0];
@@ -1155,21 +1176,17 @@ export class YandexIotClient {
   }
 
   /**
-   * Color/CCT для Yandex-облачных ламп идут отдельным endpoint'ом — иначе 400/500.
+   * `POST /m/v3/user/custom/group/color/apply` — endpoint color/CCT для
+   * cloud-ламп.
    *
-   *   POST /m/v3/user/custom/group/color/apply
-   *   Body: {"device_ids":[<id>], "hsv": {h,s,v}}        — для цвета
-   *      OR {"device_ids":[<id>], "temperature_k": <K>}  — для CCT
+   *   body: {"device_ids":[<id>], "hsv": {h,s,v}}       — color
+   *      OR {"device_ids":[<id>], "temperature_k": <K>} — CCT
    *
-   * Ключ `rgb` endpoint НЕ ПРИНИМАЕТ (HTTP 500 INTERNAL_ERROR) — AlexxIT в
-   * light.py:140-147 шлёт исключительно `hsv` и `temperature_k`. Поэтому
-   * `instance:'rgb'` мы конвертируем в hsv и отправляем как hsv.
-   *
-   * URL называется "group" исторически (изначально для групп), но используется
-   * и для одиночных устройств — `device_ids` принимает массив любых id, Yandex
-   * сам разрулит broadcast.
+   * `instance:'rgb'` конвертируется в hsv (ключ `rgb` endpoint не принимает).
+   * `device_ids` — broadcast-массив, любой размер.
    */
   private async applyColorAction(
+    _itemType: 'device' | 'group',
     deviceId: string,
     instance: 'rgb' | 'hsv' | 'temperature_k',
     value: unknown,
@@ -1182,13 +1199,19 @@ export class YandexIotClient {
     } else if (instance === 'rgb' && typeof value === 'number') {
       body = { device_ids: [deviceId], hsv: rgbIntToHsv(value) };
     } else if (instance === 'hsv' && value && typeof value === 'object') {
-      const v = value as { h?: number; s?: number; v?: number; hue?: number; saturation?: number; value?: number };
+      const v = value as {
+        h?: number; s?: number; v?: number;
+        hue?: number; saturation?: number; value?: number;
+      };
       const h = v.h ?? v.hue ?? 0;
       const s = v.s ?? v.saturation ?? 0;
       const vv = v.v ?? v.value ?? 100;
       body = { device_ids: [deviceId], hsv: { h, s, v: vv } };
     } else {
-      return { ok: false, error: `applyColorAction: неподдерживаемый формат ${instance}=${JSON.stringify(value)}` };
+      return {
+        ok: false,
+        error: `applyColorAction: неподдерживаемый формат ${instance}=${JSON.stringify(value)}`,
+      };
     }
 
     let raw: { status?: string; message?: string };
@@ -1205,7 +1228,8 @@ export class YandexIotClient {
 
     if (raw.status && raw.status !== 'ok') {
       log.warn(
-        `YandexIot.applyColorAction declined: body=${JSON.stringify(body)} → ${raw.status} ${raw.message ?? ''}`,
+        `YandexIot.applyColorAction declined: body=${JSON.stringify(body)} → ` +
+          `${raw.status} ${raw.message ?? ''}`,
       );
       return { ok: false, status: raw.status, error: raw.message ?? 'iot.quasar отклонил цвет' };
     }

@@ -1,10 +1,10 @@
 /**
- * @fileoverview
- * Yeelight LAN: SSDP M-SEARCH в multicast 239.255.255.250:1982 + JSONRPC по TCP/55443.
- * Лампа держит max 1 connection одновременно — pool бессмысленен, открываем/закрываем сокет на каждую команду.
+ * @fileoverview Yeelight LAN driver. Discovery — SSDP M-SEARCH на multicast
+ * `239.255.255.250:1982` (`ST: wifi_bulb`); control — JSON-RPC по TCP `:55443`.
+ * Лампа допускает только одно TCP-connection одновременно: открываем и
+ * закрываем socket на каждую команду.
  */
 
-import { createSocket, type Socket as DgramSocket } from 'node:dgram';
 import { Socket } from 'node:net';
 import type {
   Capability,
@@ -23,6 +23,7 @@ import {
   capOnOff,
 } from '@smarthome/shared';
 import { BaseDriver } from '../_shared/base-driver.js';
+import { ssdpDiscover } from '../_shared/ssdp-discover.js';
 
 const YEELIGHT_MULTICAST_ADDR = '239.255.255.250';
 const YEELIGHT_MULTICAST_PORT = 1982;
@@ -31,15 +32,6 @@ const YEELIGHT_DISCOVER_TIMEOUT_MS = 3500;
 const YEELIGHT_RPC_TIMEOUT_MS = 2500;
 const YEELIGHT_TRANSITION_MS = 400;
 const YEELIGHT_KELVIN: { min: number; max: number } = { min: 1700, max: 6500 };
-
-const SEARCH_MESSAGE = [
-  'M-SEARCH * HTTP/1.1',
-  `HOST: ${YEELIGHT_MULTICAST_ADDR}:${YEELIGHT_MULTICAST_PORT}`,
-  'MAN: "ssdp:discover"',
-  'ST: wifi_bulb',
-  '',
-  '',
-].join('\r\n');
 
 interface YeelightAdvert {
   id: string;
@@ -70,58 +62,26 @@ export class YeelightDriver extends BaseDriver {
   readonly displayName = 'Yeelight';
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    const socket: DgramSocket = createSocket({ type: 'udp4', reuseAddr: true });
     const found = new Map<string, YeelightAdvert>();
-
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (): void => {
-        if (settled) return;
-        settled = true;
-        try {
-          socket.close();
-        } catch {
-          /* already closed */
-        }
-        resolve(Array.from(found.values()).map(toCandidate));
-      };
-
-      socket.on('message', (msg) => {
-        const advert = parseAdvert(msg.toString('utf8'));
+    await ssdpDiscover({
+      driverId: 'yeelight',
+      multicastAddr: YEELIGHT_MULTICAST_ADDR,
+      multicastPort: YEELIGHT_MULTICAST_PORT,
+      st: 'wifi_bulb',
+      timeoutMs: YEELIGHT_DISCOVER_TIMEOUT_MS,
+      signal,
+      onResponse: (text) => {
+        const advert = parseAdvert(text);
         if (advert?.id) found.set(advert.id, advert);
-      });
-      socket.on('error', (e) => {
-        this.logWarn('discovery socket error', e);
-        finish();
-      });
-      socket.bind(0, () => {
-        try {
-          socket.setBroadcast(true);
-          socket.send(
-            SEARCH_MESSAGE,
-            0,
-            SEARCH_MESSAGE.length,
-            YEELIGHT_MULTICAST_PORT,
-            YEELIGHT_MULTICAST_ADDR,
-          );
-        } catch (e) {
-          this.logWarn('M-SEARCH send failed', e);
-          finish();
-        }
-      });
-
-      const timer = setTimeout(finish, YEELIGHT_DISCOVER_TIMEOUT_MS);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        finish();
-      });
+      },
     });
+    return Array.from(found.values()).map(toCandidate);
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
     const meta = (candidate.meta ?? {}) as Partial<YeelightMeta>;
     const support = new Set(meta.support ?? []);
-    // SSDP advert честно перечисляет методы. У белой mono-лампы set_rgb нет — color picker нельзя показывать.
+    // SSDP advert перечисляет поддерживаемые методы; capability'и формируем строго по этому списку.
     const supportsRgb = support.has('set_rgb') || support.has('set_hsv');
     const supportsCt = support.has('set_ct_abx');
     const supportsBright = support.has('set_bright');

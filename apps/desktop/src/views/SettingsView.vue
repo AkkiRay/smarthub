@@ -1,6 +1,10 @@
 <template>
   <section class="settings" ref="root">
-    <BasePageHeader title="Настройки" description="Конфигурация хаба, драйверов и интеграций." />
+    <BasePageHeader
+      eyebrow="Конфигурация"
+      title="Настройки"
+      description="Внешний вид, информация о хабе, маркетплейс из 30+ интеграций — всё в одном месте."
+    />
 
     <div class="settings__stack">
       <!-- ============ Внешний вид ============ -->
@@ -29,16 +33,16 @@
             />
           </div>
 
-          <div class="settings__row">
+          <div class="settings__row settings__row--stack">
             <div class="settings__row-copy">
-              <span class="settings__row-title">Уменьшить анимации</span>
-              <span class="settings__row-hint"
-                >Бережёт глаза и батарею. Уважает системный prefers-reduced-motion.</span
-              >
+              <span class="settings__row-title">Анимации</span>
+              <span class="settings__row-hint">{{ motionHint }}</span>
             </div>
-            <BaseSwitch
-              :model-value="ui.reduceMotion"
-              @update:model-value="ui.setReduceMotion($event)"
+            <BaseSegmented
+              :model-value="ui.motionLevel"
+              :options="motionOptions"
+              size="sm"
+              @update:model-value="ui.setMotionLevel($event as MotionLevel)"
             />
           </div>
 
@@ -137,24 +141,31 @@
           </div>
         </header>
 
-        <DriversMarketplace />
+        <Transition name="settings-defer" mode="out-in">
+          <DriversMarketplace v-if="marketplaceReady" />
+          <div v-else class="settings__skeleton" aria-hidden="true">
+            <div v-for="n in 6" :key="n" class="settings__skeleton-row" />
+          </div>
+        </Transition>
       </article>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, useTemplateRef } from 'vue';
+import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import type { HubInfo } from '@smarthome/shared';
-import { useUiStore } from '@/stores/ui';
+import { useUiStore, type MotionLevel } from '@/stores/ui';
 import { useViewMount } from '@/composables/useViewMount';
+import { useDeferredMount } from '@/composables/useDeferredMount';
 import {
   BaseButton,
   BaseIcon,
+  BaseSegmented,
   BaseSelect,
-  BaseSwitch,
   BasePageHeader,
+  type SegmentedOption,
   type SelectOption,
 } from '@/components/base';
 import DriversMarketplace from '@/components/drivers/DriversMarketplace.vue';
@@ -170,6 +181,21 @@ const themeOptions: SelectOption[] = [
   { value: 'alice-dark', label: 'Alice Dark' },
   { value: 'alice-midnight', label: 'Alice Midnight' },
 ];
+
+const motionOptions: SegmentedOption[] = [
+  { value: 'off', label: 'Выкл.' },
+  { value: 'reduced', label: 'Меньше' },
+  { value: 'standard', label: 'Стандарт' },
+  { value: 'full', label: 'Премиум' },
+];
+
+const MOTION_HINTS: Record<MotionLevel, string> = {
+  off: 'Все анимации отключены — максимум производительности на слабых устройствах.',
+  reduced: 'Только мягкие fade-эффекты, без декоративных движений. Бережёт глаза и батарею.',
+  standard: 'Сбалансированные анимации с плавным появлением и stagger-эффектами.',
+  full: 'Все эффекты + удлинённые easing’и для премиум-ощущения.',
+};
+const motionHint = computed(() => MOTION_HINTS[ui.motionLevel as MotionLevel]);
 
 function restartTour(): void {
   ui.resetOnboarding();
@@ -191,7 +217,11 @@ onMounted(async () => {
   hubInfo.value = await window.smarthome.app.getHubInfo();
 });
 
-useViewMount({ scope: root.value });
+useViewMount({ scope: root });
+
+// Marketplace монтируется во второй task'е (`requestIdleCallback`); skeleton
+// фиксированной высоты держит layout до swap'а.
+const marketplaceReady = useDeferredMount({ mode: 'idle', delayMs: 250 });
 </script>
 
 <style scoped lang="scss">
@@ -252,7 +282,7 @@ useViewMount({ scope: root.value });
 
     &-title {
       font-family: var(--font-family-display);
-      font-size: clamp(18px, 1vw + 14px, 22px);
+      font-size: var(--font-size-h1);
       font-weight: 600;
       letter-spacing: var(--tracking-h1);
       color: var(--color-text-primary);
@@ -285,6 +315,16 @@ useViewMount({ scope: root.value });
 
     &:first-child {
       border-top: 0;
+    }
+
+    // Stack-row: control под текстом (для широких controls типа segmented с 4 опциями).
+    &--stack {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+
+      > :nth-child(2) {
+        justify-self: start;
+      }
     }
 
     > :nth-child(2) {
@@ -604,6 +644,39 @@ useViewMount({ scope: root.value });
   }
 }
 
+// Skeleton DriversMarketplace: 6 строк × 60px + opacity-pulse.
+.settings__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings__skeleton-row {
+  height: 60px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  animation: settingsSkeletonPulse 1.4s ease-in-out infinite;
+}
+.settings__skeleton-row:nth-child(2) { animation-delay: 0.08s; }
+.settings__skeleton-row:nth-child(3) { animation-delay: 0.16s; }
+.settings__skeleton-row:nth-child(4) { animation-delay: 0.24s; }
+.settings__skeleton-row:nth-child(5) { animation-delay: 0.32s; }
+.settings__skeleton-row:nth-child(6) { animation-delay: 0.4s; }
+@keyframes settingsSkeletonPulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+// Fade-swap skeleton ↔ DriversMarketplace.
+.settings-defer-enter-active,
+.settings-defer-leave-active {
+  transition: opacity 220ms var(--ease-out);
+}
+.settings-defer-enter-from,
+.settings-defer-leave-to {
+  opacity: 0;
+}
+
 .drivers-expand-enter-active,
 .drivers-expand-leave-active {
   overflow: hidden;
@@ -666,11 +739,19 @@ useViewMount({ scope: root.value });
 
     &__row {
       // Action под текстом, не справа — иначе chip обрезает hint.
-      flex-wrap: wrap;
+      // Базово row — grid 2-кол; на mobile перевозим в single-col, контрол
+      // едет под текст с justify-self: stretch чтобы full-width control'ы
+      // (segmented, select) занимали всю ширину карточки.
+      grid-template-columns: minmax(0, 1fr);
       gap: 10px;
 
       &-copy {
-        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      > :nth-child(2) {
+        justify-self: stretch;
+        width: 100%;
       }
     }
   }

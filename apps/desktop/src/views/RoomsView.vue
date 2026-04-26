@@ -819,7 +819,7 @@ onMounted(async () => {
   }
 });
 
-useViewMount({ scope: root.value, itemsSelector: '.room' });
+useViewMount({ scope: root, itemsSelector: '.room' });
 </script>
 
 <style scoped lang="scss">

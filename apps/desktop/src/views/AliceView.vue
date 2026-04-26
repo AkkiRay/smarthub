@@ -1,6 +1,6 @@
 <template>
   <section class="alice" ref="root">
-    <BasePageHeader :title="pageTitle" eyebrow="Подключение">
+    <BasePageHeader :title="pageTitle" eyebrow="Алиса · Подключение">
       <template #description>
         <span v-if="activeSection === 'station'">
           Хаб подключается к вашей колонке Алисы
@@ -41,7 +41,10 @@
       data-tour="alice-section-nav"
     />
 
-    <div v-if="activeSection === 'station'" class="alice__stack">
+    <!-- Tab-stage: relative-якорь для cross-fade сегментов. -->
+    <div class="alice__tab-stage">
+      <Transition :name="motion ? 'tab-fade' : 'tab-fade-instant'">
+        <div v-if="activeSection === 'station'" :key="'station'" class="alice__stack">
       <!-- ============================================================== -->
       <!-- Connected: success-баннер с быстрыми голосовыми командами       -->
       <!-- ============================================================== -->
@@ -52,43 +55,58 @@
           class="alice__connected"
           data-tour="alice-station-connected"
         >
-          <div class="alice__connected-head">
-            <span class="alice__connected-pulse" aria-hidden="true" />
-            <div>
-              <h3 class="alice__connected-title">
-                «{{ station.status?.station?.name ?? 'Колонка' }}» подключена
-              </h3>
-              <p class="alice__connected-sub">
-                {{ station.status?.station?.host }}:{{
-                  station.status?.station?.port ?? YANDEX_STATION_PORT
-                }}
-                ·
-                {{ station.status?.station?.platform ?? '—' }}
-              </p>
+          <div class="alice__connected-body">
+            <div class="alice__connected-head">
+              <span class="alice__connected-pulse" aria-hidden="true" />
+              <div>
+                <h3 class="alice__connected-title">
+                  «{{ station.status?.station?.name ?? 'Колонка' }}» подключена
+                </h3>
+                <p class="alice__connected-sub">
+                  {{ station.status?.station?.host }}:{{
+                    station.status?.station?.port ?? YANDEX_STATION_PORT
+                  }}
+                  ·
+                  {{ station.status?.station?.platform ?? '—' }}
+                </p>
+              </div>
+              <BaseButton
+                variant="ghost"
+                size="sm"
+                icon-left="close"
+                class="alice__connected-action"
+                @click="onDisconnect"
+              >
+                Отключить
+              </BaseButton>
             </div>
-            <BaseButton
-              variant="ghost"
-              size="sm"
-              icon-left="close"
-              class="alice__connected-action"
-              @click="onDisconnect"
-            >
-              Отключить
-            </BaseButton>
+            <p class="alice__connected-hint">
+              Подключение готово. Управление воспроизведением, оповещения и стрим звука с ПК
+              живут в отдельном разделе <strong>«Колонка»</strong>.
+            </p>
+            <div class="alice__connected-actions">
+              <BaseButton
+                variant="primary"
+                icon-right="arrow-right"
+                @click="speakerNav.openSpeaker()"
+              >
+                Перейти к управлению
+              </BaseButton>
+            </div>
           </div>
-          <p class="alice__connected-hint">
-            Подключение готово. Управление воспроизведением, оповещения и стрим звука с ПК
-            живут в отдельном разделе <strong>«Колонка»</strong>.
-          </p>
-          <div class="alice__connected-actions">
-            <BaseButton
-              variant="primary"
-              icon-right="arrow-right"
-              @click="speakerNav.openSpeaker()"
-            >
-              Перейти к управлению
-            </BaseButton>
-          </div>
+          <!-- Orb справа: voice-mode читает aliceState из glagol-сессии
+               (LISTENING → пульс, SPEAKING → волна). Mouse-tilt отключён. -->
+          <button
+            type="button"
+            class="alice__orb-stage"
+            :aria-label="orbAriaLabel"
+            @click="onOrbClick"
+          >
+            <JarvisOrb size="lg" :state="orbState" voice-mode :voice-state="station.voiceState" />
+            <Transition name="alice-caption" mode="out-in">
+              <span :key="orbCaption" class="alice__orb-caption">{{ orbCaption }}</span>
+            </Transition>
+          </button>
         </article>
         <AliceAutoPair v-else key="auto" />
       </Transition>
@@ -285,9 +303,11 @@
       </details>
     </div>
 
-    <AliceHomeDevices v-else-if="activeSection === 'home'" />
-    <AliceSkillBridge v-else-if="activeSection === 'skill'" />
-    <AliceExposurePanel v-else />
+        <AliceHomeDevices v-else-if="activeSection === 'home'" :key="'home'" />
+        <AliceSkillBridge v-else-if="activeSection === 'skill'" :key="'skill'" />
+        <AliceExposurePanel v-else :key="'exposure'" />
+      </Transition>
+    </div>
   </section>
 </template>
 
@@ -295,17 +315,20 @@
 // Экран Алисы: секции station / home / skill / exposure.
 
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useTemplateRef, watch } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useRoute } from 'vue-router';
 import type { YandexStationCandidate } from '@smarthome/shared';
 import { YANDEX_STATION_PORT, YANDEX_STATION_SCAN_MS } from '@smarthome/shared';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useAliceStore } from '@/stores/alice';
+import { useUiStore } from '@/stores/ui';
 import { useViewMount } from '@/composables/useViewMount';
 import { useSpeakerNavigation } from '@/composables/useSpeakerNavigation';
 import AliceAutoPair from '@/components/alice/AliceAutoPair.vue';
 import AliceSkillBridge from '@/components/alice/AliceSkillBridge.vue';
 import AliceExposurePanel from '@/components/alice/AliceExposurePanel.vue';
 import AliceHomeDevices from '@/components/alice/AliceHomeDevices.vue';
+import JarvisOrb from '@/components/visuals/JarvisOrb.vue';
 import {
   BaseButton,
   BaseIcon,
@@ -319,6 +342,9 @@ const station = useYandexStationStore();
 const alice = useAliceStore();
 const speakerNav = useSpeakerNavigation();
 const root = useTemplateRef<HTMLElement>('root');
+const ui = useUiStore();
+const { reduceMotion } = storeToRefs(ui);
+const motion = computed(() => !reduceMotion.value);
 
 type AliceSection = 'station' | 'home' | 'skill' | 'exposure';
 const route = useRoute();
@@ -340,7 +366,8 @@ const sectionOptions = computed<SegmentedOption[]>(() => [
     value: 'home',
     label: 'Дом с Алисой',
     icon: 'devices',
-    ...(station.home ? { count: station.home.devices.length } : {}),
+    // Badge считает devices активного дома (homeFiltered), не суммы по аккаунту.
+    ...(station.homeFiltered ? { count: station.homeFiltered.devices.length } : {}),
   },
   { value: 'skill', label: 'Связка с Алисой', icon: 'arrow-right' },
   {
@@ -363,12 +390,44 @@ const pageTitle = computed(() => {
   }
 });
 
+// JarvisOrb отражает реальное состояние WSS-сессии. Кликом ведёт на пульт.
+const orbState = computed<'idle' | 'active' | 'error'>(() => {
+  const c = station.status?.connection;
+  if (c === 'connected') return 'active';
+  if (c === 'error') return 'error';
+  return 'idle';
+});
+
+const orbCaption = computed(() => {
+  const c = station.status?.connection;
+  if (c === 'connecting' || c === 'authenticating') return 'Подключение…';
+  if (c === 'error') return 'Ошибка соединения';
+  if (c !== 'connected') return 'Ожидает подключения';
+  // connected → voice-state из glagol-канала.
+  switch (station.voiceState) {
+    case 'listening':
+      return 'Слушает…';
+    case 'speaking':
+      return 'Говорит…';
+    case 'busy':
+      return 'Думает…';
+    default:
+      return 'На связи · клик → пульт';
+  }
+});
+
+const orbAriaLabel = computed(() => `Алиса · ${orbCaption.value}`);
+
+function onOrbClick(): void {
+  void speakerNav.openSpeaker();
+}
+
 onMounted(async () => {
-  // Bootstrap optional — backend не готов? UI остаётся в idle, не падаем.
+  // Bootstrap optional — backend без creds → store остаётся в idle.
   try {
     await alice.bootstrap();
   } catch {
-    /* show idle state */
+    /* idle */
   }
 });
 
@@ -536,7 +595,7 @@ function openTokenGuide(): void {
   );
 }
 
-useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
+useViewMount({ scope: root, itemsSelector: '.alice__card' });
 </script>
 
 <style scoped lang="scss">
@@ -552,6 +611,14 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
 
   &__nav {
     align-self: flex-start;
+  }
+
+  // Tab-stage — relative-якорь для cross-fade сегментов. leave-active в absolute,
+  // entering-tab сразу в финальной позиции.
+  &__tab-stage {
+    position: relative;
+    min-height: 0;
+    width: 100%;
   }
 
   &__stack {
@@ -617,7 +684,7 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
 
     &-title {
       font-family: var(--font-family-display);
-      font-size: clamp(18px, 1vw + 14px, 22px);
+      font-size: var(--font-size-h1);
       font-weight: 600;
       letter-spacing: var(--tracking-h1);
       color: var(--color-text-primary);
@@ -997,9 +1064,10 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
     ),
     rgba(255, 255, 255, 0.025);
   border: 1px solid color-mix(in srgb, var(--color-brand-purple) 30%, transparent);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(20px, 2.4vw, 36px);
   overflow: hidden;
 
   &::before {
@@ -1015,6 +1083,14 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
     );
     pointer-events: none;
     filter: blur(20px);
+  }
+
+  &-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    position: relative;
   }
 
   &-head {
@@ -1035,7 +1111,7 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
 
   &-title {
     font-family: var(--font-family-display);
-    font-size: clamp(18px, 0.6vw + 14px, 22px);
+    font-size: var(--font-size-h1);
     font-weight: 600;
     letter-spacing: var(--tracking-h1);
     color: var(--color-text-primary);
@@ -1067,6 +1143,66 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+  }
+}
+
+// JarvisOrb справа в connected-карточке. Состояние orb берётся из station store.
+.alice__orb-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  z-index: 1;
+
+  :deep(.orb) {
+    --orb-size: clamp(180px, 16vw, 240px);
+    transition: transform var(--dur-medium) var(--ease-spring);
+  }
+
+  &:hover :deep(.orb) {
+    transform: scale(1.04);
+  }
+
+  &:focus-visible {
+    outline: none;
+    :deep(.orb) {
+      filter: drop-shadow(0 0 24px rgba(var(--color-brand-violet-rgb), 0.6));
+    }
+  }
+}
+
+.alice__orb-caption {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-micro);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-micro);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .alice__connected {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  // Orb на mobile — 120px, чтобы connected-card помещалась в viewport.
+  .alice__orb-stage :deep(.orb) {
+    --orb-size: 120px;
+  }
+  .alice__orb-caption {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .alice__orb-stage :deep(.orb) {
+    --orb-size: 96px;
   }
 }
 
@@ -1149,6 +1285,53 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
   transform: translateY(8px);
 }
 
+// Caption под orb'ом: cross-fade при смене voiceState.
+.alice-caption-enter-active,
+.alice-caption-leave-active {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+.alice-caption-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.alice-caption-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+// Tab cross-fade: simultaneous + leave-active absolute внутри `.alice__tab-stage`.
+.tab-fade-enter-active,
+.tab-fade-leave-active {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 280ms var(--ease-out);
+  will-change: opacity, transform;
+}
+.tab-fade-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
+}
+.tab-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.tab-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+// Reduce-motion: instant swap, leave-active в absolute (без opacity/transform tween).
+.tab-fade-instant-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .alice__candidate,
   .alice__card,
@@ -1172,7 +1355,7 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
       gap: 12px;
 
       &-head {
-        // Pulse + title + action: action под текстом, иначе он подрезает имя.
+        // Pulse + title в одной row, action — на отдельной row снизу.
         grid-template-columns: auto minmax(0, 1fr);
         grid-template-rows: auto auto;
         gap: 10px 12px;
@@ -1192,7 +1375,7 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
       grid-template-columns: auto minmax(0, 1fr);
       gap: 12px;
 
-      // Action-кнопка под описанием.
+      // Action-кнопка на отдельной row, full-width.
       .alice__card-action {
         grid-column: 1 / -1;
         justify-self: stretch;
@@ -1208,7 +1391,7 @@ useViewMount({ scope: root.value, itemsSelector: '.alice__card' });
       grid-template-rows: auto auto;
       padding: 10px 12px;
 
-      // Action-кнопка под мета — иначе зажата справа.
+      // Action-кнопка на отдельной row под мета-инфой.
       :deep(.btn) {
         grid-column: 1 / -1;
         justify-self: stretch;
