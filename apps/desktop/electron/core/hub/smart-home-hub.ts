@@ -57,6 +57,7 @@ import type { YandexStationDiscovery } from '../alice/yandex-station-discovery.j
 import { YandexQuasarClient } from '../alice/yandex-quasar-api.js';
 import { YandexIotClient } from '../alice/yandex-iot-api.js';
 import { YandexImportService } from '../alice/yandex-import-service.js';
+import { detectCurrentNetwork, networkMatches } from '../network/network-identity.js';
 import {
   runYandexOauth,
   clearYandexOauthSession,
@@ -302,6 +303,34 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     deps.settings.set('yandexStation', updated);
   });
 
+  // Network gate: cloud execute (yandex-iot) допускается только если current
+  // network привязана к household устройства, либо allowCloudControlOffNetwork=true.
+  let cachedNetwork: { sig: Awaited<ReturnType<typeof detectCurrentNetwork>>; at: number } | null = null;
+  const NETWORK_CACHE_TTL_MS = 5_000;
+  const getCachedNetwork = async (): Promise<Awaited<ReturnType<typeof detectCurrentNetwork>>> => {
+    const now = Date.now();
+    if (cachedNetwork && now - cachedNetwork.at < NETWORK_CACHE_TTL_MS) return cachedNetwork.sig;
+    const sig = await detectCurrentNetwork();
+    cachedNetwork = { sig, at: now };
+    return sig;
+  };
+  deps.deviceRegistry.setCommandPrecheck(async (device) => {
+    if (device.driver !== 'yandex-iot') return { allowed: true };
+    if (deps.settings.get('allowCloudControlOffNetwork')) return { allowed: true };
+    const householdId = device.meta?.['householdId'];
+    if (typeof householdId !== 'string') return { allowed: true };
+    const bindings = deps.settings.get('householdNetworks')[householdId] ?? [];
+    if (bindings.length === 0) return { allowed: true };
+    const current = await getCachedNetwork();
+    const ok = bindings.some((b) => networkMatches(b, current));
+    if (ok) return { allowed: true };
+    return {
+      allowed: false,
+      errorCode: 'NETWORK_MISMATCH',
+      errorMessage: `Текущая сеть (${current.ssid ?? current.subnet ?? 'неизвестна'}) не привязана к дому устройства. Включите «Удалённое управление» в настройках если хотите управлять отсюда.`,
+    };
+  });
+
   /**
    * Сервис импорта «Дома с Алисой» — pair устройств, upsert комнат, cleanup orphans.
    * Хаб только проксирует вызовы; вся бизнес-логика и счётчики живут в сервисе.
@@ -387,6 +416,11 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     /** Сохраняет выбранный household; UI обычно сразу зовёт syncHomeDevices(). */
     setYandexHousehold(id: string | null): void {
       yandexImport.setSelectedHousehold(id);
+    },
+
+    /** true = разрешить yandex-iot execute с любой сети; false = только bound. */
+    setCloudControlPolicy(allow: boolean): void {
+      yandexImport.setCloudControlPolicy(allow);
     },
 
     /**

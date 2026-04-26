@@ -121,6 +121,8 @@ function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
     'yandexStation:list-households': () => hub.yandexStation.listYandexHouseholds(),
     'yandexStation:set-household': (id) =>
       hub.yandexStation.setYandexHousehold(id as string | null),
+    'yandexStation:set-cloud-control-policy': (allow) =>
+      hub.yandexStation.setCloudControlPolicy(Boolean(allow)),
     'yandexStation:open-home-binding-window': () => hub.yandexStation.openHomeBindingWindow(),
     'yandexStation:run-home-scenario': (id) =>
       hub.yandexStation.runHomeScenario(id as string),

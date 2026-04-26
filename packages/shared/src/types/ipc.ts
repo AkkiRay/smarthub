@@ -171,15 +171,18 @@ export interface IpcApi {
       currentNetwork: { ssid: string | null; subnet: string | null; detectedAt: string } | null;
       lastError?: string;
     }>;
-    /** Households + selected + current network signature + bound household для UI. */
+    /** Households + selected + current network + bound id + cloud-control flag. */
     listHouseholds: () => Promise<{
       households: Array<{ id: string; name: string }>;
       selected: string | null;
       currentNetwork: { ssid: string | null; subnet: string | null; detectedAt: string };
       boundHouseholdId: string | null;
+      allowCloudControlOffNetwork: boolean;
     }>;
     /** Сохраняет активный household + сразу purge yandex-устройств других домов. */
     setHousehold: (id: string | null) => Promise<void>;
+    /** true = разрешить yandex-iot execute с любой сети. */
+    setCloudControlPolicy: (allow: boolean) => Promise<void>;
     /**
      * Открывает embedded-окно «Дома с Алисой» (yandex.ru/quasar/iot) в той же
      * OAuth-партиции — юзер уже авторизован, может добавить лампочку прямо

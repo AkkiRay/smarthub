@@ -91,6 +91,7 @@ const api: IpcApi = {
     syncHomeDevices: () => invoke('yandexStation:sync-home-devices'),
     listHouseholds: () => invoke('yandexStation:list-households'),
     setHousehold: (id) => invoke('yandexStation:set-household', id),
+    setCloudControlPolicy: (allow) => invoke('yandexStation:set-cloud-control-policy', allow),
     openHomeBindingWindow: () => invoke('yandexStation:open-home-binding-window'),
     runHomeScenario: (id) => invoke('yandexStation:run-home-scenario', id),
     fetchScenarioDetails: (id) => invoke('yandexStation:fetch-scenario-details', id),
