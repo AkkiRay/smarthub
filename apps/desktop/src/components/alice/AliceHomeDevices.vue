@@ -35,21 +35,35 @@
     <!-- ============================ Household selector =================== -->
     <!-- Виден если households.length > 1; импорт фильтрует по выбранному. -->
     <section v-if="households.length > 1" class="home-dash__household">
-      <label class="home-dash__household-label" for="household-select">
-        Активный дом
-      </label>
-      <select
-        id="household-select"
-        class="home-dash__household-select"
-        :value="selectedHouseholdId ?? ''"
-        :disabled="switchingHousehold"
-        @change="onHouseholdChange(($event.target as HTMLSelectElement).value)"
-      >
-        <option v-for="h in households" :key="h.id" :value="h.id">
-          {{ h.name }}
-        </option>
-      </select>
-      <span v-if="switchingHousehold" class="home-dash__household-hint">Переключаем…</span>
+      <div class="home-dash__household-row">
+        <span class="home-dash__household-label">Активный дом</span>
+        <BaseSelect
+          class="home-dash__household-select"
+          :model-value="selectedHouseholdId ?? ''"
+          :options="householdOptions"
+          :disabled="switchingHousehold"
+          placeholder="— выбрать —"
+          @update:model-value="onHouseholdChange(String($event ?? ''))"
+        />
+        <span v-if="switchingHousehold" class="home-dash__household-hint">Переключаем…</span>
+      </div>
+      <div class="home-dash__network-row">
+        <span class="home-dash__network-label">Текущая сеть</span>
+        <span class="home-dash__network-value">{{ networkLabel }}</span>
+        <span
+          v-if="boundHouseholdId && boundHouseholdId === selectedHouseholdId"
+          class="home-dash__network-tag home-dash__network-tag--ok"
+        >
+          привязана к активному дому
+        </span>
+        <span
+          v-else-if="boundHouseholdId && boundHouseholdId !== selectedHouseholdId"
+          class="home-dash__network-tag home-dash__network-tag--warn"
+        >
+          привязана к «{{ households.find((h) => h.id === boundHouseholdId)?.name ?? '?' }}»
+        </span>
+        <span v-else class="home-dash__network-tag">не привязана</span>
+      </div>
     </section>
 
     <!-- ============================ Stats grid ============================ -->
@@ -159,7 +173,7 @@ import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import type { YandexHomeSnapshot } from '@smarthome/shared';
 import type { IconName } from '@/components/base';
-import { BaseButton, BaseIcon } from '@/components/base';
+import { BaseButton, BaseIcon, BaseSelect, type SelectOption } from '@/components/base';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useDevicesStore } from '@/stores/devices';
 import { useToasterStore } from '@/stores/toaster';
@@ -183,12 +197,28 @@ const runningScenarioId = ref<string | null>(null);
 const households = ref<Array<{ id: string; name: string }>>([]);
 const selectedHouseholdId = ref<string | null>(null);
 const switchingHousehold = ref(false);
+const currentNetwork = ref<{
+  ssid: string | null;
+  subnet: string | null;
+  detectedAt: string;
+} | null>(null);
+const boundHouseholdId = ref<string | null>(null);
+
+const networkLabel = computed(() => {
+  const n = currentNetwork.value;
+  if (!n) return '—';
+  if (n.ssid) return n.ssid;
+  if (n.subnet) return `${n.subnet}.0/24`;
+  return 'неизвестна';
+});
 
 async function loadHouseholds(): Promise<void> {
   try {
     const r = await window.smarthome.yandexStation.listHouseholds();
     households.value = r.households;
     selectedHouseholdId.value = r.selected;
+    currentNetwork.value = r.currentNetwork;
+    boundHouseholdId.value = r.boundHouseholdId;
   } catch {
     /* not authorized yet — UI скроется автоматически households.length === 0 */
   }
@@ -256,7 +286,10 @@ async function onSync(): Promise<void> {
     if (summary) {
       households.value = summary.availableHouseholds;
       selectedHouseholdId.value = summary.householdId;
+      currentNetwork.value = summary.currentNetwork;
     }
+    // После sync — пересмотреть network binding (sync мог обновить).
+    void loadHouseholds();
   } finally {
     syncing.value = false;
   }
@@ -363,13 +396,19 @@ function pluralize(n: number, forms: [string, string, string]): string {
 
   &__household {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 8px;
     padding: 10px 14px;
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  &__household-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
   }
 
   &__household-label {
@@ -399,6 +438,41 @@ function pluralize(n: number, forms: [string, string, string]): string {
   &__household-hint {
     font-size: 12px;
     color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  }
+
+  &__network-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  &__network-label {
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+    letter-spacing: var(--tracking-meta);
+    text-transform: uppercase;
+  }
+
+  &__network-value {
+    font-family: var(--font-family-mono);
+    color: var(--text-primary, #fff);
+  }
+
+  &__network-tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    &--ok {
+      background: rgba(72, 200, 130, 0.18);
+      color: rgb(72, 200, 130);
+    }
+    &--warn {
+      background: rgba(255, 170, 80, 0.18);
+      color: rgb(255, 170, 80);
+    }
   }
 
   &__title {

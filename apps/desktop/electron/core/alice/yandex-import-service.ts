@@ -18,26 +18,27 @@ import type {
 import type { SettingsStore } from '../storage/settings-store.js';
 import type { DriverRegistry } from '../drivers/driver-registry.js';
 import type { DeviceRegistry } from '../registry/device-registry.js';
+import {
+  detectCurrentNetwork,
+  findHouseholdForNetwork,
+  type NetworkSignature,
+} from '../network/network-identity.js';
 import { guessRoomIcon } from './room-icon-guesser.js';
 
 export interface YandexImportSummary {
-  /** Новых устройств запейрено в локальном реестре. */
   imported: number;
-  /** Существующих устройств — обновлено state'ом. */
   updated: number;
-  /** Удалено устройств, которых больше нет в Я.Доме. */
   removed: number;
-  /** Сколько pair/refresh упало (auth протух / single-device 404 / etc). */
   failed: number;
-  /** Всего обнаружено устройств в Yandex'е (target, после фильтра household). */
+  /** Devices в Я.доме после household-фильтра. */
   total: number;
-  /** Сколько yandex-комнат прошло upsert. */
   rooms: number;
-  /** ID активного дома, в который импортируем. */
+  /** Активный household. */
   householdId: string | null;
-  /** Все доступные дома — для UI selector'а. */
+  /** Все households аккаунта — для UI selector'а. */
   availableHouseholds: YandexHomeHousehold[];
-  /** Сообщение последней ошибки — пробрасываем в toast вместе с failed > 0. */
+  /** Текущая сетевая identity (SSID + subnet). */
+  currentNetwork: NetworkSignature | null;
   lastError?: string;
 }
 
@@ -67,7 +68,12 @@ export class YandexImportService {
     const candidates = await this.discoverFromYandex();
     const snapshot = this.cachedSnapshot();
     const households = snapshot?.households ?? [];
-    const householdId = this.resolveHousehold(households, candidates);
+    const currentNetwork = await detectCurrentNetwork();
+    const householdId = this.resolveHousehold(households, currentNetwork);
+
+    // Bind текущую сеть к активному household — следующий sync на этой сети
+    // авто-выберет тот же дом без UI-вопросов.
+    if (householdId) this.rememberNetworkForHousehold(householdId, currentNetwork);
 
     const filteredCandidates = householdId
       ? candidates.filter((c) => c.meta?.['householdId'] === householdId)
@@ -87,35 +93,56 @@ export class YandexImportService {
       rooms: roomsImported,
       householdId,
       availableHouseholds: households,
+      currentNetwork,
     };
     log.info(
-      `YandexImport.sync: household=${householdId ?? 'all'} | ` +
-        `+${summary.imported} imported, ${summary.updated} updated, ` +
-        `-${summary.removed} removed, ${summary.failed} failed, ${summary.rooms} rooms ` +
-        `(total ${summary.total}, ${households.length} households available)`,
+      `YandexImport.sync: household=${householdId ?? 'all'} ssid=${currentNetwork.ssid ?? '-'} ` +
+        `subnet=${currentNetwork.subnet ?? '-'} | +${summary.imported} imported, ` +
+        `${summary.updated} updated, -${summary.removed} removed, ${summary.failed} failed, ` +
+        `${summary.rooms} rooms (total ${summary.total}, ${households.length} households)`,
     );
     return summary;
   }
 
-  /** Возвращает список households без mutation'ов — для UI селектора. */
+  /** Households + текущий выбор + текущая сеть — для UI селектора. */
   async listHouseholds(): Promise<{
     households: YandexHomeHousehold[];
     selected: string | null;
+    currentNetwork: NetworkSignature;
+    boundHouseholdId: string | null;
   }> {
     this.validateAuth();
     await this.ensureDriver();
     await this.discoverFromYandex();
     const snapshot = this.cachedSnapshot();
+    const currentNetwork = await detectCurrentNetwork();
+    const bindings = this.deps.settings.get('householdNetworks');
     return {
       households: snapshot?.households ?? [],
       selected: this.deps.settings.get('selectedHouseholdId'),
+      currentNetwork,
+      boundHouseholdId: findHouseholdForNetwork(currentNetwork, bindings),
     };
   }
 
-  /** Сохраняет выбор юзера. Следующий `sync()` отфильтрует по этому ID. */
+  /** Сохраняет выбор + сразу purge yandex-устройств из остальных домов. */
   setSelectedHousehold(id: string | null): void {
+    const prev = this.deps.settings.get('selectedHouseholdId');
     this.deps.settings.set('selectedHouseholdId', id);
-    log.info(`YandexImport: selectedHouseholdId set to ${id ?? 'null'}`);
+    log.info(`YandexImport: selectedHouseholdId ${prev ?? 'null'} → ${id ?? 'null'}`);
+    if (id && prev !== id) {
+      let pruned = 0;
+      for (const d of this.deps.deviceRegistry.list()) {
+        if (
+          d.driver === YandexImportService.DRIVER_ID &&
+          d.meta?.['householdId'] !== id
+        ) {
+          this.deps.deviceRegistry.remove(d.id);
+          pruned++;
+        }
+      }
+      if (pruned > 0) log.info(`YandexImport: pruned ${pruned} devices from other households`);
+    }
   }
 
   // ---- private --------------------------------------------------------------
@@ -151,37 +178,91 @@ export class YandexImportService {
     return driver?.getCachedSnapshot?.() ?? null;
   }
 
-  /** stored ID если валиден → max-devices auto-pick → null (households пуст). */
+  /**
+   * Resolution order:
+   *   1. 0 households → null
+   *   2. 1 household → auto-pick + persist
+   *   3. current network bound к одному household → auto-pick (важно: имеет
+   *      приоритет над stored, чтобы переезд между домами автоматически
+   *      переключал активный household без UI-action)
+   *   4. stored id валиден → используем
+   *   5. throw HOUSEHOLD_AMBIGUOUS — UI обязан показать селектор
+   */
   private resolveHousehold(
     households: YandexHomeHousehold[],
-    candidates: DiscoveredDevice[],
+    currentNetwork: NetworkSignature,
   ): string | null {
     if (households.length === 0) return null;
 
-    const stored = this.deps.settings.get('selectedHouseholdId');
-    if (stored && households.some((h) => h.id === stored)) return stored;
-
-    // Авто-выбор: дом с максимальным числом устройств.
-    const counts = new Map<string, number>();
-    for (const c of candidates) {
-      const hid = c.meta?.['householdId'];
-      if (typeof hid === 'string') counts.set(hid, (counts.get(hid) ?? 0) + 1);
-    }
-    let bestId = households[0]!.id;
-    let bestCount = counts.get(bestId) ?? 0;
-    for (const h of households) {
-      const cnt = counts.get(h.id) ?? 0;
-      if (cnt > bestCount) {
-        bestId = h.id;
-        bestCount = cnt;
+    if (households.length === 1) {
+      const only = households[0]!.id;
+      if (this.deps.settings.get('selectedHouseholdId') !== only) {
+        this.deps.settings.set('selectedHouseholdId', only);
       }
+      return only;
     }
-    this.deps.settings.set('selectedHouseholdId', bestId);
-    log.warn(
-      `YandexImport: auto-selected household ${bestId} (${bestCount} devices) ` +
-        `from ${households.length} available — set in settings.`,
+
+    const bindings = this.deps.settings.get('householdNetworks');
+    const networkBound = findHouseholdForNetwork(currentNetwork, bindings);
+    if (networkBound && households.some((h) => h.id === networkBound)) {
+      if (this.deps.settings.get('selectedHouseholdId') !== networkBound) {
+        log.info(`YandexImport: network match → switching to household ${networkBound}`);
+        this.setSelectedHousehold(networkBound);
+      }
+      return networkBound;
+    }
+
+    const stored = this.deps.settings.get('selectedHouseholdId');
+    if (stored && households.some((h) => h.id === stored)) {
+      // У household есть bindings и current network не входит → потенциальный
+      // перенос хаба в чужую сеть. Sync rejected до явного действия юзера.
+      const storedBindings = bindings[stored] ?? [];
+      const onBoundNet =
+        storedBindings.length === 0 ||
+        storedBindings.some((b) =>
+          (b.ssid && b.ssid === currentNetwork.ssid) ||
+          (!b.ssid && b.subnet === currentNetwork.subnet && !currentNetwork.ssid),
+        );
+      if (!onBoundNet) {
+        throw Object.assign(
+          new Error(
+            `Текущая сеть (${currentNetwork.ssid ?? currentNetwork.subnet ?? 'неизвестна'}) ` +
+              `не привязана к активному дому. Подключитесь к домашней сети или ` +
+              `выберите другой дом.`,
+          ),
+          { code: 'NETWORK_MISMATCH', currentNetwork, householdId: stored },
+        );
+      }
+      return stored;
+    }
+
+    const list = households.map((h) => `«${h.name}»`).join(', ');
+    throw Object.assign(
+      new Error(
+        `В аккаунте Яндекса ${households.length} домов: ${list}. ` +
+          `Выберите активный дом перед синхронизацией.`,
+      ),
+      { code: 'HOUSEHOLD_AMBIGUOUS', households },
     );
-    return bestId;
+  }
+
+  /** Запоминает текущую сеть как одну из привязанных к household. */
+  private rememberNetworkForHousehold(householdId: string, sig: NetworkSignature): void {
+    if (!sig.ssid && !sig.subnet) return;
+    const all = { ...this.deps.settings.get('householdNetworks') };
+    const list = all[householdId] ? [...all[householdId]] : [];
+    const exists = list.some(
+      (existing) =>
+        (sig.ssid && existing.ssid === sig.ssid) ||
+        (!sig.ssid && existing.subnet === sig.subnet && !existing.ssid),
+    );
+    if (exists) return;
+    list.push(sig);
+    all[householdId] = list;
+    this.deps.settings.set('householdNetworks', all);
+    log.info(
+      `YandexImport: bound network ssid=${sig.ssid ?? '-'} subnet=${sig.subnet ?? '-'} → ${householdId}`,
+    );
   }
 
   /**

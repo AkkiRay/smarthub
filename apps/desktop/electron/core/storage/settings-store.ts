@@ -87,8 +87,13 @@ export interface HubSettings {
   yandexStation: YandexStationCreds | null;
   /** OAuth Я.Музыки для Quasar API. */
   quasarAuth: QuasarAuthCreds | null;
-  /** Активный household; null — авто-выбор при первом sync'е. */
+  /** Активный household; null — UI обязан спросить если households.length > 1. */
   selectedHouseholdId: string | null;
+  /** householdId → list of network signatures (SSID/subnet) для авто-выбора по сети. */
+  householdNetworks: Record<
+    string,
+    Array<{ ssid: string | null; subnet: string | null; detectedAt: string }>
+  >;
   alice: AliceSkillState;
   ui: {
     theme: 'alice-dark' | 'alice-midnight';
@@ -103,6 +108,7 @@ const defaults: HubSettings = {
   yandexStation: null,
   quasarAuth: null,
   selectedHouseholdId: null,
+  householdNetworks: {},
   alice: {
     config: null,
     yandexXToken: null,
