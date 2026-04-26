@@ -42,10 +42,15 @@ interface DeviceRegistryEvents {
 
 export type DeviceRegistry = ReturnType<typeof createDeviceRegistry>;
 
+export interface CommandPrecheck {
+  (device: Device, command: DeviceCommand): Promise<{ allowed: true } | { allowed: false; errorCode: string; errorMessage: string }>;
+}
+
 export function createDeviceRegistry(deps: {
   deviceStore: DeviceStore;
   driverRegistry: DriverRegistry;
 }) {
+  let precheck: CommandPrecheck | null = null;
   const emitter = new EventEmitter();
   const cache = new Map<string, Device>();
   const roomCache = new Map<string, Room>();
@@ -99,6 +104,11 @@ export function createDeviceRegistry(deps: {
       for (const d of deps.deviceStore.devices.list()) cache.set(d.id, d);
       for (const r of deps.deviceStore.rooms.list()) roomCache.set(r.id, r);
       log.info(`DeviceRegistry: ${cache.size} devices, ${roomCache.size} rooms loaded`);
+    },
+
+    /** Hub внедряет precheck после конструирования (избегаем circular dep). */
+    setCommandPrecheck(fn: CommandPrecheck | null): void {
+      precheck = fn;
     },
 
     /**
@@ -226,6 +236,19 @@ export function createDeviceRegistry(deps: {
           errorCode: 'DEVICE_NOT_FOUND',
           errorMessage: `Device ${command.deviceId} is not paired`,
         };
+      }
+      if (precheck) {
+        const check = await precheck(device, command);
+        if (!check.allowed) {
+          return {
+            deviceId: command.deviceId,
+            capability: command.capability,
+            instance: command.instance,
+            status: 'ERROR',
+            errorCode: check.errorCode,
+            errorMessage: check.errorMessage,
+          };
+        }
       }
       const driver = deps.driverRegistry.require(device.driver);
       const result = await driver.execute(device, command);

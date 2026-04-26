@@ -64,6 +64,14 @@
         </span>
         <span v-else class="home-dash__network-tag">не привязана</span>
       </div>
+      <div class="home-dash__policy-row">
+        <BaseSwitch
+          size="sm"
+          :model-value="allowCloudControlOffNetwork"
+          @update:model-value="onCloudControlToggle($event)"
+        />
+        <span>Разрешить управление с любой сети (cloud без network-gate)</span>
+      </div>
     </section>
 
     <!-- ============================ Stats grid ============================ -->
@@ -173,7 +181,7 @@ import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import type { YandexHomeSnapshot } from '@smarthome/shared';
 import type { IconName } from '@/components/base';
-import { BaseButton, BaseIcon, BaseSelect, type SelectOption } from '@/components/base';
+import { BaseButton, BaseIcon, BaseSelect, BaseSwitch, type SelectOption } from '@/components/base';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useDevicesStore } from '@/stores/devices';
 import { useToasterStore } from '@/stores/toaster';
@@ -182,28 +190,9 @@ const station = useYandexStationStore();
 const devices = useDevicesStore();
 const toaster = useToasterStore();
 
-// Полный snapshot из Quasar API содержит ВСЕ households аккаунта; UI рендерит
-// отфильтрованную версию по `selectedHouseholdId`.
-const rawSnapshot = computed<YandexHomeSnapshot | null>(() => station.home);
-const snapshot = computed<YandexHomeSnapshot | null>(() => {
-  const raw = rawSnapshot.value;
-  if (!raw) return null;
-  const id = selectedHouseholdId.value;
-  if (!id) return raw;
-  const deviceIds = new Set(
-    raw.devices.filter((d) => d.householdId === id).map((d) => d.id),
-  );
-  return {
-    ...raw,
-    devices: raw.devices.filter((d) => d.householdId === id),
-    rooms: raw.rooms.filter((r) => !r.householdId || r.householdId === id),
-    groups: raw.groups.filter((g) => !g.householdId || g.householdId === id),
-    // Scenarios в API не имеют householdId — фильтруем по принадлежности
-    // device-ids: показываем только сценарии, использующие хотя бы одно
-    // устройство активного household'а.
-    scenarios: raw.scenarios.filter((s) => s.devices.some((d) => deviceIds.has(d))),
-  };
-});
+// Snapshot уже отфильтрован по активному household'у в store — единый источник
+// правды для всех потребителей (этот компонент + segmented-badge в AliceView).
+const snapshot = computed<YandexHomeSnapshot | null>(() => station.homeFiltered);
 const hasSnapshot = computed(() => snapshot.value !== null);
 
 const deviceCount = computed(() => snapshot.value?.devices.length ?? 0);
@@ -215,8 +204,13 @@ const syncing = ref(false);
 const runningScenarioId = ref<string | null>(null);
 
 // Households dropdown — виден только при households.length > 1.
+// `selectedHouseholdId` — single source of truth в store (используется для
+// фильтрации snapshot'а в station.homeFiltered и счётчика в AliceView segmented).
 const households = ref<Array<{ id: string; name: string }>>([]);
-const selectedHouseholdId = ref<string | null>(null);
+const selectedHouseholdId = computed({
+  get: () => station.selectedHouseholdId,
+  set: (v) => station.setSelectedHousehold(v),
+});
 const switchingHousehold = ref(false);
 const currentNetwork = ref<{
   ssid: string | null;
@@ -224,6 +218,16 @@ const currentNetwork = ref<{
   detectedAt: string;
 } | null>(null);
 const boundHouseholdId = ref<string | null>(null);
+const allowCloudControlOffNetwork = ref(false);
+
+async function onCloudControlToggle(allow: boolean): Promise<void> {
+  try {
+    await window.smarthome.yandexStation.setCloudControlPolicy(allow);
+    allowCloudControlOffNetwork.value = allow;
+  } catch (e) {
+    toaster.push({ kind: 'error', message: (e as Error).message });
+  }
+}
 
 const networkLabel = computed(() => {
   const n = currentNetwork.value;
@@ -244,17 +248,19 @@ async function loadHouseholds(): Promise<void> {
     selectedHouseholdId.value = r.selected;
     currentNetwork.value = r.currentNetwork;
     boundHouseholdId.value = r.boundHouseholdId;
+    allowCloudControlOffNetwork.value = r.allowCloudControlOffNetwork;
   } catch {
     /* not authorized yet — UI скроется автоматически households.length === 0 */
   }
 }
 
 async function onHouseholdChange(id: string): Promise<void> {
-  if (switchingHousehold.value || id === selectedHouseholdId.value) return;
+  const next = id || null;
+  if (switchingHousehold.value || next === selectedHouseholdId.value) return;
   switchingHousehold.value = true;
   try {
-    await window.smarthome.yandexStation.setHousehold(id || null);
-    selectedHouseholdId.value = id || null;
+    await window.smarthome.yandexStation.setHousehold(next);
+    selectedHouseholdId.value = next;
     await Promise.all([station.fetchHome(), devices.syncYandexHome()]);
   } catch (e) {
     toaster.push({ kind: 'error', message: (e as Error).message });
@@ -470,6 +476,18 @@ function pluralize(n: number, forms: [string, string, string]): string {
   &__network-value {
     font-family: var(--font-family-mono);
     color: var(--text-primary, #fff);
+  }
+
+  &__policy-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    user-select: none;
+    span {
+      flex: 1;
+    }
   }
 
   &__network-tag {

@@ -94,6 +94,8 @@ export interface HubSettings {
     string,
     Array<{ ssid: string | null; subnet: string | null; detectedAt: string }>
   >;
+  /** Если true — yandex-iot execute разрешается с любой сети (remote control). */
+  allowCloudControlOffNetwork: boolean;
   alice: AliceSkillState;
   ui: {
     theme: 'alice-dark' | 'alice-midnight';
@@ -109,6 +111,7 @@ const defaults: HubSettings = {
   quasarAuth: null,
   selectedHouseholdId: null,
   householdNetworks: {},
+  allowCloudControlOffNetwork: false,
   alice: {
     config: null,
     yandexXToken: null,

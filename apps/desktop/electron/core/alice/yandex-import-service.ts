@@ -71,8 +71,7 @@ export class YandexImportService {
     const currentNetwork = await detectCurrentNetwork();
     const householdId = this.resolveHousehold(households, currentNetwork);
 
-    // Bind текущую сеть к активному household — следующий sync на этой сети
-    // авто-выберет тот же дом без UI-вопросов.
+    // Bind current network to active household — следующий sync на этой сети auto-pick.
     if (householdId) this.rememberNetworkForHousehold(householdId, currentNetwork);
 
     const filteredCandidates = householdId
@@ -104,12 +103,13 @@ export class YandexImportService {
     return summary;
   }
 
-  /** Households + текущий выбор + текущая сеть — для UI селектора. */
+  /** Households + selected + current net + bound id + cloud-control flag. */
   async listHouseholds(): Promise<{
     households: YandexHomeHousehold[];
     selected: string | null;
     currentNetwork: NetworkSignature;
     boundHouseholdId: string | null;
+    allowCloudControlOffNetwork: boolean;
   }> {
     this.validateAuth();
     await this.ensureDriver();
@@ -122,7 +122,13 @@ export class YandexImportService {
       selected: this.deps.settings.get('selectedHouseholdId'),
       currentNetwork,
       boundHouseholdId: findHouseholdForNetwork(currentNetwork, bindings),
+      allowCloudControlOffNetwork: this.deps.settings.get('allowCloudControlOffNetwork'),
     };
+  }
+
+  setCloudControlPolicy(allow: boolean): void {
+    this.deps.settings.set('allowCloudControlOffNetwork', allow);
+    log.info(`YandexImport: allowCloudControlOffNetwork = ${allow}`);
   }
 
   /** Сохраняет выбор + сразу purge yandex-устройств из остальных домов. */
@@ -179,14 +185,8 @@ export class YandexImportService {
   }
 
   /**
-   * Resolution order:
-   *   1. 0 households → null
-   *   2. 1 household → auto-pick + persist
-   *   3. current network bound к одному household → auto-pick (важно: имеет
-   *      приоритет над stored, чтобы переезд между домами автоматически
-   *      переключал активный household без UI-action)
-   *   4. stored id валиден → используем
-   *   5. throw HOUSEHOLD_AMBIGUOUS — UI обязан показать селектор
+   * Resolution: 0→null | 1→auto | network-bound→switch+persist |
+   * stored валиден И network match → ok | иначе throw NETWORK_MISMATCH/AMBIGUOUS.
    */
   private resolveHousehold(
     households: YandexHomeHousehold[],
@@ -206,7 +206,7 @@ export class YandexImportService {
     const networkBound = findHouseholdForNetwork(currentNetwork, bindings);
     if (networkBound && households.some((h) => h.id === networkBound)) {
       if (this.deps.settings.get('selectedHouseholdId') !== networkBound) {
-        log.info(`YandexImport: network match → switching to household ${networkBound}`);
+        log.info(`YandexImport: network match → switching to ${networkBound}`);
         this.setSelectedHousehold(networkBound);
       }
       return networkBound;
@@ -214,8 +214,7 @@ export class YandexImportService {
 
     const stored = this.deps.settings.get('selectedHouseholdId');
     if (stored && households.some((h) => h.id === stored)) {
-      // У household есть bindings и current network не входит → потенциальный
-      // перенос хаба в чужую сеть. Sync rejected до явного действия юзера.
+      // Если household уже привязан к сетям и current не из них — sync rejected.
       const storedBindings = bindings[stored] ?? [];
       const onBoundNet =
         storedBindings.length === 0 ||

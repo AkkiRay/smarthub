@@ -46,13 +46,9 @@ async function detectSsid(): Promise<string | null> {
 }
 
 /**
- * RFC1918 private ranges + link-local. Скоринг:
- *   - 10.x / 172.16-31.x / 192.168.x → priority 0 (real LAN)
- *   - 169.254.x (link-local) → reject
- *   - 198.18-19.x (TEST-NET-2 / benchmarking) → reject (часто Hamachi/VPN)
- *   - 192.0.2.x / 198.51.100.x / 203.0.113.x (TEST-NETs) → reject
- *   - virtual-likely interface name (vEthernet, VirtualBox, VMware, Hyper-V) → priority 2
- *   - остальные не-loopback → priority 1 (включая публичные IPv4)
+ * Score: RFC1918 physical=0, RFC1918 virtual / public physical=1,
+ * public virtual=2; reject link-local 169.254 + TEST-NETs (198.18/15, 192.0.2,
+ * 198.51.100, 203.0.113). Меньше — лучше.
  */
 function scoreInterface(name: string, ip: string): number | null {
   const [a, b] = ip.split('.').map(Number) as [number, number, number, number];
