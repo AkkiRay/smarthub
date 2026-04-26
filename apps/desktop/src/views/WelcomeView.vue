@@ -190,7 +190,7 @@
       <!-- Orb + 3D-chip ring живут в одной сцене; не перерендериваются между шагами. -->
       <aside class="welcome__visual" aria-hidden="true">
         <div class="welcome__visual-stage">
-          <JarvisOrb size="xl" :state="orbState" class="welcome__orb" />
+          <JarvisOrb size="xl" ambient :state="orbState" class="welcome__orb" />
           <OrbitalChips :chips="orbitalChips" />
         </div>
       </aside>
@@ -423,16 +423,18 @@ onMounted(() => {
 
 .welcome {
   position: relative;
-  flex: 1;
   display: grid;
-  // Bar (top + progress объединены) → scene (1fr fills) → bottom dots.
   grid-template-rows: auto 1fr auto;
   gap: clamp(10px, 1.4vw, 18px);
-  height: 100dvh;
+  // height: 100% — наследуем от .app__fullscreen (flex: 1 в .app колонке).
+  // Раньше был 100dvh который выходил за parent и срезался → бар уезжал в центр.
+  height: 100%;
+  width: 100%;
   padding: clamp(12px, 1.6vw, 24px) clamp(20px, 3.2vw, 44px);
   color: var(--color-text-primary);
   outline: none;
   overflow: hidden;
+  min-height: 0;
 
   @media (max-height: 720px) {
     gap: 8px;
@@ -540,10 +542,22 @@ onMounted(() => {
   &__scene {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
     min-width: 0;
     min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+
+    // Hide scrollbar тонко: контент cards/buttons не должен «обкусываться».
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+    }
   }
 
   &__visual {
