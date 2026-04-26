@@ -182,7 +182,28 @@ const station = useYandexStationStore();
 const devices = useDevicesStore();
 const toaster = useToasterStore();
 
-const snapshot = computed<YandexHomeSnapshot | null>(() => station.home);
+// Полный snapshot из Quasar API содержит ВСЕ households аккаунта; UI рендерит
+// отфильтрованную версию по `selectedHouseholdId`.
+const rawSnapshot = computed<YandexHomeSnapshot | null>(() => station.home);
+const snapshot = computed<YandexHomeSnapshot | null>(() => {
+  const raw = rawSnapshot.value;
+  if (!raw) return null;
+  const id = selectedHouseholdId.value;
+  if (!id) return raw;
+  const deviceIds = new Set(
+    raw.devices.filter((d) => d.householdId === id).map((d) => d.id),
+  );
+  return {
+    ...raw,
+    devices: raw.devices.filter((d) => d.householdId === id),
+    rooms: raw.rooms.filter((r) => !r.householdId || r.householdId === id),
+    groups: raw.groups.filter((g) => !g.householdId || g.householdId === id),
+    // Scenarios в API не имеют householdId — фильтруем по принадлежности
+    // device-ids: показываем только сценарии, использующие хотя бы одно
+    // устройство активного household'а.
+    scenarios: raw.scenarios.filter((s) => s.devices.some((d) => deviceIds.has(d))),
+  };
+});
 const hasSnapshot = computed(() => snapshot.value !== null);
 
 const deviceCount = computed(() => snapshot.value?.devices.length ?? 0);
@@ -211,6 +232,10 @@ const networkLabel = computed(() => {
   if (n.subnet) return `${n.subnet}.0/24`;
   return 'неизвестна';
 });
+
+const householdOptions = computed<SelectOption[]>(() =>
+  households.value.map((h) => ({ value: h.id, label: h.name })),
+);
 
 async function loadHouseholds(): Promise<void> {
   try {
@@ -421,18 +446,6 @@ function pluralize(n: number, forms: [string, string, string]): string {
   &__household-select {
     flex: 1 1 auto;
     min-width: 160px;
-    padding: 8px 12px;
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: var(--text-primary, #fff);
-    font-size: 13px;
-    cursor: pointer;
-    appearance: auto;
-    &:disabled {
-      opacity: 0.6;
-      cursor: progress;
-    }
   }
 
   &__household-hint {

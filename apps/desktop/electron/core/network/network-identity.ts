@@ -45,17 +45,44 @@ async function detectSsid(): Promise<string | null> {
   return null;
 }
 
+/**
+ * RFC1918 private ranges + link-local. Скоринг:
+ *   - 10.x / 172.16-31.x / 192.168.x → priority 0 (real LAN)
+ *   - 169.254.x (link-local) → reject
+ *   - 198.18-19.x (TEST-NET-2 / benchmarking) → reject (часто Hamachi/VPN)
+ *   - 192.0.2.x / 198.51.100.x / 203.0.113.x (TEST-NETs) → reject
+ *   - virtual-likely interface name (vEthernet, VirtualBox, VMware, Hyper-V) → priority 2
+ *   - остальные не-loopback → priority 1 (включая публичные IPv4)
+ */
+function scoreInterface(name: string, ip: string): number | null {
+  const [a, b] = ip.split('.').map(Number) as [number, number, number, number];
+  if (a === 169 && b === 254) return null;
+  if (a === 198 && (b === 18 || b === 19)) return null;
+  if (a === 192 && b === 0 && Number(ip.split('.')[2]) === 2) return null;
+  if (a === 198 && b === 51 && Number(ip.split('.')[2]) === 100) return null;
+  if (a === 203 && b === 0 && Number(ip.split('.')[2]) === 113) return null;
+  const isPrivate =
+    a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  const isVirtual = /vethernet|virtualbox|vmware|hyper-?v|tap|tun|wsl|docker|loopback/i.test(name);
+  if (isPrivate) return isVirtual ? 1 : 0;
+  return isVirtual ? 2 : 1;
+}
+
 function detectSubnet(): string | null {
   const ifs = os.networkInterfaces();
-  for (const list of Object.values(ifs)) {
+  let best: { score: number; subnet: string } | null = null;
+  for (const [name, list] of Object.entries(ifs)) {
     for (const iface of list ?? []) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        const parts = iface.address.split('.');
-        if (parts.length === 4) return `${parts[0]}.${parts[1]}.${parts[2]}`;
-      }
+      if (iface.family !== 'IPv4' || iface.internal) continue;
+      const score = scoreInterface(name, iface.address);
+      if (score === null) continue;
+      const parts = iface.address.split('.');
+      if (parts.length !== 4) continue;
+      const subnet = `${parts[0]}.${parts[1]}.${parts[2]}`;
+      if (!best || score < best.score) best = { score, subnet };
     }
   }
-  return null;
+  return best?.subnet ?? null;
 }
 
 export async function detectCurrentNetwork(): Promise<NetworkSignature> {
