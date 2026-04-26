@@ -1,7 +1,7 @@
 <template>
   <header class="page-head" data-page-header>
     <div class="page-head__lead">
-      <!-- Back-кнопка: emit('back'), либо fallback router.back(). -->
+      <!-- Back: emit('back') или fallback router.back(). -->
       <button
         v-if="back"
         type="button"
@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-// Единый header views. Layout: [back? + copy] | [actions]. Wrap-friendly.
+// Page header views. Layout: [back? + copy] | [actions]. Wrap-friendly.
 
 import { useAttrs } from 'vue';
 import { useRouter } from 'vue-router';
@@ -57,7 +57,7 @@ const emit = defineEmits<{ back: [] }>();
 const attrs = useAttrs();
 const router = useRouter();
 
-// Если родитель повесил @back — отдаём ему control, иначе router.back().
+// При наличии @back-listener'а — emit, иначе router.back().
 function onBack(): void {
   if (attrs.onBack) emit('back');
   else void router.back();
@@ -65,12 +65,59 @@ function onBack(): void {
 </script>
 
 <style scoped lang="scss">
+@use '@/styles/abstracts/mixins' as *;
+
 .page-head {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px 24px;
+  padding: clamp(20px, 2vw, 28px) clamp(20px, 2.4vw, 32px);
+  border-radius: var(--radius-xl);
+  isolation: isolate;
+  // Flat surface: матовый single-tone background + hairline + ambient drop-shadow.
+  background: rgba(255, 255, 255, 0.022);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  box-shadow:
+    0 32px 80px -44px rgba(0, 0, 0, 0.75),
+    0 10px 24px -20px rgba(var(--color-brand-violet-rgb), 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition:
+    border-color 280ms var(--ease-out),
+    box-shadow 280ms var(--ease-out);
+
+  // Brand accent line: вертикальный gradient слева, slow shift через keyframes.
+  &::before {
+    content: '';
+    position: absolute;
+    top: 14%;
+    bottom: 14%;
+    left: 0;
+    width: 2px;
+    border-radius: 2px;
+    background: linear-gradient(
+      180deg,
+      rgba(var(--color-brand-violet-rgb), 0) 0%,
+      rgba(var(--color-brand-violet-rgb), 0.7) 25%,
+      rgba(var(--color-brand-pink-rgb), 0.85) 60%,
+      rgba(var(--color-brand-violet-rgb), 0) 100%
+    );
+    background-size: 100% 280%;
+    animation: pageHeadAccent 6s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 32px 80px -40px rgba(0, 0, 0, 0.75),
+      0 14px 28px -18px rgba(var(--color-brand-purple-rgb), 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  > * { position: relative; z-index: 1; }
 
   &__lead {
     display: flex;
@@ -80,7 +127,7 @@ function onBack(): void {
     min-width: 0;
   }
 
-  // Back-кнопка — голая стрелка. Hover: shift влево + brand-purple + glow.
+  // Back button: bare arrow. Hover — shift влево + brand-purple + glow.
   &__back {
     width: 36px;
     height: 36px;
@@ -124,8 +171,7 @@ function onBack(): void {
   &__copy {
     flex: 1;
     min-width: 0;
-    // Prose-кап ~75ch для readability на широких мониторах. Header остаётся
-    // full-width — actions уходят вправо через space-between.
+    // Prose cap ~75ch для readability; actions уходят вправо через space-between.
     max-width: var(--content-max-prose);
     display: flex;
     flex-direction: column;
@@ -133,27 +179,43 @@ function onBack(): void {
   }
 
   &__eyebrow {
-    color: var(--color-brand-purple);
+    color: var(--color-brand-violet);
+    font-family: var(--font-family-mono);
+    font-weight: 600;
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    background: rgba(var(--color-brand-violet-rgb), 0.14);
+    border: 1px solid rgba(var(--color-brand-violet-rgb), 0.26);
+    width: fit-content;
+    margin-bottom: 4px;
 
     &::before {
       content: '';
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: currentColor;
-      box-shadow: 0 0 8px currentColor;
+      background: var(--gradient-brand);
+      box-shadow: 0 0 8px rgba(var(--color-brand-violet-rgb), 0.6);
     }
   }
 
   &__title {
     margin: 0;
+    font-family: var(--font-family-display);
+    // Display-2 token: 22→48px на 720→2560px viewport.
+    font-size: var(--font-size-display-2);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-weight: 720;
   }
   &__desc {
     color: var(--color-text-secondary);
     margin: 0;
+    font-size: var(--font-size-body);
+    line-height: 1.55;
   }
 
   &__actions {
@@ -162,6 +224,68 @@ function onBack(): void {
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+  }
+}
+
+@keyframes pageHeadAccent {
+  0% { background-position: 0% 0%; opacity: 0.7; }
+  100% { background-position: 0% 100%; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-head::before {
+    animation: none;
+  }
+}
+
+// Mobile: header стекается в column, actions внизу full-width row.
+// Lighter ambient-shadow + compact padding/radius.
+@media (max-width: 720px) {
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 14px 16px;
+    border-radius: var(--radius-lg);
+    box-shadow:
+      0 18px 36px -28px rgba(0, 0, 0, 0.7),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+
+    &::before {
+      top: 18%;
+      bottom: 18%;
+      left: 0;
+    }
+
+    &__lead {
+      flex: 1 1 auto;
+      gap: 10px;
+    }
+
+    &__back {
+      width: 36px;
+      height: 36px;
+      margin-top: 0;
+    }
+
+    // __title использует --font-size-display-2 token (clamp 19→24px на mobile).
+
+    &__desc {
+      font-size: var(--font-size-small);
+    }
+
+    &__actions {
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 8px;
+
+      // Actions buttons растягиваются на full-width в две колонки.
+      :deep(.button) {
+        flex: 1 1 calc(50% - 4px);
+        min-width: 0;
+        justify-content: center;
+      }
+    }
   }
 }
 </style>

@@ -1,202 +1,238 @@
 <template>
   <section class="welcome" ref="root" @keydown="onKeydown" tabindex="0">
-    <!-- Декоративные орбиты в фоне -->
-    <div class="welcome__halo" aria-hidden="true">
-      <span class="welcome__halo-ring welcome__halo-ring--1" />
-      <span class="welcome__halo-ring welcome__halo-ring--2" />
-      <span class="welcome__halo-ring welcome__halo-ring--3" />
-    </div>
+    <!-- Brand-аура: статичная плоскость + два мягких пятна.
+         Per feedback flat-hero — НЕ bubble-glass. -->
+    <div class="welcome__aura" aria-hidden="true" />
+    <div class="welcome__grain" aria-hidden="true" />
 
-    <!-- Bar: skip + progress объединены в один компактный row. -->
     <header class="welcome__bar">
+      <div class="welcome__bar-mark">
+        <span class="welcome__mark-dot" />
+        <span class="welcome__mark-text">SmartHome Hub · Onboarding</span>
+      </div>
       <div class="steps welcome__bar-progress">
         <div class="steps__rail">
           <div class="steps__fill" :style="{ width: `${railProgress}%` }" />
         </div>
         <span class="steps__label">{{ stepLabel }}</span>
       </div>
-      <button v-if="step < totalSteps - 1" type="button" class="welcome__skip" @click="skip">
-        Пропустить онбординг
+      <button
+        v-if="step < totalSteps - 1"
+        type="button"
+        class="welcome__skip"
+        @click="skip"
+      >
+        Пропустить
         <BaseIcon name="arrow-right" :size="14" />
       </button>
+      <span v-else class="welcome__skip welcome__skip--ghost">Финал</span>
     </header>
 
-    <!-- Сцена -->
+    <!-- Сцена-обёртка фиксированной min-height: step-cards живут одновременно
+         (absolute-stack), активная видна. Crossfade — opacity + filter, без
+         translateY. → grid-row не «дышит» → orb-стейдж не плывёт. -->
     <div class="welcome__layout">
-      <Transition :name="motion ? 'welcome-step' : 'welcome-fade'" mode="out-in">
-        <div :key="step" class="welcome__scene">
-          <!-- Шаг 1: Hero — приветствие -->
-          <div v-if="step === 0" class="step-card welcome__hero-step">
-            <div class="step-card__head">
-              <span class="step-card__kicker">Добро пожаловать</span>
-              <h1 class="step-card__title">
-                Один хаб для всего<br />
-                <span class="text--gradient">умного дома</span>
-              </h1>
-              <p class="step-card__lead">
-                28+ интеграций, локальное управление, голосовые сценарии через Алису. Без облака,
-                без подписок, без лишнего.
-              </p>
-            </div>
-            <ul class="welcome__pill-list">
-              <li v-for="b in heroBullets" :key="b">
-                <span class="welcome__pill-icon"><BaseIcon name="check" :size="12" /></span>
-                <span>{{ b }}</span>
-              </li>
-            </ul>
-            <div class="step-card__actions">
-              <BaseButton variant="primary" size="lg" icon-right="arrow-right" @click="next">
-                Поехали
-              </BaseButton>
-              <BaseButton variant="ghost" size="lg" @click="skip">Я уже знаком</BaseButton>
-            </div>
-          </div>
-
-          <!-- Шаг 2: Что получаете — 3 ключевых фичи -->
-          <div v-else-if="step === 1" class="step-card">
-            <div class="step-card__head">
-              <span class="step-card__kicker">Шаг 02 · Что вы получите</span>
-              <h2 class="step-card__title">Три способа управлять домом</h2>
-              <p class="step-card__lead">
-                Каждый канал работает независимо. Можно начать с одного и постепенно подключать
-                остальные.
-              </p>
-            </div>
-            <div class="welcome__feature-grid stack-in">
-              <article
-                v-for="f in features"
-                :key="f.title"
-                class="tile tile--glass"
-                :class="`tile--${f.tone}`"
-              >
-                <div class="tile__icon"><span v-safe-html="f.icon" /></div>
-                <div class="tile__label">{{ f.title }}</div>
-                <div class="tile__hint">{{ f.text }}</div>
-                <div class="welcome__feature-tags">
-                  <span v-for="t in f.tags" :key="t" class="chip chip--brand">{{ t }}</span>
-                </div>
-              </article>
-            </div>
-            <div class="step-card__actions">
-              <BaseButton variant="ghost" icon-left="arrow-left" @click="back">Назад</BaseButton>
-              <BaseButton variant="primary" icon-right="arrow-right" @click="next">
-                Дальше
-              </BaseButton>
-            </div>
-          </div>
-
-          <!-- Шаг 3: Выбор пути — куда направить пользователя после онбординга -->
-          <div v-else-if="step === 2" class="step-card">
-            <div class="step-card__head">
-              <span class="step-card__kicker">Шаг 03 · Выбор пути</span>
-              <h2 class="step-card__title">С чего начнём?</h2>
-              <p class="step-card__lead">
-                Выберите способ — после онбординга мы сразу откроем нужный экран. Передумаете —
-                всегда можно вернуться через боковое меню.
-              </p>
-            </div>
-            <div class="welcome__path-grid">
-              <button
-                v-for="p in paths"
-                :key="p.id"
-                type="button"
-                class="welcome__path"
-                :class="{ 'welcome__path--active': chosenPath === p.id }"
-                :style="{
-                  '--path-tone': `var(--color-brand-${p.tone})`,
-                  '--path-tone-rgb': `var(--color-brand-${p.tone}-rgb)`,
-                }"
-                @click="chosenPath = p.id"
-              >
-                <span class="welcome__path-tag">{{ p.tag }}</span>
-                <span class="welcome__path-icon"><span v-safe-html="p.icon" /></span>
-                <span class="welcome__path-title">{{ p.title }}</span>
-                <span class="welcome__path-text">{{ p.text }}</span>
-                <ol class="welcome__path-steps">
-                  <li v-for="s in p.steps" :key="s">{{ s }}</li>
-                </ol>
-                <span class="welcome__path-pick">
-                  <BaseIcon
-                    :name="chosenPath === p.id ? 'check' : 'arrow-right'"
-                    :size="14"
-                  />
-                  {{ chosenPath === p.id ? 'Выбран' : 'Выбрать' }}
+      <div class="welcome__pane welcome__pane--copy">
+        <div ref="sceneEl" class="welcome__scene">
+          <article
+            v-for="(s, idx) in scenes"
+            :key="s.id"
+            ref="cards"
+            class="welcome__card"
+            :class="{ 'welcome__card--active': idx === step }"
+            :aria-hidden="idx !== step"
+          >
+            <template v-if="s.id === 'hero'">
+              <span class="welcome__kicker">Добро пожаловать</span>
+              <h1 class="welcome__title">
+                Один хаб
+                <span class="welcome__title-accent">
+                  <span class="text--gradient">для всего умного дома</span>
+                  <span class="welcome__title-line" aria-hidden="true" />
                 </span>
-              </button>
-            </div>
-            <div class="step-card__actions">
-              <BaseButton variant="ghost" icon-left="arrow-left" @click="back">Назад</BaseButton>
-              <BaseButton
-                variant="primary"
-                icon-right="arrow-right"
-                :disabled="!chosenPath"
-                @click="next"
-              >
-                Дальше
-              </BaseButton>
-            </div>
-          </div>
-
-          <!-- Шаг 4: Готово — тур + быстрые подсказки -->
-          <div v-else class="step-card">
-            <div class="step-card__head">
-              <span class="step-card__kicker">Шаг 04 · Финал</span>
-              <h2 class="step-card__title">Хаб готов к работе</h2>
-              <p class="step-card__lead">
-                Можем показать тур по интерфейсу — займёт 60 секунд и покажет где что лежит. Или
-                сразу перейдём к
-                <strong>{{ chosenPathTitle ?? 'хабу' }}</strong
-                >.
+              </h1>
+              <p class="welcome__lead">
+                28+ интеграций, локальное управление, голосовые сценарии через Алису.
+                Без облака, без подписок, без лишнего.
               </p>
-            </div>
+              <ul class="welcome__pill-list">
+                <li v-for="b in heroBullets" :key="b">
+                  <span class="welcome__pill-icon"><BaseIcon name="check" :size="12" /></span>
+                  <span>{{ b }}</span>
+                </li>
+              </ul>
+              <div class="welcome__actions">
+                <BaseButton variant="primary" size="lg" icon-right="arrow-right" @click="next">
+                  Поехали
+                </BaseButton>
+                <BaseButton variant="ghost" size="lg" @click="skip">Я уже знаком</BaseButton>
+              </div>
+            </template>
 
-            <div class="welcome__finish">
-              <div class="welcome__finish-card welcome__finish-card--primary">
-                <div class="welcome__finish-icon"><BaseIcon name="info" :size="20" /></div>
-                <div>
-                  <div class="welcome__finish-title">Покажу всё на интерфейсе</div>
-                  <div class="welcome__finish-text">
-                    Подсветим главное: где искать устройства, как собрать сценарий и подключить
-                    колонку. Можно прервать в любой момент клавишей Esc.
+            <template v-else-if="s.id === 'features'">
+              <span class="welcome__kicker">Шаг 02 · Что вы получите</span>
+              <h2 class="welcome__title welcome__title--sm">
+                Три способа управлять
+                <span class="welcome__title-accent">
+                  <span class="text--gradient">умным домом</span>
+                </span>
+              </h2>
+              <p class="welcome__lead">
+                Каждый канал работает независимо. Можно начать с одного и постепенно
+                подключать остальные.
+              </p>
+              <div class="welcome__feature-grid">
+                <article
+                  v-for="f in features"
+                  :key="f.title"
+                  class="welcome__feature"
+                  :style="{
+                    '--tone': `var(--color-brand-${f.tone})`,
+                    '--tone-rgb': `var(--color-brand-${f.tone}-rgb)`,
+                  }"
+                >
+                  <div class="welcome__feature-icon"><span v-safe-html="f.icon" /></div>
+                  <div class="welcome__feature-title">{{ f.title }}</div>
+                  <div class="welcome__feature-text">{{ f.text }}</div>
+                  <div class="welcome__feature-tags">
+                    <span v-for="t in f.tags" :key="t" class="welcome__feature-tag">
+                      {{ t }}
+                    </span>
                   </div>
-                </div>
-                <BaseButton variant="primary" icon-right="arrow-right" @click="finish(true)">
-                  Начать тур
+                </article>
+              </div>
+              <div class="welcome__actions">
+                <BaseButton variant="ghost" icon-left="arrow-left" @click="back">Назад</BaseButton>
+                <BaseButton variant="primary" icon-right="arrow-right" @click="next">
+                  Дальше
                 </BaseButton>
               </div>
+            </template>
 
-              <div class="welcome__finish-card">
-                <div class="welcome__finish-icon"><BaseIcon name="arrow-right" :size="20" /></div>
-                <div>
-                  <div class="welcome__finish-title">Сразу к {{ chosenPathTitle ?? 'хабу' }}</div>
-                  <div class="welcome__finish-text">
-                    Пропустим тур и откроем нужный раздел. Все подсказки доступны в Настройках.
-                  </div>
-                </div>
-                <BaseButton variant="ghost" @click="finish(false)">Перейти</BaseButton>
+            <template v-else-if="s.id === 'path'">
+              <span class="welcome__kicker">Шаг 03 · Выбор пути</span>
+              <h2 class="welcome__title welcome__title--sm">
+                С чего
+                <span class="welcome__title-accent">
+                  <span class="text--gradient">начнём?</span>
+                </span>
+              </h2>
+              <p class="welcome__lead">
+                После онбординга сразу откроем нужный экран. Передумаете — всегда
+                можно вернуться через боковое меню.
+              </p>
+              <div class="welcome__path-grid">
+                <button
+                  v-for="p in paths"
+                  :key="p.id"
+                  type="button"
+                  class="welcome__path"
+                  :class="{ 'welcome__path--active': chosenPath === p.id }"
+                  :style="{
+                    '--tone': `var(--color-brand-${p.tone})`,
+                    '--tone-rgb': `var(--color-brand-${p.tone}-rgb)`,
+                  }"
+                  @click="chosenPath = p.id"
+                >
+                  <span class="welcome__path-tag">{{ p.tag }}</span>
+                  <span class="welcome__path-title">{{ p.title }}</span>
+                  <span class="welcome__path-text">{{ p.text }}</span>
+                  <span class="welcome__path-pick">
+                    <BaseIcon
+                      :name="chosenPath === p.id ? 'check' : 'arrow-right'"
+                      :size="14"
+                    />
+                    {{ chosenPath === p.id ? 'Выбран' : 'Выбрать' }}
+                  </span>
+                </button>
               </div>
-            </div>
+              <div class="welcome__actions">
+                <BaseButton variant="ghost" icon-left="arrow-left" @click="back">Назад</BaseButton>
+                <BaseButton
+                  variant="primary"
+                  icon-right="arrow-right"
+                  :disabled="!chosenPath"
+                  @click="next"
+                >
+                  Дальше
+                </BaseButton>
+              </div>
+            </template>
 
-            <ul class="welcome__tips">
-              <li v-for="t in finishTips" :key="t.title">
-                <kbd>{{ t.title }}</kbd>
-                <span>{{ t.text }}</span>
-              </li>
-            </ul>
-          </div>
+            <template v-else>
+              <span class="welcome__kicker">Шаг 04 · Финал</span>
+              <h2 class="welcome__title welcome__title--sm">
+                Хаб
+                <span class="welcome__title-accent">
+                  <span class="text--gradient">готов к работе</span>
+                </span>
+              </h2>
+              <p class="welcome__lead">
+                Покажу тур по интерфейсу — 60 секунд, чтобы освоиться. Или сразу
+                откроем <strong>{{ chosenPathTitle ?? 'хаб' }}</strong>.
+              </p>
+              <div class="welcome__finish">
+                <button
+                  type="button"
+                  class="welcome__finish-card welcome__finish-card--primary"
+                  @click="finish(true)"
+                >
+                  <span class="welcome__finish-icon">
+                    <BaseIcon name="info" :size="20" />
+                  </span>
+                  <span class="welcome__finish-body">
+                    <span class="welcome__finish-title">Покажу всё на интерфейсе</span>
+                    <span class="welcome__finish-text">
+                      Подсветим где искать устройства, как собрать сценарий и
+                      подключить колонку. Прервать — Esc.
+                    </span>
+                  </span>
+                  <span class="welcome__finish-cta">
+                    Начать тур <BaseIcon name="arrow-right" :size="14" />
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="welcome__finish-card"
+                  @click="finish(false)"
+                >
+                  <span class="welcome__finish-icon">
+                    <BaseIcon name="arrow-right" :size="20" />
+                  </span>
+                  <span class="welcome__finish-body">
+                    <span class="welcome__finish-title">
+                      Сразу к {{ chosenPathTitle ?? 'хабу' }}
+                    </span>
+                    <span class="welcome__finish-text">
+                      Пропустим тур и откроем нужный раздел. Подсказки доступны
+                      в Настройках.
+                    </span>
+                  </span>
+                  <span class="welcome__finish-cta">Перейти</span>
+                </button>
+              </div>
+              <ul class="welcome__tips">
+                <li v-for="t in finishTips" :key="t.title">
+                  <kbd>{{ t.title }}</kbd>
+                  <span>{{ t.text }}</span>
+                </li>
+              </ul>
+            </template>
+          </article>
         </div>
-      </Transition>
+      </div>
 
-      <!-- Orb + 3D-chip ring живут в одной сцене; не перерендериваются между шагами. -->
-      <aside class="welcome__visual" aria-hidden="true">
-        <div class="welcome__visual-stage">
+      <!-- Visual pane: фиксированная (viewport-driven) ширина колонки + стейдж
+           чёткого размера. Container queries намеренно убраны — иначе высота
+           текстовой колонки таскает orb-стейдж за собой. -->
+      <aside class="welcome__pane welcome__pane--visual" aria-hidden="true">
+        <div class="welcome__stage">
           <JarvisOrb size="xl" ambient :state="orbState" class="welcome__orb" />
           <OrbitalChips :chips="orbitalChips" />
         </div>
       </aside>
     </div>
 
-    <!-- Bottom: dots-навигация -->
     <footer class="welcome__bottom">
       <div class="welcome__dots">
         <button
@@ -209,7 +245,7 @@
             'welcome__dot--done': i - 1 < step,
           }"
           :aria-label="`Шаг ${i}: ${stepLabels[i - 1]}`"
-          @click="step = i - 1"
+          @click="goTo(i - 1)"
         />
       </div>
     </footer>
@@ -217,7 +253,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { gsap } from 'gsap';
@@ -231,22 +267,35 @@ const ui = useUiStore();
 const router = useRouter();
 const { reduceMotion } = storeToRefs(ui);
 
+type PathId = 'lan' | 'alice' | 'cloud';
+
 const step = ref(0);
 const totalSteps = 4;
 const motion = computed(() => !reduceMotion.value);
-const root = useTemplateRef<HTMLElement>('root');
-
-type PathId = 'lan' | 'alice' | 'cloud';
 const chosenPath = ref<PathId | null>(null);
 
+const root = useTemplateRef<HTMLElement>('root');
+const sceneEl = useTemplateRef<HTMLElement>('sceneEl');
+const cards = useTemplateRef<HTMLElement[]>('cards');
+
+const scenes = [
+  { id: 'hero' },
+  { id: 'features' },
+  { id: 'path' },
+  { id: 'finish' },
+] as const;
+
 const stepLabels = ['Знакомство', 'Возможности', 'Выбор пути', 'Финал'];
-const stepLabel = computed(() => `Шаг ${step.value + 1} из ${totalSteps} · ${stepLabels[step.value]}`);
+const stepLabel = computed(
+  () => `Шаг ${step.value + 1} / ${totalSteps} · ${stepLabels[step.value]}`,
+);
 const railProgress = computed(() => ((step.value + 1) / totalSteps) * 100);
 
-const orbState = computed<'idle' | 'active'>(() => {
-  if (!motion.value) return 'idle';
-  return step.value === 1 ? 'idle' : 'active';
-});
+// Hero и финал — orb «оживает» (главный визуальный акцент). Content-тяжёлые
+// шаги features/path — orb успокаивается, чтобы не отвлекать от выбора.
+const orbState = computed<'idle' | 'active'>(() =>
+  step.value === 0 || step.value === 3 ? 'active' : 'idle',
+);
 
 const heroBullets = [
   'Локально, без облака',
@@ -295,9 +344,7 @@ interface Path {
   tag: string;
   title: string;
   text: string;
-  steps: string[];
   tone: string;
-  icon: string;
 }
 
 const paths: Path[] = [
@@ -307,13 +354,6 @@ const paths: Path[] = [
     title: 'Найти в LAN',
     text: 'Yeelight, Shelly, Hue, miIO. Хаб опросит сеть за 5 секунд.',
     tone: 'violet',
-    icon:
-      '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M5 12a7 7 0 0114 0M2 12a10 10 0 0120 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
-    steps: [
-      'Откроем «Поиск устройств»',
-      'Хаб параллельно опросит протоколы',
-      'Подключим первое устройство',
-    ],
   },
   {
     id: 'alice',
@@ -321,13 +361,6 @@ const paths: Path[] = [
     title: 'Подключить Алису',
     text: 'Импорт всех устройств из «Дома с Алисой» + локальная Станция.',
     tone: 'pink',
-    icon:
-      '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M8 11v2M10.5 9.5v5M13.5 8.5v7M16 10.5v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
-    steps: [
-      'Раздел «Алиса» откроется первым',
-      '«Войти через Яндекс» — единственный клик',
-      'Все Станции и устройства подтянутся',
-    ],
   },
   {
     id: 'cloud',
@@ -335,13 +368,6 @@ const paths: Path[] = [
     title: 'Облачные интеграции',
     text: 'Tuya, Mi Home, Сбер Дом, eWeLink, Aqara — 16 платформ.',
     tone: 'amber',
-    icon:
-      '<svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 010-8 6 6 0 0111 1.5 4 4 0 011 7.5H7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
-    steps: [
-      'Откроем маркетплейс интеграций',
-      'Выберите свою облачную платформу',
-      'Введёте API-ключ — всё устройства появятся',
-    ],
   },
 ];
 
@@ -357,23 +383,103 @@ const finishTips = [
   { title: 'Настройки', text: 'пройти онбординг заново' },
 ];
 
+// Подборка для орба: top-of-mind интеграции — массовые LAN-бренды + ключевые
+// протоколы + российские платформы. Fibonacci-распределение OrbitalChips даёт
+// одинаково ровный паттерн на 8 / 14 / 24 чипах, поэтому количество подбираем
+// от UX (узнаваемость, плотность), не технически. 14 — visually полно, но
+// без перегруза: каждый chip остаётся читаемым на любой rotation сферы.
 const orbitalChips = [
+  // LAN-light (массовые умные лампы) — самые узнаваемые иконки.
   { id: 'yeelight', label: 'Yeelight' },
   { id: 'hue', label: 'Hue' },
-  { id: 'tuya', label: 'Tuya' },
-  { id: 'sber-home', label: 'Сбер' },
+  { id: 'lifx', label: 'LIFX' },
   { id: 'wiz', label: 'WiZ' },
+  // LAN-actuators (реле, розетки, сенсоры) — тоже high-recognition.
   { id: 'shelly', label: 'Shelly' },
-  { id: 'miio', label: 'Mi Home' },
+  { id: 'aqara-cloud', label: 'Aqara' },
+  { id: 'switchbot', label: 'SwitchBot' },
+  // Universal-протоколы — без них «умный дом» не определяется.
   { id: 'matter', label: 'Matter' },
+  { id: 'homekit', label: 'HomeKit' },
+  { id: 'home-assistant', label: 'Home Assistant' },
+  // Российские платформы — таргет-аудитория проекта.
+  { id: 'yandex-iot', label: 'Алиса' },
+  { id: 'sber-home', label: 'Сбер' },
+  // Cloud-гиганты китайского сегмента — реальный охват по бытовой технике.
+  { id: 'tuya', label: 'Tuya' },
+  { id: 'miio', label: 'Mi Home' },
 ];
 
-function next(): void {
-  if (step.value < totalSteps - 1) {
-    step.value += 1;
-  } else {
-    finish(true);
+// =====================================================================
+// GSAP step-transitions: все step-cards живут одновременно (absolute-stack);
+// активный — opacity 1 + filter:none, остальные — opacity 0 + visibility:hidden.
+// Никаких translateY / scale → grid-row статична → orb-стейдж не дёргается.
+// =====================================================================
+let activeTl: gsap.core.Timeline | null = null;
+
+function applyStepInstantly(idx: number): void {
+  if (!cards.value) return;
+  cards.value.forEach((el, i) => {
+    gsap.set(el, {
+      opacity: i === idx ? 1 : 0,
+      visibility: i === idx ? 'visible' : 'hidden',
+      pointerEvents: i === idx ? 'auto' : 'none',
+      y: 0,
+    });
+  });
+}
+
+function animateStep(prev: number, idx: number): void {
+  if (!cards.value || cards.value.length === 0) return;
+  if (!motion.value) {
+    applyStepInstantly(idx);
+    return;
   }
+  activeTl?.kill();
+
+  const fromEl = cards.value[prev];
+  const toEl = cards.value[idx];
+  if (!toEl) return;
+
+  // Чистый opacity-crossfade без `filter: blur` — blur даёт layout-thrash на
+  // Windows + Intel iGPU (composite-layer пересчитывается каждый кадр) и
+  // визуально читается как «прыжок» при переходе. force3D промоутит карточку
+  // в свой GPU-слой — opacity всегда smooth.
+  const tl = gsap.timeline({ defaults: { ease: 'power3.out', force3D: true } });
+
+  if (fromEl && fromEl !== toEl) {
+    tl.to(fromEl, {
+      opacity: 0,
+      duration: 0.22,
+      onStart: () => gsap.set(fromEl, { pointerEvents: 'none' }),
+      onComplete: () => gsap.set(fromEl, { visibility: 'hidden' }),
+    });
+  }
+
+  // Stagger по детям: только opacity (без y) — карточка absolute, но
+  // одновременный transform на родителе (Vue route-fade) и на детях
+  // создавал заметный «дрейф» при смене шага. Чистое затухание читается
+  // плавно на всех устройствах.
+  tl.set(toEl, { visibility: 'visible', pointerEvents: 'auto', opacity: 0 })
+    .to(toEl, { opacity: 1, duration: 0.32 }, fromEl && fromEl !== toEl ? '-=0.12' : 0)
+    .fromTo(
+      toEl.children,
+      { opacity: 0, y: 8 },
+      { opacity: 1, y: 0, duration: 0.36, stagger: 0.04 },
+      '-=0.26',
+    );
+
+  activeTl = tl;
+}
+
+function goTo(idx: number): void {
+  if (idx < 0 || idx >= totalSteps || idx === step.value) return;
+  step.value = idx;
+}
+
+function next(): void {
+  if (step.value < totalSteps - 1) step.value += 1;
+  else finish(true);
 }
 
 function back(): void {
@@ -416,14 +522,81 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
-onMounted(() => {
+watch(step, (now, prev) => animateStep(prev, now));
+
+// =====================================================================
+// Touch swipe: горизонтальный жест ←/→ листает шаги (mobile-only ввод).
+// Threshold 60px по X отсекает случайные тапы; вертикальный delta > X
+// блокирует жест — даём приоритет нативному scroll'у контента.
+// =====================================================================
+let touchStart: { x: number; y: number; t: number } | null = null;
+
+function onTouchStart(e: TouchEvent): void {
+  const t = e.touches[0];
+  if (!t) return;
+  touchStart = { x: t.clientX, y: t.clientY, t: performance.now() };
+}
+
+function onTouchEnd(e: TouchEvent): void {
+  if (!touchStart) return;
+  const t = e.changedTouches[0];
+  if (!t) return;
+  const dx = t.clientX - touchStart.x;
+  const dy = t.clientY - touchStart.y;
+  const dt = performance.now() - touchStart.t;
+  touchStart = null;
+
+  if (dt > 600) return; // долгое — не свайп
+  if (Math.abs(dy) > Math.abs(dx)) return; // вертикаль → scroll
+  if (Math.abs(dx) < 60) return; // короткое — не свайп
+
+  if (dx < 0) next();
+  else back();
+}
+
+onMounted(async () => {
   root.value?.focus();
-  if (!motion.value) return;
-  gsap.from(root.value, {
-    opacity: 0,
-    duration: 0.6,
-    ease: 'power2.out',
-  });
+  await nextTick();
+  applyStepInstantly(step.value);
+
+  root.value?.addEventListener('touchstart', onTouchStart, { passive: true });
+  root.value?.addEventListener('touchend', onTouchEnd, { passive: true });
+
+  if (!motion.value || !root.value) return;
+
+  // Entrance: НЕ затухаем root повторно — это делает уже Vue route-transition
+  // (см. .fade-slide / .fade в App.vue). Двойной fade давал «вспышку» — Vue
+  // фейдит, GSAP сразу snap'ит обратно в opacity:0 и фейдит ещё раз.
+  // Анимируем только внутренние элементы поверх Vue-fade'а: bar → visual → cards.
+  const tl = gsap.timeline({ defaults: { ease: 'power3.out', force3D: true } });
+  tl.from('.welcome__bar > *', {
+      opacity: 0,
+      y: -6,
+      duration: 0.4,
+      stagger: 0.05,
+    })
+    .from(
+      '.welcome__pane--visual',
+      { opacity: 0, scale: 0.96, duration: 0.55, ease: 'power2.out' },
+      '-=0.25',
+    );
+
+  const active = cards.value?.[step.value];
+  if (active) {
+    tl.fromTo(
+      active.children,
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.45, stagger: 0.05 },
+      '-=0.35',
+    );
+  }
+});
+
+onBeforeUnmount(() => {
+  activeTl?.kill();
+  activeTl = null;
+  root.value?.removeEventListener('touchstart', onTouchStart);
+  root.value?.removeEventListener('touchend', onTouchEnd);
 });
 </script>
 
@@ -431,60 +604,66 @@ onMounted(() => {
 @use '@/styles/abstracts/mixins' as *;
 
 .welcome {
-  // Absolute-positioned поверх app__fullscreen (он `position: relative; flex: 1`).
-  // Это исключает любые flex/grid-конфликты с parent — welcome всегда занимает
-  // ровно слот fullscreen, не больше и не меньше.
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: clamp(10px, 1.4vw, 18px);
-  padding: clamp(12px, 1.6vw, 24px) clamp(20px, 3.2vw, 44px);
+  // Welcome рендерится с classed `app__fullscreen` (см. App.vue):
+  // `flex: 1; min-height: 0` уже выставлены на нашем root-элементе через class
+  // merge — section получает остаточную высоту viewport'а минус titlebar.
+  //
+  // Внутри — собственный flex-column, чтобы bar/layout/footer стояли в
+  // фиксированной вертикали: header сразу под titlebar'ом, dots-footer
+  // вплотную к нижнему краю, layout (flex: 1) растягивается между.
+  //
+  // height: 100% / min-height: 100% намеренно НЕ выставляем — в комбинации с
+  // `flex: 1` родителя (.app__fullscreen) они делают двойную фиксацию высоты,
+  // и в Chromium percentage-resolution через flex-context даёт overflow вниз
+  // на высоту titlebar'а; визуально читалось как «welcome провисает в низ».
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.6vh, 24px);
+  // Top padding сжали до 14-22px — иначе bar + дефолтные отступы layout'а
+  // давали ~150px пустого пространства над hero на 1080p мониторах.
+  padding: clamp(14px, 1.8vh, 22px) clamp(24px, 4vw, 64px) clamp(16px, 2vh, 28px);
   color: var(--color-text-primary);
   outline: none;
   overflow: hidden;
+  isolation: isolate;
+  background: var(--color-bg-base);
 
-  @media (max-height: 720px) {
-    gap: 8px;
-    padding-block: 12px;
-  }
-
-  // Декоративный halo
-  &__halo {
+  // ---- Brand aura: статичная плоскость + три мягких пятна.
+  // Per feedback flat-hero: NO bubble-glass, plane + ambient shadow.
+  &__aura {
     position: absolute;
     inset: 0;
-    pointer-events: none;
-    overflow: hidden;
     z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        58% 42% at 8% 6%,
+        rgba(var(--color-brand-violet-rgb), 0.22) 0%,
+        transparent 65%
+      ),
+      radial-gradient(
+        45% 38% at 96% 102%,
+        rgba(var(--color-brand-amber-rgb), 0.14) 0%,
+        transparent 70%
+      ),
+      radial-gradient(
+        55% 48% at 92% 0%,
+        rgba(var(--color-brand-pink-rgb), 0.18) 0%,
+        transparent 65%
+      );
   }
 
-  &__halo-ring {
+  &__grain {
     position: absolute;
-    border-radius: 50%;
-    border: 1px solid rgba(var(--color-brand-violet-rgb), 0.08);
-
-    &--1 {
-      width: 600px;
-      height: 600px;
-      top: -200px;
-      right: -200px;
-      animation: orbit 60s linear infinite;
-    }
-    &--2 {
-      width: 380px;
-      height: 380px;
-      bottom: -160px;
-      left: 10%;
-      border-color: rgba(var(--color-brand-pink-rgb), 0.1);
-      animation: orbit 90s linear infinite reverse;
-    }
-    &--3 {
-      width: 220px;
-      height: 220px;
-      top: 30%;
-      right: 35%;
-      border-color: rgba(var(--color-brand-amber-rgb), 0.08);
-    }
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--glass-noise);
+    background-size: 240px 240px;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
   }
 
   > * {
@@ -492,11 +671,46 @@ onMounted(() => {
     z-index: 1;
   }
 
+  // =================================================================
+  // Header bar — tool-bar высоты, держим консистентный visual rhythm с
+  // BasePageHeader на остальных view'ах: subtle plane + hairline border +
+  // достаточный min-height (читается как «полноценный» bar, а не тонкая
+  // полоска под titlebar'ом).
+  // =================================================================
   &__bar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 16px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--space-5);
     align-items: center;
+    min-height: clamp(56px, 6vh, 68px);
+    padding: 0 clamp(10px, 1.2vw, 18px);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.022);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow:
+      0 18px 48px -36px rgba(0, 0, 0, 0.7),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    flex: 0 0 auto;
+  }
+
+  &__bar-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-micro);
+  }
+
+  &__mark-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gradient-brand);
+    box-shadow: 0 0 12px rgba(var(--color-brand-violet-rgb), 0.7);
+    animation: welcomeMarkPulse 2.4s ease-in-out infinite;
   }
 
   &__bar-progress {
@@ -505,113 +719,185 @@ onMounted(() => {
 
   &__skip {
     background: transparent;
-    border: 1px solid var(--color-border-subtle);
+    border: var(--border-thin) solid var(--color-border-subtle);
     color: var(--color-text-secondary);
-    padding: 8px 14px;
+    padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-pill);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     font-size: var(--font-size-small);
+    font-family: inherit;
     cursor: pointer;
-    transition: all var(--dur-fast) var(--ease-out);
+    transition:
+      background var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
 
     &:hover {
       color: var(--color-text-primary);
       background: var(--surface-hover);
       border-color: var(--color-border-soft);
     }
+
+    &--ghost {
+      pointer-events: none;
+      opacity: 0.6;
+    }
   }
 
-  &__progress {
-    display: flex;
-    align-items: center;
-    max-width: 1320px;
-    width: 100%;
-    margin: 0 auto;
-  }
-
+  // =================================================================
+  // Layout: copy-pane (left) + visual-pane (right). Visual-pane —
+  // фиксированной ширины через viewport-clamp, чтобы copy любой высоты не
+  // растягивал колонку (= не двигал --stage-size).
+  // =================================================================
   &__layout {
     width: 100%;
-    max-width: 1440px;
+    max-width: var(--content-max);
     margin: 0 auto;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) clamp(360px, 38vw, 560px);
     gap: clamp(24px, 3vw, 56px);
+    // center: copy и orb выравниваются по vertical-axis layout'а — пустое
+    // пространство (≈ flex:1 минус контент сцены) распределяется симметрично
+    // выше/ниже карточки, а не «коллапсирует» под actions'ами на высоких
+    // viewport'ах. Орб остаётся на той же оси (тоже center).
+    align-items: center;
+    // Welcome теперь flex-column (auto bar / flex layout / auto bottom). Layout
+    // должен поглощать всю остаточную высоту, иначе flex auto-sizes по контенту
+    // и footer-dots залипают сразу под layout'ом — bottom большого экрана пуст.
+    flex: 1 1 auto;
     min-height: 0;
-    align-items: stretch;
 
     @media (max-width: 1024px) {
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: minmax(180px, 30vh) minmax(0, 1fr);
+      grid-template-rows: clamp(220px, 26vh, 320px) minmax(0, 1fr);
+      align-items: stretch;
     }
   }
 
+  &__pane {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  &__pane--copy {
+    align-self: center;
+  }
+
+  // ---- Сцена: фикс. min-height = под самый высокий шаг (path/finish с
+  // grid-карточками). Меньше нельзя — иначе тот шаг переполнит и push'нёт
+  // bottom-dots вниз. Замеры: hero ~340px, features ~430px, path ~440px,
+  // finish ~450px. Берём 440px как safe min — copy теперь center'ится в
+  // layout'е, и более крупная min-height просто давала бы пустоту внутри
+  // карточки, а не вокруг.
   &__scene {
+    position: relative;
+    width: 100%;
+    min-height: clamp(360px, 44vh, 460px);
+  }
+
+  &__card {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
-    width: 100%;
-    min-width: 0;
-    min-height: 0;
-    // Перенесли overflow на step-card — у него внутренний контент с разной
-    // высотой; scene остаётся чистым flex-контейнером без scrollbar-edge'ов.
+    gap: var(--space-5);
+    will-change: opacity, filter;
+
+    // Дефолт — невидимо: applyStepInstantly() в onMounted синхронизирует
+    // активную с первым шагом до первого paint'а.
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    &--active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
   }
 
-  &__visual {
+  // =================================================================
+  // Typography: hero / kicker / lead
+  // =================================================================
+  &__kicker {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-micro);
+    color: var(--color-brand-violet);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-micro);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__title {
+    font-family: var(--font-family-display);
+    font-size: var(--font-size-display);
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-display);
+    font-weight: 720;
+    color: var(--color-text-primary);
+    margin: 0;
+    text-wrap: balance;
+
+    &--sm {
+      font-size: var(--font-size-display-2);
+    }
+  }
+
+  // Inline-block + relative — accent-line абсолютно позиционируется снизу.
+  // Per feedback: brand color via animated accent-line, не bubble-glass.
+  &__title-accent {
+    display: inline-block;
     position: relative;
-    display: grid;
-    place-items: center;
-    isolation: isolate;
-    min-width: 0;
-    min-height: 0;
-    // Container query basis: stage читает 100cqi/100cqb относительно этой колонки.
-    container-type: size;
+  }
 
-    @media (max-width: 1024px) {
-      order: -1;
+  &__title-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -10px;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--gradient-brand);
+    transform-origin: left center;
+    box-shadow: 0 0 14px rgba(var(--color-brand-violet-rgb), 0.5);
+    animation: welcomeAccent 5.4s ease-in-out infinite;
+  }
+
+  &__lead {
+    font-size: var(--font-size-h3);
+    line-height: var(--leading-relaxed);
+    color: var(--color-text-secondary);
+    max-width: 56ch;
+    margin: 0;
+    text-wrap: pretty;
+
+    strong {
+      color: var(--color-text-primary);
+      font-weight: 620;
     }
   }
 
-  // Stage = max квадрат, влезающий в колонку. cqi = inline size, cqb = block size.
-  &__visual-stage {
-    --stage-size: min(100cqi, 100cqb, 640px);
-    position: relative;
-    aspect-ratio: 1;
-    width: var(--stage-size);
-    height: var(--stage-size);
-    display: grid;
-    place-items: center;
-
-    @media (max-width: 1024px) {
-      --stage-size: min(100cqi, 100cqb, 320px);
-    }
-
-    :deep(.orb) {
-      --orb-size: calc(var(--stage-size) * 0.62);
-      position: relative;
-      z-index: 2;
-    }
-  }
-
-
-
+  // =================================================================
+  // Step 1: hero pill list
+  // =================================================================
   &__pill-list {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--space-3);
 
     li {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 14px;
+      gap: var(--space-2);
+      padding: 10px 16px;
       border-radius: var(--radius-pill);
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--color-border-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border: var(--border-thin) solid var(--color-border-subtle);
       font-size: var(--font-size-small);
       color: var(--color-text-secondary);
     }
@@ -623,208 +909,243 @@ onMounted(() => {
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: rgba(var(--color-success-rgb), 0.16);
+    background: rgba(var(--color-success-rgb), 0.18);
     color: var(--color-success);
+
+    :deep(svg) {
+      width: 12px;
+      height: 12px;
+    }
   }
 
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: auto;
+    padding-top: var(--space-2);
+  }
+
+  // =================================================================
+  // Step 2: feature grid
+  // =================================================================
   &__feature-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-3);
+  }
+
+  &__feature {
+    --tone: var(--color-brand-violet);
+    --tone-rgb: var(--color-brand-violet-rgb);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.025);
+    border: var(--border-thin) solid var(--color-border-subtle);
+    overflow: hidden;
+    isolation: isolate;
+    transition:
+      border-color var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out);
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        80% 60% at 0% 0%,
+        rgba(var(--tone-rgb), 0.16) 0%,
+        transparent 55%
+      );
+      opacity: 0.55;
+      z-index: -1;
+    }
+
+    &:hover {
+      border-color: rgba(var(--tone-rgb), 0.35);
+      background: rgba(255, 255, 255, 0.04);
+    }
+  }
+
+  &__feature-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: rgba(var(--tone-rgb), 0.18);
+    color: var(--tone);
+    margin-bottom: var(--space-1);
+
+    :deep(svg) {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  &__feature-title {
+    font-family: var(--font-family-display);
+    font-size: var(--font-size-h2);
+    font-weight: 620;
+    color: var(--color-text-primary);
+  }
+
+  &__feature-text {
+    font-size: var(--font-size-small);
+    line-height: var(--leading-normal);
+    color: var(--color-text-secondary);
   }
 
   &__feature-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--space-2);
     margin-top: auto;
     padding-top: var(--space-3);
-
-    .chip {
-      font-size: 11px;
-      padding: 3px 9px;
-      height: auto;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--color-border-subtle);
-      color: var(--color-text-secondary);
-    }
   }
 
+  &__feature-tag {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-micro);
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    background: rgba(var(--tone-rgb), 0.12);
+    color: var(--tone);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-micro);
+  }
+
+  // =================================================================
+  // Step 3: path picker — текст + tone-accent, без иллюстраций
+  // =================================================================
   &__path-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
-
-    @media (max-width: 1280px) {
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-    }
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-3);
   }
 
   &__path {
-    --path-tone: var(--color-brand-violet);
-    --path-tone-rgb: var(--color-brand-violet-rgb);
+    --tone: var(--color-brand-violet);
+    --tone-rgb: var(--color-brand-violet-rgb);
     position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
     padding: var(--space-5);
     border-radius: var(--radius-lg);
-    background: var(--color-bg-surface);
-    border: 1px solid var(--color-border-subtle);
+    background: rgba(255, 255, 255, 0.03);
+    border: var(--border-thin) solid var(--color-border-subtle);
     text-align: left;
     color: var(--color-text-primary);
     cursor: pointer;
-    transition:
-      background var(--dur-medium) var(--ease-out),
-      border-color var(--dur-medium) var(--ease-out),
-      transform var(--dur-medium) var(--ease-out),
-      box-shadow var(--dur-medium) var(--ease-out);
     overflow: hidden;
     isolation: isolate;
+    font-family: inherit;
+    transition:
+      border-color var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
 
     &::before {
       content: '';
       position: absolute;
       inset: 0;
-      background: radial-gradient(80% 60% at 0% 0%, rgba(var(--path-tone-rgb), 0.18) 0%, transparent 60%);
+      background: radial-gradient(
+        90% 60% at 0% 0%,
+        rgba(var(--tone-rgb), 0.18) 0%,
+        transparent 65%
+      );
       opacity: 0;
       transition: opacity var(--dur-medium) var(--ease-out);
-      z-index: 0;
-    }
-
-    > * {
-      position: relative;
-      z-index: 1;
+      z-index: -1;
     }
 
     &:hover {
-      transform: translateY(-2px);
-      border-color: rgba(var(--path-tone-rgb), 0.3);
-      box-shadow: var(--shadow-hover);
-      &::before { opacity: 0.6; }
+      border-color: rgba(var(--tone-rgb), 0.32);
+      background: rgba(255, 255, 255, 0.045);
+      &::before { opacity: 0.55; }
     }
 
     &--active {
-      border-color: rgba(var(--path-tone-rgb), 0.5);
-      box-shadow:
-        var(--shadow-violet-glow),
-        0 0 0 2px rgba(var(--path-tone-rgb), 0.25);
+      border-color: rgba(var(--tone-rgb), 0.55);
+      background: rgba(var(--tone-rgb), 0.07);
+      box-shadow: 0 0 0 1px rgba(var(--tone-rgb), 0.35);
       &::before { opacity: 1; }
     }
   }
 
   &__path-tag {
+    @include pill-tag(var(--tone-rgb), var(--tone));
     align-self: flex-start;
-    padding: 4px 10px;
-    border-radius: var(--radius-pill);
-    background: rgba(var(--path-tone-rgb), 0.18);
-    border: 1px solid rgba(var(--path-tone-rgb), 0.3);
-    color: var(--path-tone);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: var(--tracking-micro);
-    text-transform: uppercase;
-  }
-
-  &__path-icon {
-    display: inline-grid;
-    place-items: center;
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    background: rgba(var(--path-tone-rgb), 0.18);
-    color: var(--path-tone);
-
-    :deep(svg) {
-      width: 26px;
-      height: 26px;
-    }
   }
 
   &__path-title {
     font-family: var(--font-family-display);
-    font-size: 19px;
+    font-size: var(--font-size-h2);
     font-weight: 700;
     color: var(--color-text-primary);
-    letter-spacing: -0.012em;
+    line-height: var(--leading-snug);
   }
 
   &__path-text {
     font-size: var(--font-size-small);
     color: var(--color-text-secondary);
-    line-height: 1.5;
-  }
-
-  &__path-steps {
-    list-style: none;
-    counter-reset: pstep;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-
-    li {
-      counter-increment: pstep;
-      position: relative;
-      padding-left: 26px;
-      font-size: var(--font-size-small);
-      line-height: 1.4;
-      color: var(--color-text-secondary);
-
-      &::before {
-        @include numeric-badge(0);
-        content: counter(pstep);
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        background: rgba(var(--path-tone-rgb), 0.16);
-        color: var(--path-tone);
-        font-size: 10px;
-        font-weight: 700;
-      }
-    }
+    line-height: var(--leading-relaxed);
   }
 
   &__path-pick {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     margin-top: auto;
     padding-top: var(--space-3);
-    color: var(--path-tone);
+    color: var(--tone);
     font-size: var(--font-size-small);
     font-weight: 600;
   }
 
+  // =================================================================
+  // Step 4: finish
+  // =================================================================
   &__finish {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   &__finish-card {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space-4);
-    padding: var(--space-5);
+    padding: var(--space-4) var(--space-5);
     border-radius: var(--radius-lg);
-    background: var(--color-bg-surface);
-    border: 1px solid var(--color-border-subtle);
+    background: rgba(255, 255, 255, 0.03);
+    border: var(--border-thin) solid var(--color-border-subtle);
+    color: var(--color-text-primary);
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition:
+      border-color var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out);
+
+    &:hover {
+      border-color: var(--color-border-soft);
+      background: rgba(255, 255, 255, 0.05);
+    }
 
     &--primary {
       background: rgba(var(--color-brand-violet-rgb), 0.08);
-      border-color: rgba(var(--color-brand-violet-rgb), 0.32);
-    }
+      border-color: rgba(var(--color-brand-violet-rgb), 0.3);
 
-    @media (max-width: 720px) {
-      grid-template-columns: auto 1fr;
-      :deep(.button) {
-        grid-column: 1 / -1;
+      &:hover {
+        background: rgba(var(--color-brand-violet-rgb), 0.13);
+        border-color: rgba(var(--color-brand-violet-rgb), 0.45);
       }
     }
   }
@@ -832,24 +1153,45 @@ onMounted(() => {
   &__finish-icon {
     display: inline-grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     border-radius: 12px;
     background: rgba(var(--color-brand-violet-rgb), 0.16);
     color: var(--color-brand-violet);
+
+    :deep(svg) {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  &__finish-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
   }
 
   &__finish-title {
     font-size: var(--font-size-h2);
-    font-weight: 600;
+    font-weight: 620;
     color: var(--color-text-primary);
-    margin-bottom: 4px;
   }
 
   &__finish-text {
     font-size: var(--font-size-small);
     color: var(--color-text-secondary);
-    line-height: 1.5;
+    line-height: var(--leading-relaxed);
+  }
+
+  &__finish-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--color-brand-violet);
+    font-weight: 600;
+    font-size: var(--font-size-small);
+    white-space: nowrap;
   }
 
   &__tips {
@@ -857,21 +1199,21 @@ onMounted(() => {
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-2);
 
     li {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 10px 14px;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3);
       border-radius: var(--radius-md);
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--color-border-subtle);
+      background: rgba(255, 255, 255, 0.025);
+      border: var(--border-thin) solid var(--color-border-subtle);
 
       kbd {
         font-family: var(--font-family-mono);
-        font-size: 11px;
+        font-size: var(--font-size-micro);
         padding: 3px 8px;
         border-radius: 6px;
         background: rgba(var(--color-brand-violet-rgb), 0.16);
@@ -879,7 +1221,7 @@ onMounted(() => {
         font-weight: 600;
         letter-spacing: var(--tracking-micro);
         text-transform: uppercase;
-        border: 1px solid rgba(var(--color-brand-violet-rgb), 0.24);
+        border: var(--border-thin) solid rgba(var(--color-brand-violet-rgb), 0.24);
         flex-shrink: 0;
       }
 
@@ -890,6 +1232,42 @@ onMounted(() => {
     }
   }
 
+  // =================================================================
+  // Visual pane: orb + chips. Стейдж — viewport-driven, fixed-aspect.
+  // Container queries намеренно убраны — иначе высота copy-колонки
+  // таскает orb-стейдж за собой между шагами.
+  // =================================================================
+  &__pane--visual {
+    position: relative;
+    display: grid;
+    place-items: center;
+    align-self: center;
+  }
+
+  &__stage {
+    --stage-size: clamp(320px, min(38vw, 56vh), 520px);
+    position: relative;
+    width: var(--stage-size);
+    height: var(--stage-size);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+
+    @media (max-width: 1024px) {
+      --stage-size: clamp(220px, 30vh, 320px);
+    }
+
+    :deep(.orb) {
+      --orb-size: calc(var(--stage-size) * 0.66);
+      position: relative;
+      z-index: 2;
+    }
+  }
+
+  // =================================================================
+  // Bottom dots
+  // =================================================================
   &__bottom {
     display: flex;
     justify-content: center;
@@ -897,86 +1275,228 @@ onMounted(() => {
 
   &__dots {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   &__dot {
-    width: 24px;
+    width: 28px;
     height: 4px;
     border-radius: 4px;
     border: 0;
     padding: 0;
-    background: var(--color-border-soft);
+    background: rgba(255, 255, 255, 0.1);
     cursor: pointer;
-    transition: all var(--dur-fast) var(--ease-out);
+    transition:
+      width var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
 
     &--active {
-      width: 36px;
+      width: 42px;
       background: var(--gradient-brand);
-      box-shadow: 0 0 12px rgba(var(--color-brand-violet-rgb), 0.5);
+      box-shadow: 0 0 14px rgba(var(--color-brand-violet-rgb), 0.55);
     }
+
     &--done {
-      background: rgba(var(--color-brand-violet-rgb), 0.5);
+      background: rgba(var(--color-brand-violet-rgb), 0.55);
     }
   }
 }
 
-
-.welcome-step-enter-active,
-.welcome-step-leave-active {
-  transition:
-    opacity var(--dur-medium) var(--ease-out),
-    transform var(--dur-slow) var(--ease-out);
-}
-.welcome-step-enter-from {
-  opacity: 0;
-  transform: translateY(20px) scale(0.98);
-}
-.welcome-step-leave-to {
-  opacity: 0;
-  transform: translateY(-14px) scale(0.99);
-}
-
-.welcome-fade-enter-active,
-.welcome-fade-leave-active {
-  transition: opacity var(--dur-fast) ease;
-}
-.welcome-fade-enter-from,
-.welcome-fade-leave-to {
-  opacity: 0;
-}
-
-.app--reduce-motion .welcome {
-  &__halo-ring,
-  &__pulse,
-  &__orbit {
-    animation: none !important;
-  }
-  &__pulse {
-    opacity: 0.18;
+@keyframes welcomeMarkPulse {
+  0%, 100% {
     transform: scale(1);
+    opacity: 0.85;
   }
-  &__visual-tags span {
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+
+@keyframes welcomeAccent {
+  0%, 100% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scaleX(0.6);
+    opacity: 0.75;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome__mark-dot,
+  .welcome__title-line {
     animation: none !important;
   }
 }
 
+// =====================================================================
+// Mobile (≤ 720px): полностью другой UX-pattern.
+//
+// Desktop: copy слева, orb справа, всё умещается в один экран.
+// Mobile: вертикальный stack — orb сверху (компактный hero ≤ 30vh), контент
+// под ним прокручивается естественно, dots/actions идут в общем flow внизу.
+// Sticky-bottom CTA не делаем: при scroll'е контента overlap'ится с длинными
+// карточками path-step'а; вместо этого actions внутри каждой карточки уже
+// помечены `margin-top: auto` и оказываются последними в скролле.
+//
+// Swipe-навигация (см. setupTouchSwipe в script) даёт жест влево/вправо для
+// смены шага — основной mobile-ввод вместо клавиш.
+// =====================================================================
 @media (max-width: 720px) {
   .welcome {
-    padding: 16px;
+    padding: 14px 14px calc(18px + var(--safe-bottom));
+    gap: 14px;
     grid-template-rows: auto auto 1fr auto;
+    overflow: hidden auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 
-    &__top {
-      flex-wrap: wrap;
+    &__bar {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      min-height: 48px;
+      padding: 0 10px;
+      border-radius: var(--radius-md);
+      box-shadow: none;
     }
-
+    &__bar-mark {
+      display: none;
+    }
     &__skip {
-      font-size: 11px;
-      padding: 6px 10px;
+      font-size: var(--font-size-micro);
+      padding: 6px 12px;
     }
 
-    &__finish-card {
+    // ---- Layout: одноколоночный stack, visual сверху, copy под ним.
+    &__layout {
+      display: grid;
+      grid-template-columns: 100%;
+      grid-template-rows: auto auto;
+      gap: 18px;
+      align-items: stretch;
+    }
+    &__pane--copy {
+      align-self: stretch;
+    }
+
+    // Visual в mobile — БЕЗ aspect:1, чтобы не съедал треть высоты viewport'а.
+    // Stage держит 30vh max; orb внутри сжат до 0.78 чтобы chip-кольца хорошо
+    // обтекали (на узком экране фракция от стейджа меньше, но хорошо смотрится).
+    &__pane--visual {
+      order: -1;
+      height: clamp(220px, 30vh, 300px);
+      align-self: start;
+    }
+    &__stage {
+      --stage-size: min(82vw, 30vh);
+      width: var(--stage-size);
+      height: var(--stage-size);
+
+      :deep(.orb) {
+        --orb-size: calc(var(--stage-size) * 0.7);
+      }
+    }
+
+    // Scene держит min-height под самый высокий шаг (path-step ≈ 540px). Без
+    // этого absolute-stack карточек коллапсирует контейнер в 0px. На мобиле
+    // welcome имеет overflow:auto, лишняя высота скроллится естественно.
+    &__scene {
+      min-height: clamp(480px, 70vh, 620px);
+    }
+
+    &__card {
+      gap: 16px;
+    }
+
+    // ---- Typography: --font-size-display token уже clamp 22→28px на mobile.
+    &__title {
+      line-height: 1.15;
+    }
+    &__title-line {
+      display: none;
+    }
+    &__lead {
+      font-size: var(--font-size-body);
+      line-height: var(--leading-normal);
+    }
+
+    // ---- Pills hero — wrap на 2 ряда максимум.
+    &__pill-list {
+      gap: 8px;
+
+      li {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+    }
+
+    // ---- Actions — full-width column. На touch проще ткнуть большую кнопку.
+    &__actions {
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+
+      :deep(.button) {
+        width: 100%;
+        justify-content: center;
+        min-height: var(--tap-min);
+      }
+    }
+
+    // ---- Feature/path grids: один column на mobile.
+    &__feature-grid,
+    &__path-grid {
+      grid-template-columns: 100%;
+      gap: 10px;
+    }
+    &__path {
+      padding: 16px;
+      min-height: 0;
+    }
+    &__feature {
       padding: 14px;
+    }
+
+    // ---- Finish cards: иконка слева, body справа, CTA под body на отдельной
+    // строке (а не справа — на 360px не помещается).
+    &__finish-card {
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      align-items: start;
+      gap: 12px;
+      padding: 14px;
+
+      .welcome__finish-icon { grid-row: 1; }
+      .welcome__finish-body { grid-row: 1; grid-column: 2; }
+      .welcome__finish-cta {
+        grid-row: 2;
+        grid-column: 1 / -1;
+        justify-content: center;
+        padding: 8px 0;
+        border-top: 1px solid var(--color-border-subtle);
+      }
+    }
+
+    // ---- Tips: один column (и так wrap'ились, но фиксируем).
+    &__tips {
+      grid-template-columns: 100%;
+    }
+  }
+}
+
+// Очень узкие screens (iPhone SE, < 380px) — ещё компактнее.
+@media (max-width: 379px) {
+  .welcome {
+    padding: 12px 10px calc(14px + var(--safe-bottom));
+
+    &__title {
+      font-size: 22px;
+    }
+    &__pane--visual {
+      height: clamp(180px, 26vh, 240px);
     }
   }
 }

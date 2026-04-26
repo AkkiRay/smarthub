@@ -1,9 +1,10 @@
 <template>
-  <section v-if="device" class="detail" ref="root">
+  <!-- Stable root: section всегда в DOM, даже до hydration device.
+       Transition в App.vue использует Component != null. -->
+  <section class="detail" ref="root">
+    <template v-if="device">
     <BasePageHeader back :title="device.name" :description="`${driverLabel} · ${device.address}`">
       <template #actions>
-        <!-- «Полный экран» убран: пульт колонки уже занимает страницу целиком,
-             прежний `/speaker` redirect крутил юзера в петлю → /devices/<id>. -->
         <BaseButton
           variant="ghost"
           size="sm"
@@ -21,9 +22,8 @@
     </BasePageHeader>
 
     <div class="detail__layout">
-      <!-- Hero колонки — кастомный, заменяет generic-hero. Внутри есть AliceStationPanel
-           (now-playing/громкость/transport/log) + категории команд + PC-стрим. Сюда же
-           перенесена вся /speaker-страница — пользователь не должен переключаться. -->
+      <!-- Speaker hero: AliceStationPanel (now-playing/volume/transport/log)
+           + категории команд + PC-stream. -->
       <SpeakerControlSurface
         v-if="isYandexStation"
         :device="device"
@@ -53,9 +53,8 @@
         </div>
       </div>
 
-      <!-- Capabilities. Для станции скрываем quasar.* — они дублируют пульт выше
-           (TTS/voice action есть в SpeakerControlSurface). Оставляем только то, чего
-           там нет: подсветка LED, громкость по cloud, режимы и т.п. -->
+      <!-- Capabilities. На станции скрыты quasar.* (TTS/voice — в SpeakerControlSurface).
+           Остальное: LED, cloud-volume, режимы. -->
       <div v-if="visibleCapabilities.length" class="card detail__capabilities" data-anim="block">
         <h3 class="text--h2">
           {{ isYandexStation ? 'Дополнительные возможности' : 'Управление' }}
@@ -175,6 +174,16 @@
       :loading="removing"
       @confirm="performRemove"
     />
+    </template>
+    <!-- Loading-shell: skeleton + BasePageHeader до hydration device. -->
+    <template v-else>
+      <BasePageHeader back title="Загружаем устройство…" description="Тянем актуальное состояние из реестра." />
+      <div class="detail__skeleton card" data-anim="block">
+        <div class="detail__skeleton-bar detail__skeleton-bar--md" />
+        <div class="detail__skeleton-bar detail__skeleton-bar--sm" />
+        <div class="detail__skeleton-bar detail__skeleton-bar--lg" />
+      </div>
+    </template>
   </section>
 </template>
 
@@ -211,7 +220,7 @@ const root = useTemplateRef<HTMLElement>('root');
 const id = computed(() => String(route.params.id));
 const device = computed(() => devices.byId.get(id.value));
 
-/** Yandex-импортированные устройства редактировать локально нельзя — sync затрёт изменения. */
+/** Yandex-импортированное устройство: name/room read-only (синхронизируется из Алисы). */
 const isYandexImported = computed(() => device.value?.driver === 'yandex-iot');
 
 const isYandexStation = computed(() => {
@@ -219,8 +228,7 @@ const isYandexStation = computed(() => {
   if (!d) return false;
   if (d.driver !== 'yandex-iot') return false;
   if (d.type.startsWith('devices.types.media_device')) return true;
-  // Fallback: yandex-iot выставляет devices.capabilities.quasar/quasar.server_action
-  // только для станций. Если type был замаплен в OTHER, это запасной канал распознавания.
+  // Fallback: capabilities `devices.capabilities.quasar*` — маркер станции.
   return d.capabilities.some((c) => c.type.startsWith('devices.capabilities.quasar'));
 });
 
@@ -230,10 +238,8 @@ const hasLiveGlagolSession = computed(
 );
 
 /**
- * Capabilities, которые имеет смысл рендерить ниже SpeakerControlSurface.
- * Для станции скрываем `devices.capabilities.quasar*` (это TTS/voice — уже есть
- * в пульте выше; иначе пользователь видит 8-10 одинаковых input'ов «Произнести
- * фразу» / «Голосовая команда»). Оставляем подсветку, громкость по cloud и т.п.
+ * Capabilities для рендера ниже SpeakerControlSurface.
+ * На станции `devices.capabilities.quasar*` скрыты (TTS/voice — в пульте).
  */
 const visibleCapabilities = computed(() => {
   const all = device.value?.capabilities ?? [];
@@ -242,9 +248,8 @@ const visibleCapabilities = computed(() => {
 });
 
 /**
- * Real-time aliceState из glagol-WS — для подмены `voice_activity` property
- * у станции. Без этого UI всегда показывает «—», т.к. cloud-snapshot не
- * содержит мгновенного state'а воспроизведения.
+ * Real-time aliceState из glagol-WS для подмены `voice_activity` property
+ * на станции. Cloud-snapshot не содержит мгновенного playback-state'а.
  */
 const liveVoiceActivity = computed<string | null>(() => {
   if (!hasLiveGlagolSession.value) return null;
@@ -255,12 +260,9 @@ const liveVoiceActivity = computed<string | null>(() => {
 });
 
 /**
- * Properties для рендера. Два преобразования:
- *   1. Подмешиваем live `voice_activity` из glagol-WS (если устройство —
- *      станция и WS открыт), иначе остаётся cloud-snapshot значение (часто null).
- *   2. Скрываем строки без значения — карточка с одной только меткой и «—»
- *      бесполезна и засоряет интерфейс. Пользователь видит только то, что
- *      реально несёт данные.
+ * Properties для рендера:
+ *   1. Live `voice_activity` из glagol-WS на станции с открытым WS.
+ *   2. Filter: properties без значения скрыты.
  */
 const visibleProperties = computed(() => {
   const all = device.value?.properties ?? [];
@@ -514,16 +516,16 @@ onMounted(async () => {
   if (!rooms.rooms.length) await rooms.bootstrap();
   if (id.value && devices.byId.get(id.value)) {
     void devices.refresh(id.value).catch(() => {
-      /* refresh — best-effort: ошибки уже логируются в registry/driver */
+      /* best-effort: errors logged в registry/driver */
     });
   }
 });
 
-useViewMount({ scope: root.value });
+useViewMount({ scope: root });
 </script>
 
 <style scoped lang="scss">
-// Success-feedback после pull'а: success-rim + glow + icon-flash. Класс снимается через 1.4с.
+// Success-feedback после refresh: success-rim + glow + icon-flash. Класс снимается через 1.4с.
 :deep(.base-button.is-just-refreshed) {
   border-color: rgba(var(--color-success-rgb), 0.55) !important;
   color: var(--color-success) !important;
@@ -559,6 +561,37 @@ useViewMount({ scope: root.value });
   display: flex;
   flex-direction: column;
   gap: var(--content-gap);
+
+  // Loading-skeleton bars — shimmer placeholder до hydration device.
+  // Размеры выровнены с реальной картой.
+  &__skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: clamp(20px, 2vw, 28px);
+    min-height: 220px;
+  }
+  &__skeleton-bar {
+    height: 14px;
+    border-radius: 8px;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.085) 50%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    background-size: 200% 100%;
+    animation: detailSkelShimmer 1.6s linear infinite;
+
+    &--sm { width: 35%; }
+    &--md { width: 60%; }
+    &--lg { width: 90%; }
+  }
+
+  @keyframes detailSkelShimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
 
   &__layout {
     display: grid;
@@ -596,6 +629,15 @@ useViewMount({ scope: root.value });
       filter: saturate(0.7);
       opacity: 0.92;
     }
+
+    @media (max-width: 720px) {
+      gap: 14px;
+      padding: 18px;
+      min-height: 0;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+    }
   }
 
   &__hero-icon {
@@ -604,6 +646,11 @@ useViewMount({ scope: root.value });
     flex-shrink: 0;
     border-radius: 28px;
     display: grid;
+    @media (max-width: 720px) {
+      width: 64px;
+      height: 64px;
+      border-radius: 20px;
+    }
     place-items: center;
     color: #fff;
     background: rgba(255, 255, 255, 0.08);

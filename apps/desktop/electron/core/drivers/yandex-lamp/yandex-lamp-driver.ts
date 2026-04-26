@@ -1,24 +1,15 @@
 /**
- * yandex-lamp — passive LAN-detection для Яндекс Лампочек YNDX-XXXXX (Tuya OEM).
+ * @fileoverview Passive LAN-detection для Яндекс Лампочек YNDX-XXXXX
+ * (Tuya OEM). Слушает Tuya UDP-broadcast на портах 6666/6667, парсит
+ * незашифрованный header и эмитит кандидата с `gwId + IP`. Control недоступен
+ * без `localKey` — `execute()` возвращает `YANDEX_LAMP_NEEDS_BINDING` с
+ * подсказкой привязать лампочку через «Дом с Алисой».
  *
- * Без OAuth и без cloud-credentials. Лампочка вещает Tuya v3.x UDP-broadcast на
- * порту 6667 каждые ~10 секунд — мы слушаем сокет, парсим незашифрованный header
- * (gwId + IP), и выдаём кандидата в Discovery.
- *
- * Контролить лампочку без `localKey` (хранится только в Tuya cloud / SmartLife
- * аккаунте) нельзя — поэтому `probe()` намеренно возвращает null с понятной
- * ошибкой и хинтом: «привяжите её через приложение Дом с Алисой → она появится
- * в хабе автоматически через yandex-iot driver».
- *
- * Tuya v3.3+ frame layout (только нужные нам поля):
- *   bytes 0..3   = 0x000055AA          (prefix-magic)
- *   bytes 12..15 = payload length (BE uint32)
- *   bytes 20..len = JSON payload (encrypted с v3.3, plain c v3.1)
- *   payload содержит { ip, gwId, productKey, version, ... }
- *
- * В v3.3+ payload зашифрован, но gwId дублируется ВНЕ payload в некоторых
- * прошивках. Для надёжности парсим ОБА варианта — plain JSON если получится,
- * иначе ищем 22-символьный gwId в hex-dump'е (typical Tuya pattern).
+ * Tuya frame layout (v3.1/v3.3/v3.4):
+ *   [0..4)   prefix `0x000055AA`
+ *   [12..16) payload length (BE uint32)
+ *   [20..]   payload (plain JSON в v3.1, encrypted в v3.3+)
+ *   suffix   `0x0000AA55`
  */
 
 import { createSocket, type Socket as DgramSocket } from 'node:dgram';
@@ -31,11 +22,7 @@ import type {
 import { DEVICE_TYPE } from '@smarthome/shared';
 import { BaseDriver } from '../_shared/base-driver.js';
 
-/**
- * Tuya broadcasts на двух портах одновременно — старый v3.1-протокол использует
- * 6666, v3.3+ перешёл на 6667. Yandex YNDX-XXXXX встречаются c обеими прошивками.
- * Слушаем оба, чтобы не упустить лампочку с устаревшей firmware.
- */
+/** Tuya v3.1 broadcasts на UDP `:6666`, v3.3+ — на `:6667`. Слушаем оба. */
 const TUYA_BROADCAST_PORTS = [6666, 6667] as const;
 const DISCOVERY_LISTEN_MS = 4500;
 /** Tuya frame prefix: 0x000055AA. */
@@ -51,25 +38,22 @@ interface TuyaBroadcast {
 }
 
 /**
- * Извлекает payload из Tuya UDP-фрейма. Работает для v3.1/v3.3/v3.4 — в первых
- * двух payload — plain JSON, в v3.4 — зашифрован, но prefix-suffix те же.
+ * Извлекает payload из Tuya UDP-фрейма (v3.1/v3.3/v3.4). Возвращает null
+ * если frame некорректный (нет prefix/suffix либо payload-length out of range).
  */
 function extractTuyaPayload(buf: Buffer): Buffer | null {
   if (buf.length < 20) return null;
   if (!buf.subarray(0, 4).equals(TUYA_FRAME_PREFIX)) return null;
-  // Длина payload в bytes 12..16 (BE uint32). Сам payload начинается с byte 20.
   const payloadLen = buf.readUInt32BE(12);
   if (payloadLen <= 0 || 16 + payloadLen > buf.length) return null;
-  // Suffix-check (последние 4 байта payload-block'а).
   const suffixStart = 16 + payloadLen - 4;
   if (!buf.subarray(suffixStart, suffixStart + 4).equals(TUYA_FRAME_SUFFIX)) return null;
-  // Skip return-code (4 bytes) и crc (4 bytes до suffix).
+  // Между [20] и suffix лежат return_code (4b) + crc (4b); полезные данные между ними.
   return buf.subarray(20, suffixStart - 4);
 }
 
-/** Парсит plain JSON из payload (v3.1) либо ищет gwId в hex (v3.3+ encrypted). */
+/** Парсит плейн JSON (v3.1) либо ищет 22-символьный gwId в payload (v3.3+ encrypted). */
 function parseBroadcast(payload: Buffer, fromIp: string): TuyaBroadcast | null {
-  // Вариант 1 — plain JSON (v3.1, и некоторые v3.3 прошивки).
   try {
     const text = payload.toString('utf8');
     if (text.startsWith('{')) {
@@ -84,13 +68,10 @@ function parseBroadcast(payload: Buffer, fromIp: string): TuyaBroadcast | null {
       }
     }
   } catch {
-    /* not plain json — try encrypted-payload patterns */
+    /* payload не plain JSON, пробуем pattern-match по encrypted bytes */
   }
 
-  // Вариант 2 — encrypted payload, но gwId 22 chars [a-z0-9] обычно «торчит»
-  // в незашифрованных padding-байтах для совместимости с Tuya gateway-discovery.
-  // Используем conservative pattern, ловит false-positive только при крайне
-  // редкой коллизии в random-данных.
+  // Tuya gwId — 22 chars `[bd][a-f0-9]{21}` и часто торчит из encrypted payload в служебных padding-байтах.
   const hex = payload.toString('hex');
   const ascii = payload.toString('latin1');
   const m = /\b[bd][a-f0-9]{21}\b/i.exec(ascii) ?? /\b[bd][a-f0-9]{21}\b/i.exec(hex);
@@ -103,13 +84,13 @@ export class YandexLampDriver extends BaseDriver {
   readonly id = 'yandex-lamp' as const;
   readonly displayName = 'Яндекс Лампочка';
 
-  /** Long-lived listeners (по одному на каждый порт). */
+  /** Long-lived UDP listeners — по одному на каждый Tuya broadcast port. */
   private readonly listenerSockets: DgramSocket[] = [];
-  /** Сколько raw-broadcasts получили (любой формат, до парсинга) — для диагностики. */
+  /** Счётчик raw-broadcasts (любой формат, до парсинга). Используется в диагностике. */
   private rawFramesReceived = 0;
-  /** gwId → broadcast info; накапливается между discovery cycles. */
+  /** Map `gwId → last-seen broadcast info`. Накапливается между discovery cycles. */
   private readonly seen = new Map<string, { ip: string; port: number; lastSeenAt: number; productKey?: string; version?: string }>();
-  /** Stale-cutoff: 60s без broadcast → считаем что лампочка ушла из сети. */
+  /** TTL без broadcast'а, после которого лампочка считается ушедшей из сети. */
   private static readonly STALE_AFTER_MS = 60_000;
 
   constructor() {
@@ -124,7 +105,7 @@ export class YandexLampDriver extends BaseDriver {
       this.rawFramesReceived++;
       const payload = extractTuyaPayload(msg);
       if (!payload) {
-        // Логируем первые 8 байт — для диагностики если Yandex использует кастомный envelope.
+        // Первые 3 unknown-фрейма пишем в лог: 8 байт head'а для диагностики envelope.
         if (this.rawFramesReceived <= 3) {
           this.logInfo(
             `unknown UDP frame on :${port} from ${rinfo.address} (${msg.length}b, head=${msg.subarray(0, 8).toString('hex')})`,
@@ -154,7 +135,7 @@ export class YandexLampDriver extends BaseDriver {
     this.listenerSockets.push(sock);
   }
 
-  /** Public-метод для DiscoveryService / UI — диагностика когда ничего не находится. */
+  /** Диагностика: счётчик raw-фреймов, число known-устройств, prob'нутые ports. */
   getDiagnostics(): { rawFramesReceived: number; seenCount: number; ports: readonly number[] } {
     return {
       rawFramesReceived: this.rawFramesReceived,
@@ -172,7 +153,6 @@ export class YandexLampDriver extends BaseDriver {
       });
     });
 
-    // Чистим stale.
     const now = Date.now();
     for (const [id, info] of this.seen) {
       if (now - info.lastSeenAt > YandexLampDriver.STALE_AFTER_MS) this.seen.delete(id);
@@ -182,7 +162,6 @@ export class YandexLampDriver extends BaseDriver {
       driver: 'yandex-lamp' as const,
       externalId: gwId,
       type: DEVICE_TYPE.LIGHT,
-      // Имя вида «Яндекс Лампочка •abc123» — последние 6 символов id (как у Тинькоффа в банкоматах).
       name: `Яндекс Лампочка •${gwId.slice(-6).toUpperCase()}`,
       address: `${info.ip}:${info.port}`,
       meta: {
@@ -191,7 +170,7 @@ export class YandexLampDriver extends BaseDriver {
         port: info.port,
         ...(info.productKey ? { productKey: info.productKey } : {}),
         ...(info.version ? { version: info.version } : {}),
-        // UI-флаг: Discovery покажет специальный hint вместо обычной кнопки «Подключить».
+        // Флаг для UI: рендерит hint про «Дом с Алисой» вместо кнопки «Подключить».
         requiresYandexHomeApp: true,
       },
     }));
@@ -201,15 +180,9 @@ export class YandexLampDriver extends BaseDriver {
     return found;
   }
 
-  /**
-   * Без `localKey` управление невозможно (Tuya v3.3+ encrypted protocol).
-   * Возвращаем null с понятной ошибкой — UI должен показать guide пользователю.
-   */
+  /** Возвращает null: control требует `localKey` (Tuya v3.3+ encrypted), который доступен только через `yandex-iot` driver. */
   async probe(_candidate: DiscoveredDevice): Promise<Device | null> {
-    this.logWarn(
-      'probe: Yandex/Tuya bulb cannot be paired without local key. ' +
-        'Add it to «Дом с Алисой» first — yandex-iot driver will pick it up automatically.',
-    );
+    this.logWarn('probe: Yandex/Tuya bulb requires localKey, pair through Дом с Алисой instead');
     return null;
   }
 

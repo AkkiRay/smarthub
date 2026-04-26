@@ -1,8 +1,7 @@
 /**
- * @fileoverview
- * WiZ (Philips/Signify): UDP 38899, JSON-RPC.
- * Discovery: broadcast getPilot → каждая лампа отвечает unicast'ом своим state.
- * Каждая команда — отдельная UDP-пара request/response, нет TCP/keepalive — лампа stateless.
+ * @fileoverview WiZ (Philips/Signify) LAN driver. UDP `:38899`, JSON-RPC.
+ * Discovery: broadcast `getPilot` → unicast `result` от каждой лампы.
+ * Control: одна UDP request/response пара на команду, без keepalive.
  */
 
 import { createSocket, type Socket as DgramSocket } from 'node:dgram';
@@ -24,9 +23,9 @@ import {
 } from '@smarthome/shared';
 import { kelvinToMired, miredToKelvin, rgbIntToTuple, tupleToRgbInt } from '../_shared/color.js';
 import { BaseDriver } from '../_shared/base-driver.js';
+import { broadcastDiscover } from '../_shared/udp-broadcast.js';
 
 const WIZ_PORT = 38899;
-const WIZ_BROADCAST = '255.255.255.255';
 const WIZ_DISCOVER_TIMEOUT_MS = 2500;
 const WIZ_RPC_TIMEOUT_MS = 2000;
 const WIZ_KELVIN: { min: number; max: number } = { min: 2200, max: 6500 };
@@ -39,9 +38,9 @@ interface WizPilot {
   r?: number;
   g?: number;
   b?: number;
-  c?: number; // cool white 0..255
-  w?: number; // warm white 0..255
-  temp?: number; // mireds
+  c?: number; // cool white channel, 0..255
+  w?: number; // warm white channel, 0..255
+  temp?: number; // color temperature в mireds
   sceneId?: number;
   speed?: number;
   src?: string;
@@ -57,33 +56,15 @@ export class WizDriver extends BaseDriver {
   readonly displayName = 'WiZ';
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    const sock = createSocket({ type: 'udp4', reuseAddr: true });
     const found = new Map<string, { address: string; pilot: WizPilot }>();
     const payload = Buffer.from(JSON.stringify({ method: 'getPilot', params: {} }));
-
-    return await new Promise((resolve) => {
-      let settled = false;
-      const finish = (): void => {
-        if (settled) return;
-        settled = true;
-        try {
-          sock.close();
-        } catch {
-          /* already closed */
-        }
-        resolve(
-          Array.from(found.entries()).map(([mac, { address, pilot }]) => ({
-            driver: 'wiz' as const,
-            externalId: mac,
-            type: DEVICE_TYPE.LIGHT,
-            name: `WiZ ${mac.slice(-6).toUpperCase()}`,
-            address: `${address}:${WIZ_PORT}`,
-            meta: { mac, pilot } satisfies WizMeta,
-          })),
-        );
-      };
-
-      sock.on('message', (msg, rinfo) => {
+    await broadcastDiscover({
+      driverId: 'wiz',
+      port: WIZ_PORT,
+      payload,
+      timeoutMs: WIZ_DISCOVER_TIMEOUT_MS,
+      signal,
+      onMessage: (msg, rinfo) => {
         try {
           const obj = JSON.parse(msg.toString('utf8')) as { result?: WizPilot };
           const mac = obj.result?.mac;
@@ -91,28 +72,16 @@ export class WizDriver extends BaseDriver {
         } catch {
           /* non-json */
         }
-      });
-
-      sock.on('error', (err) => {
-        this.logWarn('discovery error', err);
-        finish();
-      });
-
-      sock.bind(0, () => {
-        try {
-          sock.setBroadcast(true);
-        } catch {
-          /* fallback к unicast */
-        }
-        sock.send(payload, 0, payload.length, WIZ_PORT, WIZ_BROADCAST);
-      });
-
-      const timer = setTimeout(finish, WIZ_DISCOVER_TIMEOUT_MS);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        finish();
-      });
+      },
     });
+    return Array.from(found.entries()).map(([mac, { address, pilot }]) => ({
+      driver: 'wiz' as const,
+      externalId: mac,
+      type: DEVICE_TYPE.LIGHT,
+      name: `WiZ ${mac.slice(-6).toUpperCase()}`,
+      address: `${address}:${WIZ_PORT}`,
+      meta: { mac, pilot } satisfies WizMeta,
+    }));
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
@@ -213,7 +182,7 @@ export class WizDriver extends BaseDriver {
         command.capability === CAPABILITY.COLOR_SETTING &&
         command.instance === INSTANCE.TEMPERATURE_K
       ) {
-        // WiZ принимает либо temp (mireds), либо c/w пары — temp надёжнее.
+        // `temp` (mireds) поддерживается всеми моделями; `c`/`w` пары — только tunable-white.
         const k = clamp(Number(command.value), WIZ_KELVIN.min, WIZ_KELVIN.max);
         await this.rpc(device.address, 'setPilot', { temp: kelvinToMired(k) });
       } else {
@@ -225,7 +194,7 @@ export class WizDriver extends BaseDriver {
     }
   }
 
-  // Бесcession UDP: один сокет на один request — параллельные команды не пересекутся по id.
+  /** Sessionless UDP RPC: один socket на один request, response по rinfo. */
   private rpc<T = WizPilot>(address: string, method: string, params: object): Promise<T> {
     return new Promise((resolve, reject) => {
       const [host, portStr] = address.includes(':')

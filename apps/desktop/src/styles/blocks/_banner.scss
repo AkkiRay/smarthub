@@ -1,0 +1,112 @@
+@use '../abstracts/mixins' as *;
+
+// .banner — inline-уведомление (success/warning/danger/info). icon + copy + action.
+.banner {
+  --banner-tone: var(--color-brand-violet);
+  --banner-tone-rgb: var(--color-brand-violet-rgb);
+  --banner-bg: rgba(var(--color-brand-violet-rgb), 0.1);
+  --banner-edge: rgba(var(--color-brand-violet-rgb), 0.32);
+
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--pad-comfort);
+  border-radius: var(--radius-lg);
+  background: var(--banner-bg);
+  border: var(--border-thin) solid var(--banner-edge);
+  color: var(--color-text-primary);
+
+  &__icon {
+    --icon-tone: var(--banner-tone);
+    --icon-tone-rgb: var(--banner-tone-rgb);
+    @include icon-box(var(--icon-box-md), var(--icon-glyph-md), 12px);
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  &__title {
+    font-size: var(--font-size-h2);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    letter-spacing: var(--tracking-h2);
+  }
+
+  &__text {
+    font-size: var(--font-size-small);
+    line-height: var(--leading-relaxed);
+    color: var(--color-text-secondary);
+  }
+
+  &__action {
+    flex-shrink: 0;
+    align-self: center;
+  }
+
+  &--success {
+    --banner-tone: var(--color-success);
+    --banner-tone-rgb: var(--color-success-rgb);
+    --banner-bg: var(--tone-success-soft);
+    --banner-edge: var(--tone-success-edge);
+  }
+
+  &--warning {
+    --banner-tone: var(--color-warning);
+    --banner-tone-rgb: var(--color-warning-rgb);
+    --banner-bg: var(--tone-warning-soft);
+    --banner-edge: var(--tone-warning-edge);
+  }
+
+  &--danger {
+    --banner-tone: var(--color-danger);
+    --banner-tone-rgb: var(--color-danger-rgb);
+    --banner-bg: var(--tone-danger-soft);
+    --banner-edge: var(--tone-danger-edge);
+  }
+
+  &--info {
+    --banner-tone: var(--color-brand-cyan);
+    --banner-tone-rgb: var(--color-brand-cyan-rgb);
+    --banner-bg: var(--tone-info-soft);
+    --banner-edge: var(--tone-info-edge);
+  }
+}
+
+// .stat-row — inline-метрика: value + label (+ delta).
+.stat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  &__value {
+    font-family: var(--font-family-display);
+    font-size: var(--font-size-h1);
+    font-weight: 600;
+    line-height: 1;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  &__label {
+    font-size: var(--font-size-micro);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-micro);
+  }
+
+  &__delta {
+    font-size: var(--font-size-micro);
+    color: var(--color-success);
+    font-weight: 600;
+
+    &--down {
+      color: var(--color-danger);
+    }
+  }
+}

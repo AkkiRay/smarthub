@@ -6,9 +6,11 @@
     <!-- состояния Алисы (IDLE / LISTENING / SPEAKING / BUSY).             -->
     <!-- ================================================================== -->
     <article class="speaker-hero" :data-state="aliceState" data-anim="block">
-      <div class="speaker-hero__badge" aria-hidden="true">
-        <BaseIcon name="speaker" :size="48" />
-        <span class="speaker-hero__badge-pulse" />
+      <!-- Hero-orb: размер lg + spectral analyzer вокруг — голос Алисы виден
+           как радиальная волна, а не маленький бейдж. Sidebar/AliceView/Welcome
+           переиспользуют тот же компонент. -->
+      <div class="speaker-hero__orb" aria-hidden="true">
+        <JarvisOrb size="lg" voice-mode spectrum :voice-state="station.voiceState" :detail="3" />
       </div>
 
       <div class="speaker-hero__copy">
@@ -28,12 +30,6 @@
           </span>
         </div>
         <p class="speaker-hero__alice">{{ aliceStateLabel }}</p>
-      </div>
-
-      <!-- Эквалайзер: 5 бар-ов, амплитуды зависят от aliceState. Чисто-CSS, -->
-      <!-- никакого audio-API на стороне renderer'а.                        -->
-      <div class="speaker-hero__viz" aria-hidden="true">
-        <span v-for="i in 5" :key="i" :style="{ '--bar': i }" />
       </div>
     </article>
 
@@ -84,6 +80,12 @@
       data-anim="block"
     />
 
+    <!-- Tab-stage: relative-якорь + cross-fade при свапе категорий. Старая
+         категория позиционируется absolute, новая занимает flow — никакого
+         «прыжка» между announce/music/sounds/info/.../stream. -->
+    <div class="speaker-tab-stage">
+      <Transition :name="motion ? 'tab-fade' : 'tab-fade-instant'">
+        <div :key="activeCategory" class="speaker-tab-stage__inner">
     <!-- ============================ Announce ============================ -->
     <article v-if="activeCategory === 'announce'" class="speaker-card" data-anim="block">
       <header class="speaker-card__head">
@@ -466,18 +468,24 @@
         </ol>
       </section>
     </article>
+        </div>
+      </Transition>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// Полный пульт Я.Станции, встроенный в DeviceDetailView. Использует glagol-протокол
-// (sendText / setVolume / play|stop|next|prev — внутри AliceStationPanel) и три
-// honest-канала для PC-аудио. Custom-hero заменяет generic device-hero.
+// Полный пульт Я.Станции для DeviceDetailView. Glagol-протокол
+// (sendText / setVolume / play|stop|next|prev — внутри AliceStationPanel) +
+// три honest-канала PC-аудио. Кастомный hero отображается вместо generic device-hero.
 
 import { computed, ref } from 'vue';
+import { storeToRefs } from 'pinia';
 import type { Device } from '@smarthome/shared';
 import { useYandexStationStore } from '@/stores/yandexStation';
+import { useUiStore } from '@/stores/ui';
 import AliceStationPanel from '@/components/alice/AliceStationPanel.vue';
+import JarvisOrb from '@/components/visuals/JarvisOrb.vue';
 import {
   BaseButton,
   BaseIcon,
@@ -490,6 +498,9 @@ import {
 defineProps<{ device: Device }>();
 
 const station = useYandexStationStore();
+const ui = useUiStore();
+const { reduceMotion } = storeToRefs(ui);
+const motion = computed(() => !reduceMotion.value);
 
 // ---- Hero state ------------------------------------------------------------
 
@@ -530,17 +541,22 @@ const hostLabel = computed(() => {
   return `${s.host}:${s.port}`;
 });
 
-// Эквалайзер-визуализация — амплитуда через `data-state` в CSS (анимирует bars
-// разной длительностью). Snapshot Алисы снимаем из последнего state-event'а.
+// Source of truth — `station.voiceState`, там корректный response-fallback
+// (glagol часто пропускает явный SPEAKING → орб залипал на «думает» во время
+// реальной речи Алисы). Здесь только маппим в локальный uppercase-enum +
+// добавляем OFFLINE для disconnected.
 const aliceState = computed<'IDLE' | 'BUSY' | 'LISTENING' | 'SPEAKING' | 'OFFLINE'>(() => {
   if (connection.value !== 'connected') return 'OFFLINE';
-  for (const e of [...station.events].reverse()) {
-    if (e.aliceState === 'IDLE') return 'IDLE';
-    if (e.aliceState === 'BUSY') return 'BUSY';
-    if (e.aliceState === 'LISTENING') return 'LISTENING';
-    if (e.aliceState === 'SPEAKING') return 'SPEAKING';
+  switch (station.voiceState) {
+    case 'listening':
+      return 'LISTENING';
+    case 'speaking':
+      return 'SPEAKING';
+    case 'busy':
+      return 'BUSY';
+    default:
+      return 'IDLE';
   }
-  return 'IDLE';
 });
 
 const aliceStateLabel = computed(() => {
@@ -774,6 +790,52 @@ async function onYandexMusicVoice(): Promise<void> {
   }
 }
 
+// Tab-stage: relative-якорь для cross-fade при смене категорий пульта.
+// Отключаем `min-height: 0` — категории разной высоты, leave-active абсолютно
+// позиционирован, новый контент сразу занимает финальную высоту.
+.speaker-tab-stage {
+  position: relative;
+  width: 100%;
+
+  &__inner {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(14px, 1.4vw, 20px);
+    width: 100%;
+  }
+}
+
+// Tab cross-fade: simultaneous (без mode) + leave-active абсолютно. Делит
+// keyframes с AliceView через одинаковые имена `tab-fade-*`.
+.tab-fade-enter-active,
+.tab-fade-leave-active {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 280ms var(--ease-out);
+  will-change: opacity, transform;
+}
+.tab-fade-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
+}
+.tab-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.tab-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.tab-fade-instant-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
 // =============================================================================
 // Offline banner — показывается, когда glagol-WS не подключён.
 // =============================================================================
@@ -856,89 +918,84 @@ async function onYandexMusicVoice(): Promise<void> {
 }
 
 // =============================================================================
-// HERO — кастомный, заменяет generic device-hero
+// HERO — кастомный для speaker-устройств
 // =============================================================================
 .speaker-hero {
   --hero-accent: var(--color-brand-purple);
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: clamp(18px, 2vw, 28px);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(20px, 2vw, 32px);
   align-items: center;
-  padding: clamp(22px, 2.4vw, 32px);
+  padding: clamp(20px, 2vw, 28px) clamp(22px, 2.2vw, 32px);
   border-radius: var(--radius-lg);
-  background:
-    linear-gradient(
-      130deg,
-      color-mix(in srgb, var(--color-brand-purple) 14%, transparent) 0%,
-      color-mix(in srgb, var(--color-brand-pink) 10%, transparent) 60%,
-      transparent 100%
-    ),
-    rgba(255, 255, 255, 0.025);
-  border: 1px solid color-mix(in srgb, var(--color-brand-purple) 30%, transparent);
-  overflow: hidden;
+  // Плоская поверхность вместо bubble-glass: single-tone background + hairline,
+  // объём — через ambient drop-shadow и тонкое внутреннее highlight'а.
+  background: rgba(255, 255, 255, 0.022);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 28px 80px -40px rgba(0, 0, 0, 0.7),
+    0 12px 28px -22px rgba(var(--color-brand-purple-rgb), 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   isolation: isolate;
+  transition:
+    background-color 280ms var(--ease-out),
+    border-color 280ms var(--ease-out),
+    box-shadow 280ms var(--ease-out);
 
-  // Радиальный glow позади бейджа.
-  &::before {
+  // Тонкая «сканирующая» линия — горизонтальная подсветка снизу, плывёт от
+  // .speaker-hero[data-state]. Объёма не добавляет, но делает блок «живым»,
+  // когда орб говорит.
+  &::after {
     content: '';
     position: absolute;
-    z-index: -1;
-    inset: -30% auto auto -10%;
-    width: 360px;
-    height: 360px;
-    background: radial-gradient(
-      circle,
-      color-mix(in srgb, var(--color-brand-purple) 28%, transparent),
-      transparent 60%
+    inset: auto 0 0 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(var(--color-brand-pink-rgb), 0.7) 25%,
+      rgba(var(--color-brand-purple-rgb), 0.7) 75%,
+      transparent 100%
     );
-    filter: blur(40px);
+    transform-origin: 50% 50%;
+    opacity: 0;
+    transition: opacity 320ms var(--ease-out);
     pointer-events: none;
+  }
+
+  &[data-state='LISTENING']::after,
+  &[data-state='SPEAKING']::after {
+    opacity: 0.55;
+    animation: speakerHeroScan 2.8s ease-in-out infinite;
   }
 
   @media (max-width: 720px) {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto;
-
-    &__viz {
-      grid-column: 1 / -1;
-      justify-self: center;
-    }
+    justify-items: center;
+    text-align: center;
   }
 }
 
-.speaker-hero__badge {
+// Hero-orb: достаточно крупный чтобы spectrum-бары читались, но не теснит контент.
+// Размер задаём здесь, JarvisOrb пробрасывает через --orb-size CSS-переменную.
+.speaker-hero__orb {
   position: relative;
-  width: 96px;
-  height: 96px;
+  width: clamp(150px, 14vw, 180px);
+  height: clamp(150px, 14vw, 180px);
   flex-shrink: 0;
-  border-radius: 28px;
   display: grid;
   place-items: center;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--color-brand-purple) 80%, white 0%) 0%,
-    color-mix(in srgb, var(--color-brand-pink) 50%, transparent) 100%
-  );
-  color: #fff;
-  box-shadow:
-    0 16px 40px -12px color-mix(in srgb, var(--color-brand-purple) 60%, transparent),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 
-  :deep(svg) {
-    width: 52px;
-    height: 52px;
-    filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.3));
+  :deep(.orb) {
+    --orb-size: clamp(150px, 14vw, 180px);
   }
+}
 
-  &-pulse {
-    position: absolute;
-    inset: -6px;
-    border-radius: inherit;
-    border: 2px solid color-mix(in srgb, var(--color-brand-purple) 60%, transparent);
-    pointer-events: none;
-    animation: heroBadgePulse 2.4s ease-out infinite;
-  }
+@keyframes speakerHeroScan {
+  0%, 100% { transform: scaleX(0.4); opacity: 0.2; }
+  50% { transform: scaleX(1); opacity: 0.55; }
 }
 
 .speaker-hero__copy {
@@ -956,9 +1013,10 @@ async function onYandexMusicVoice(): Promise<void> {
 
 .speaker-hero__title {
   font-family: var(--font-family-display);
-  font-size: clamp(24px, 1.4vw + 16px, 34px);
+  font-size: var(--font-size-h1);
   font-weight: 700;
-  letter-spacing: var(--tracking-h1);
+  letter-spacing: -0.018em;
+  line-height: 1.15;
   color: var(--color-text-primary);
   margin: 0;
   text-wrap: balance;
@@ -1042,53 +1100,6 @@ async function onYandexMusicVoice(): Promise<void> {
   max-width: 56ch;
 }
 
-// Эквалайзер-визуализация: 5 баров. Высота каждого зависит от индекса (--bar)
-// и текущего aliceState (через [data-state] родителя). Чисто-CSS, без JS-таймера.
-.speaker-hero__viz {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  height: 60px;
-  width: 56px;
-  flex-shrink: 0;
-
-  span {
-    --bar: 1;
-    width: 6px;
-    height: 18%;
-    border-radius: 3px;
-    background: linear-gradient(180deg, var(--color-brand-pink), var(--color-brand-purple));
-    transform-origin: bottom;
-    will-change: transform;
-  }
-}
-
-// Состояния Алисы — каждое со своим характером движения баров.
-.speaker-hero[data-state='IDLE'] .speaker-hero__viz span {
-  // Лёгкое «дыхание».
-  animation: vizIdle 3.2s ease-in-out infinite;
-  animation-delay: calc(var(--bar) * 0.18s);
-}
-.speaker-hero[data-state='LISTENING'] .speaker-hero__viz span {
-  animation: vizListen 0.9s ease-in-out infinite;
-  animation-delay: calc(var(--bar) * 0.06s);
-  background: linear-gradient(180deg, var(--color-brand-purple), #fff);
-}
-.speaker-hero[data-state='SPEAKING'] .speaker-hero__viz span {
-  animation: vizSpeak 0.5s ease-in-out infinite alternate;
-  animation-delay: calc(var(--bar) * 0.07s);
-  background: linear-gradient(180deg, var(--color-brand-pink), #ffd27d);
-}
-.speaker-hero[data-state='BUSY'] .speaker-hero__viz span {
-  animation: vizBusy 1.4s ease-in-out infinite;
-  animation-delay: calc(var(--bar) * 0.14s);
-  background: linear-gradient(180deg, var(--color-warning), var(--color-brand-pink));
-}
-.speaker-hero[data-state='OFFLINE'] .speaker-hero__viz span {
-  animation: none;
-  background: rgba(255, 255, 255, 0.12);
-  height: 18%;
-}
 
 // =============================================================================
 // CARDS (категории)
@@ -1152,7 +1163,7 @@ async function onYandexMusicVoice(): Promise<void> {
 
   &__title {
     font-family: var(--font-family-display);
-    font-size: clamp(16px, 0.6vw + 12px, 19px);
+    font-size: var(--font-size-h2);
     font-weight: 600;
     letter-spacing: var(--tracking-h1);
     color: var(--color-text-primary);
@@ -1427,52 +1438,15 @@ async function onYandexMusicVoice(): Promise<void> {
   }
 }
 
-@keyframes vizIdle {
-  0%,
-  100% {
-    transform: scaleY(1);
-  }
-  50% {
-    transform: scaleY(1.6);
-  }
-}
-
-@keyframes vizListen {
-  0%,
-  100% {
-    transform: scaleY(1);
-  }
-  50% {
-    transform: scaleY(2.4);
-  }
-}
-
-@keyframes vizSpeak {
-  0% {
-    transform: scaleY(1);
-  }
-  100% {
-    transform: scaleY(3.2);
-  }
-}
-
-@keyframes vizBusy {
-  0%,
-  100% {
-    transform: scaleY(1.2);
-  }
-  50% {
-    transform: scaleY(2.1);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .speaker-hero__badge-pulse,
   .speaker-hero__chip-dot,
-  .speaker-hero__viz span,
   .speaker-card__chip {
     animation: none !important;
     transition: none;
+  }
+  .speaker-hero::after {
+    animation: none;
   }
 }
 

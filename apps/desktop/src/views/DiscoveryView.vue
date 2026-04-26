@@ -1,8 +1,9 @@
 <template>
   <section class="discovery" ref="root">
     <BasePageHeader
+      eyebrow="Сканирование сети"
       title="Поиск устройств"
-      description="Хаб опрашивает локальную сеть по нескольким протоколам параллельно. Включите устройство в режим сопряжения — оно появится здесь."
+      description="Хаб параллельно опрашивает 10+ локальных протоколов: Yeelight, Shelly, MQTT, Hue. Включите устройство в режим сопряжения — оно появится здесь."
     >
       <template #actions>
         <BaseButton variant="ghost" icon-left="plus" @click="manualOpen = true">
@@ -62,13 +63,14 @@
         </div>
       </header>
 
-      <!-- Список драйверов виден всегда — пользователь должен понимать, ЧТО будет опрошено. -->
+      <!-- Driver list: видим всегда — показывает, какие протоколы опрашиваются. -->
       <ul class="scan-panel__drivers" v-if="driverList.length">
         <li
           v-for="d in driverList"
           :key="d.driverId"
           class="scan-driver"
           :class="`scan-driver--${d.phase}`"
+          data-anim="item"
         >
           <span class="scan-driver__icon-wrap">
             <DriverIcon :driver="d.driverId as DriverId" size="sm" />
@@ -91,7 +93,7 @@
             >
               <span class="scan-driver__bar-fill" />
             </div>
-            <!-- Error full-width с переносом — точная причина (timeout / EHOSTUNREACH / etc). -->
+            <!-- Error: full-width с word-break, печатает причину (timeout / EHOSTUNREACH / …). -->
             <p v-if="d.phase === 'error' && d.error" class="scan-driver__error">
               <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path
@@ -117,11 +119,8 @@
       </ul>
     </section>
 
-    <!-- Diagnostic hint для устройств Яндекса в LAN: lamp/socket/switch/strip — все
-         идут через одинаковый flow (привязка в Я.Доме → cloud-импорт). Без явной
-         подсказки юзер думает «лампа просто в розетке = должна быть видна», но
-         большинство Yandex-устройств LAN-протоколы открывают только после
-         cloud-pairing'а. -->
+    <!-- Hint для Yandex-устройств в LAN: lamp/socket/switch/strip требуют
+         pairing через «Дом с Алисой» → cloud-импорт. -->
     <section
       v-if="showYandexLampHint"
       class="discovery__hint"
@@ -164,7 +163,7 @@
       class="discovery__filters"
     />
 
-    <!-- Paired-статус через `isPaired(c)`: backend ставит `knownDeviceId` только в scan-цикле, флаг устаревает после ручного pair / удаления. -->
+    <!-- Paired-статус: `isPaired(c)` сверяется с актуальным `devices.devices`. -->
     <div v-if="filteredCandidates.length" class="discovery__list">
       <article
         v-for="c in filteredCandidates"
@@ -201,8 +200,7 @@
           </div>
           <h3 class="candidate__name">{{ c.name }}</h3>
           <p class="candidate__address">{{ c.address }}</p>
-          <!-- Yandex-устройства видны в LAN, но без cloud-key локально мы их не
-               контролируем. Подсказка ведёт юзера в правильный flow через «Дом с Алисой». -->
+          <!-- Yandex-устройства: LAN-видимость без cloud-key. CTA → «Дом с Алисой». -->
           <p v-if="needsYandexHomeBinding(c) && !isPaired(c)" class="candidate__hint">
             Устройство найдено в локальной сети, но протокол требует ключ из облака.
             Привяжите его через приложение <strong>«Дом с Алисой»</strong> — Hub автоматически
@@ -272,16 +270,14 @@ const root = useTemplateRef<HTMLElement>('root');
 const activeFilter = ref<DriverId | 'all'>('all');
 const pairTarget = ref<DiscoveredDevice | null>(null);
 const manualOpen = ref(false);
-// Default false — one-shot, чтобы не нагружать фон UDP-сокетами.
+// Default one-shot. Continuous mode держит UDP-сокеты постоянно открытыми.
 const continuousMode = ref(false);
 
-// 250ms tick для live elapsed-индикатора; без него значение фризилось бы между push'ами.
+// 250ms tick для live elapsed-индикатора.
 const now = ref(Date.now());
 let nowTimer = 0;
 
-// /discovery показывает ТОЛЬКО непривязанных — иначе после первого pair'а
-// устройство дублируется здесь же и в /devices, и пользователь не понимает,
-// зачем оно тут осталось. Привязанные смотрите на /devices.
+// /discovery показывает только unpaired-кандидатов (paired видны в /devices).
 const candidates = computed(() => devices.unpairedCandidates);
 
 const hasEverScanned = computed(() => discoveryProgress.value.cycleStartedAt > 0);
@@ -373,7 +369,7 @@ function phaseLabel(d: DriverScanProgress): string {
       return d.found > 0 ? `Готово · ${time}` : `Пусто · ${time}`;
     }
     case 'error':
-      // Полный текст рендерится строкой ниже бара; тут — короткий ярлык.
+      // Краткий ярлык; полный текст — в `.scan-driver__error` под bar'ом.
       return 'Ошибка';
     default:
       return 'Ожидает';
@@ -382,7 +378,7 @@ function phaseLabel(d: DriverScanProgress): string {
 
 function barProgress(d: DriverScanProgress): number {
   if (d.phase === 'done' || d.phase === 'error') return 100;
-  if (d.phase === 'scanning') return 65; // visual sweep — точного значения нет
+  if (d.phase === 'scanning') return 65; // visual sweep, точное значение неизвестно
   return 0;
 }
 
@@ -413,7 +409,7 @@ function iconForType(t: DiscoveredDevice['type']): string {
   return map[t] ?? map['devices.types.switch']!;
 }
 
-/** Live: считаем по `devices.devices` (реактивно), а не stale `c.knownDeviceId`. */
+/** Reactive paired-check по `devices.devices`. */
 function isPaired(c: DiscoveredDevice): boolean {
   return devices.pairedDeviceIdFor(c) !== undefined;
 }
@@ -429,19 +425,17 @@ function openPaired(c: DiscoveredDevice): void {
 }
 
 /**
- * Yandex-устройства (лампы, розетки, реле, увлажнители, …) детектируются по
- * UDP-broadcast Tuya-протокола, но управлять ими без `localKey` (живёт в Tuya
- * cloud / Yandex IoT) нельзя. Driver выставляет `meta.requiresYandexHomeApp = true` —
- * UI показывает не «Подключить», а ссылку в приложение «Дом с Алисой».
+ * Yandex-устройства детектируются UDP-broadcast Tuya, но требуют `localKey`
+ * из cloud. Driver выставляет `meta.requiresYandexHomeApp = true` —
+ * UI показывает CTA «Дом с Алисой» вместо «Подключить».
  */
 function needsYandexHomeBinding(c: DiscoveredDevice): boolean {
   return c.driver === 'yandex-lamp' || c.meta?.['requiresYandexHomeApp'] === true;
 }
 
 /**
- * Подсказка «как подготовить устройства Яндекса» — показываем после первого
- * скана, если ни одного кандидата от yandex-lamp driver'а нет. Если хоть что-то
- * нашли — блок не нужен (юзер увидит устройства в списке и сам разберётся).
+ * Hint «как подготовить устройства Яндекса». Видим после scan'а
+ * при пустой выборке от yandex-lamp driver'а.
  */
 const showYandexLampHint = computed(() => {
   if (!hasEverScanned.value) return false;
@@ -454,12 +448,9 @@ const showYandexLampHint = computed(() => {
 });
 
 /**
- * Открывает embedded-окно «Дома с Алисой» прямо внутри хаба. Юзер видит
- * привычный Yandex-UI, авторизация уже подтянута из OAuth-партиции. После
- * закрытия окна автоматически делается sync — добавленные устройства
- * появятся в Hub без ручного клика «Синхронизировать».
- *
- * Fallback: если юзер не авторизован — открываем external браузер.
+ * Открывает embedded-окно «Дома с Алисой» с подтянутой OAuth-сессией.
+ * После close — auto-sync импортированных devices.
+ * Fallback: external браузер, если не авторизован.
  */
 async function onOpenYandexHomeApp(): Promise<void> {
   const toaster = useToasterStore();
@@ -499,28 +490,34 @@ async function startScan(): Promise<void> {
   });
 }
 
-// Сняли «Постоянно» в continuous-режиме (между циклами) — стопаем backend, чтобы UI не врал.
+// Toggle off в continuous-режиме между циклами → stopDiscovery.
 watch(continuousMode, (next) => {
   if (!next && devices.isDiscovering && !discoveryProgress.value.cycleActive) {
     void devices.stopDiscovery();
   }
 });
 
-useViewMount({ scope: root.value, itemsSelector: '.candidate' });
+// Cascade-mount: scan-driver + candidate stagger одной волной (comma-selector).
+useViewMount({ scope: root, itemsSelector: '.scan-driver, .candidate' });
 
-// Re-stagger новой выборки при смене фильтра.
+// Re-stagger при смене filter'а.
 const { from } = useGsap(root.value);
 watch(activeFilter, () => {
-  from('.candidate', { opacity: 0, y: 10, stagger: 0.04, duration: 0.4 });
+  from('.candidate', {
+    opacity: 0,
+    y: 10,
+    stagger: { each: 0.04, amount: 0.4, from: 'start' },
+    duration: 0.36,
+  });
 });
 
 onMounted(() => {
-  // 250ms tick — точности 0.1с достаточно, setInterval легче чем rAF.
+  // 250ms tick — точности 0.1с достаточно для elapsed-индикатора.
   nowTimer = window.setInterval(() => {
     now.value = Date.now();
   }, 250);
 
-  // Автостарт по `?scan=1` (из tray); чистим query, чтобы F5 не перезапускал.
+  // Auto-scan по `?scan=1` из tray; query чистится после старта.
   if (route.query['scan'] === '1' && !discoveryProgress.value.cycleActive) {
     void devices.startDiscovery({
       mode: continuousMode.value ? 'continuous' : 'once',
@@ -547,18 +544,17 @@ onBeforeUnmount(() => {
   &__filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--space-2);
   }
 
-  // Yandex-lamp diagnostic: brand-tinted card с ol-step-by-step гайдом, появляется
-  // если scan завершён, но yandex-lamp driver ничего не нашёл — типичный case
-  // когда лампочка ещё в setup-mode и не присоединена к домашнему Wi-Fi.
+  // .discovery__hint — brand-tinted card с ol-гайдом по сетапу
+  // Yandex-lamp / SmartLife через «Дом с Алисой».
   &__hint {
     display: grid;
-    grid-template-columns: 56px minmax(0, 1fr) auto;
-    gap: clamp(14px, 1.4vw, 20px);
+    grid-template-columns: var(--icon-box-xl) minmax(0, 1fr) auto;
+    gap: var(--space-5);
     align-items: start;
-    padding: clamp(16px, 1.6vw, 22px);
+    padding: var(--pad-comfort);
     border-radius: var(--radius-lg);
     background:
       linear-gradient(
@@ -567,7 +563,7 @@ onBeforeUnmount(() => {
         color-mix(in srgb, var(--color-brand-amber) 7%, transparent)
       ),
       rgba(255, 255, 255, 0.02);
-    border: 1px solid color-mix(in srgb, var(--color-brand-purple) 26%, transparent);
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-brand-purple) 26%, transparent);
 
     @container (max-width: 640px) {
       grid-template-columns: 1fr;
@@ -575,46 +571,42 @@ onBeforeUnmount(() => {
   }
 
   &__hint-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 16px;
-    display: grid;
-    place-items: center;
-    background: color-mix(in srgb, var(--color-brand-purple) 18%, transparent);
-    color: var(--color-brand-purple);
+    --icon-tone: var(--color-brand-purple);
+    --icon-tone-rgb: var(--color-brand-purple-rgb);
+    @include icon-box(var(--icon-box-xl), var(--icon-glyph-lg), var(--radius-md));
   }
 
   &__hint-body {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
     min-width: 0;
 
     strong {
       font-family: var(--font-family-display);
-      font-size: clamp(15px, 0.4vw + 13px, 17px);
+      font-size: var(--font-size-h2);
       font-weight: 600;
       color: var(--color-text-primary);
       letter-spacing: var(--tracking-h1);
     }
 
     p {
-      font-size: 13px;
+      font-size: var(--font-size-small);
       color: var(--color-text-secondary);
-      line-height: 1.55;
+      line-height: var(--leading-relaxed);
       margin: 0;
       text-wrap: pretty;
     }
 
     ol {
-      margin: 4px 0 0;
+      margin: var(--space-1) 0 0;
       padding-left: 22px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      font-size: 12.5px;
+      gap: var(--space-1);
+      font-size: var(--font-size-small);
       color: var(--color-text-secondary);
-      line-height: 1.5;
+      line-height: var(--leading-relaxed);
 
       strong {
         font-family: inherit;
@@ -625,35 +617,32 @@ onBeforeUnmount(() => {
   }
 
   &__hint-note {
-    font-size: 12px !important;
-    color: var(--color-text-muted) !important;
+    font-size: var(--font-size-small);
+    color: var(--color-text-muted);
     font-style: italic;
-    padding: 8px 12px;
+    padding: var(--space-2) var(--space-3);
     background: rgba(255, 255, 255, 0.02);
     border-radius: var(--radius-sm);
-    border-left: 2px solid var(--color-warning);
+    border-left: var(--border-bold) solid var(--color-warning);
   }
 
-  // Auto-fit: 1 кол узкий / 2 кол >=960px. Inner grid карточки фикс 3-кол, не режется.
   &__list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
-    gap: 10px;
+    @include auto-grid(var(--cell-xl), var(--space-3));
   }
 }
 
 .candidate {
   display: grid;
-  grid-template-columns: 48px 1fr auto;
-  gap: 14px;
+  grid-template-columns: var(--icon-box-md) 1fr auto;
+  gap: var(--space-4);
   align-items: center;
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--color-border-subtle);
+  border: var(--border-thin) solid var(--color-border-subtle);
   transition:
-    background 160ms var(--ease-out),
-    border-color 160ms var(--ease-out);
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 
   &:hover {
     background: rgba(255, 255, 255, 0.06);
@@ -661,9 +650,9 @@ onBeforeUnmount(() => {
   }
 
   &__icon {
-    --accent: #a961ff;
-    width: 40px;
-    height: 40px;
+    --accent: var(--color-brand-purple);
+    width: var(--icon-box-md);
+    height: var(--icon-box-md);
     border-radius: var(--radius-sm);
     display: grid;
     place-items: center;
@@ -671,28 +660,28 @@ onBeforeUnmount(() => {
     background: color-mix(in srgb, var(--accent) 14%, transparent);
 
     &-glyph :deep(svg) {
-      width: 20px;
-      height: 20px;
+      width: var(--icon-glyph-md);
+      height: var(--icon-glyph-md);
     }
   }
 
   &__body {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
     min-width: 0;
   }
 
   &__head {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
   }
 
   &__driver {
     font-family: var(--font-family-mono);
-    font-size: 11px;
+    font-size: var(--font-size-micro);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -700,7 +689,7 @@ onBeforeUnmount(() => {
   }
 
   &__name {
-    font-size: 15px;
+    font-size: var(--font-size-h3);
     font-weight: 600;
     margin: 0;
     overflow: hidden;
@@ -710,7 +699,7 @@ onBeforeUnmount(() => {
 
   &__address {
     font-family: var(--font-family-mono);
-    font-size: 12px;
+    font-size: var(--font-size-small);
     color: var(--color-text-muted);
     margin: 0;
   }
@@ -727,16 +716,16 @@ onBeforeUnmount(() => {
 // chip-стили — в styles/blocks/_chip.scss (single source of truth).
 
 .scan-panel {
-  padding: 20px 22px;
+  padding: var(--pad-comfort);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--color-border-subtle);
+  border: var(--border-thin) solid var(--color-border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
   transition:
-    background 240ms var(--ease-out),
-    border-color 240ms var(--ease-out);
+    background var(--dur-medium) var(--ease-out),
+    border-color var(--dur-medium) var(--ease-out);
 
   &--idle {
     border-style: dashed;
@@ -756,14 +745,14 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px 24px;
+    gap: var(--space-4) var(--space-6);
     flex-wrap: wrap;
   }
 
   &__title-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     min-width: 0;
     flex: 1 1 auto;
   }
@@ -774,7 +763,7 @@ onBeforeUnmount(() => {
     border-radius: 50%;
     background: var(--color-text-muted);
     flex-shrink: 0;
-    transition: background 240ms var(--ease-out);
+    transition: background var(--dur-medium) var(--ease-out);
 
     &.is-pulsing {
       background: var(--color-brand-purple);
@@ -797,36 +786,36 @@ onBeforeUnmount(() => {
 
   &__title {
     font-family: var(--font-family-display);
-    font-size: 17px;
+    font-size: var(--font-size-h2);
     font-weight: 700;
     margin: 0;
-    letter-spacing: -0.005em;
-    line-height: 1.2;
+    letter-spacing: var(--tracking-h2);
+    line-height: var(--leading-snug);
   }
 
   &__subtitle {
-    font-size: 13px;
+    font-size: var(--font-size-small);
     color: var(--color-text-secondary);
-    line-height: 1.35;
+    line-height: var(--leading-normal);
     font-variant-numeric: tabular-nums;
   }
 
   &__actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     flex-shrink: 0;
   }
 
   &__continuous {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    font-size: 12.5px;
+    gap: var(--space-3);
+    font-size: var(--font-size-small);
     color: var(--color-text-muted);
     cursor: pointer;
     user-select: none;
-    transition: color 160ms var(--ease-out);
+    transition: color var(--dur-fast) var(--ease-out);
 
     &:hover {
       color: var(--color-text-secondary);
@@ -841,25 +830,25 @@ onBeforeUnmount(() => {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-    gap: 10px;
+    @include auto-grid(280px, var(--space-3));
   }
 }
 
 .scan-driver {
   display: grid;
-  // Head + counter сверху; error-row тянется на всю ширину снизу.
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
-  gap: 6px 12px;
-  padding: 12px;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border-subtle);
+  border: var(--border-thin) solid var(--color-border-subtle);
+  // Phase change idle→scanning→done меняет border/background и opacity (idle-ряды
+  // приглушены до 0.55) — все три едут одной волной --dur-medium вместо абрупт-swap'а.
   transition:
-    background 180ms var(--ease-out),
-    border-color 180ms var(--ease-out);
+    background var(--dur-medium) var(--ease-out),
+    border-color var(--dur-medium) var(--ease-out),
+    opacity var(--dur-medium) var(--ease-out);
 
   &__icon-wrap {
     position: relative;
@@ -867,7 +856,7 @@ onBeforeUnmount(() => {
     align-self: center;
   }
 
-  // Виден только в done/error; scanning показывает sweep в bar-fill, idle — пустой угол.
+  // Pip-индикатор done/error в правом нижнем углу icon-wrap; scanning рисует sweep в bar-fill.
   &__pip {
     position: absolute;
     right: -3px;
@@ -877,17 +866,17 @@ onBeforeUnmount(() => {
     border-radius: 50%;
     display: grid;
     place-items: center;
-    background: var(--color-bg-base, #0d0e18);
+    background: var(--color-bg-base);
     color: #fff;
-    box-shadow: 0 0 0 2px var(--color-bg-base, #0d0e18);
+    box-shadow: 0 0 0 var(--border-bold) var(--color-bg-base);
     transform: scale(0);
-    transition: transform 220ms var(--ease-spring);
+    transition: transform var(--dur-medium) var(--ease-spring);
   }
 
   &__body {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-2);
     min-width: 0;
     align-self: center;
   }
@@ -896,11 +885,11 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   &__name {
-    font-size: 13px;
+    font-size: var(--font-size-small);
     font-weight: 600;
     color: var(--color-text-primary);
     overflow: hidden;
@@ -909,7 +898,7 @@ onBeforeUnmount(() => {
   }
 
   &__phase {
-    font-size: 11.5px;
+    font-size: var(--font-size-micro);
     color: var(--color-text-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -919,15 +908,15 @@ onBeforeUnmount(() => {
     grid-column: 1 / -1;
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    margin: 4px 0 0;
-    padding: 8px 10px;
+    gap: var(--space-2);
+    margin: var(--space-1) 0 0;
+    padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-sm);
     background: rgba(var(--color-danger-rgb), 0.08);
-    border: 1px solid rgba(var(--color-danger-rgb), 0.22);
+    border: var(--border-thin) solid rgba(var(--color-danger-rgb), 0.22);
     color: var(--color-danger);
-    font-size: 12px;
-    line-height: 1.4;
+    font-size: var(--font-size-small);
+    line-height: var(--leading-normal);
     word-break: break-word;
 
     svg {
@@ -959,22 +948,22 @@ onBeforeUnmount(() => {
     transform-origin: left;
     transform: scaleX(0);
     transition:
-      transform 320ms var(--ease-out),
-      background 200ms var(--ease-out);
+      transform var(--dur-medium) var(--ease-out),
+      background var(--dur-fast) var(--ease-out);
   }
 
   &__found {
     display: inline-flex;
     align-items: baseline;
-    gap: 4px;
-    font-size: 11.5px;
+    gap: var(--space-1);
+    font-size: var(--font-size-micro);
     color: var(--color-text-muted);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
 
     strong {
       font-family: var(--font-family-display);
-      font-size: 16px;
+      font-size: var(--font-size-h3);
       font-weight: 700;
       color: var(--color-text-primary);
       line-height: 1;
@@ -1072,13 +1061,13 @@ onBeforeUnmount(() => {
 // ---- Mobile ----
 @media (max-width: 720px) {
   .scan-panel {
-    padding: 14px 16px;
-    gap: 12px;
+    padding: var(--space-3) var(--space-4);
+    gap: var(--space-3);
 
     &__head {
       flex-direction: column;
       align-items: stretch;
-      gap: 12px;
+      gap: var(--space-3);
     }
 
     &__actions {
@@ -1099,7 +1088,7 @@ onBeforeUnmount(() => {
   .scan-driver {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto auto auto;
-    gap: 6px 10px;
+    gap: var(--space-2) var(--space-3);
 
     &__found {
       grid-column: 1 / -1;
@@ -1108,9 +1097,9 @@ onBeforeUnmount(() => {
   }
 
   .candidate {
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: var(--icon-box-md) minmax(0, 1fr);
     grid-template-rows: auto auto;
-    padding: 10px 12px;
+    padding: var(--space-3);
 
     &__actions {
       grid-column: 1 / -1;

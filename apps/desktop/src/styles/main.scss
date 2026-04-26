@@ -2,6 +2,7 @@
 @use './abstracts/tokens';
 @use './abstracts/typography';
 @use './abstracts/utilities';
+@use './abstracts/motion';
 @use './blocks/button';
 @use './blocks/card';
 @use './blocks/chip';
@@ -9,3 +10,7 @@
 @use './blocks/skeleton';
 @use './blocks/bento';
 @use './blocks/section';
+@use './blocks/hero';
+@use './blocks/tile';
+@use './blocks/step';
+@use './blocks/banner';

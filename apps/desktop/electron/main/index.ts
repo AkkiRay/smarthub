@@ -56,6 +56,35 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.smarthome.hub');
 }
 
+// GPU / render-флаги — обязательно ДО app.whenReady(): Chromium читает их при
+// инициализации composit'а, поздняя установка молча игнорируется.
+//
+// Зачем каждый:
+//   - disable-features=CalculateNativeWinOcclusion (Windows): Chromium тротлит
+//     rendering когда считает окно перекрытым; ложные срабатывания тормозят
+//     WebGL и GSAP rAF до 1Hz при работе других окон поверх.
+//   - disable-backgrounding-occluded-windows / disable-renderer-backgrounding:
+//     рекдер-процесс не понижается в приоритете при потере фокуса (для hub'а
+//     в трее это критично — иначе orb «замерзает» когда пользователь в браузере).
+//   - enable-gpu-rasterization + enable-zero-copy: WebGL и compositor-кадры
+//     обрабатываются на GPU без промежуточного копирования через shared mem.
+//   - ignore-gpu-blocklist: на старых драйверах Chromium иногда выключает
+//     hardware-acceleration по консервативному списку — для desktop'а смело
+//     включаем (фоллбэк ANGLE остаётся).
+//   - use-angle=d3d11 (Windows): нативный D3D11 backend стабильнее OpenGL.
+app.commandLine.appendSwitch(
+  'disable-features',
+  'CalculateNativeWinOcclusion,IntensiveWakeUpThrottling',
+);
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('use-angle', 'd3d11');
+}
+
 // ПОСЛЕ setName: использует app.getPath('userData') для приоритетного кандидата.
 const _envLoad = loadRuntimeEnv(app);
 
@@ -70,7 +99,6 @@ const IS_DEV = !app.isPackaged;
 const VITE_DEV_SERVER_URL = IS_DEV ? process.env['VITE_DEV_SERVER_URL'] : undefined;
 const RENDERER_DIST = join(APP_ROOT, 'dist');
 const PRELOAD = join(__dirname, '..', 'preload', 'index.js');
-
 
 // Single-instance lock: иначе SQLite WAL побьётся и multicast-сокеты подерутся за порт.
 const gotLock = app.requestSingleInstanceLock();
@@ -153,6 +181,10 @@ async function createWindow(): Promise<void> {
       // Весь network — через main process, единая точка контроля доступа.
       allowRunningInsecureContent: false,
       webviewTag: false,
+      // Hub-resident в трее: пользователь сворачивает окно, GSAP-таймлайн в
+      // Welcome / Alice продолжает крутиться без замедления. Дефолтно Chromium
+      // дропает RAF до 1Hz для unfocused windows.
+      backgroundThrottling: false,
     },
   });
 
@@ -217,7 +249,7 @@ async function bootstrap(): Promise<SmartHomeHub> {
   const deviceStore = await createDeviceStore();
   const driverRegistry = createDriverRegistry({ settings });
   const deviceRegistry = createDeviceRegistry({ deviceStore, driverRegistry });
-  const discovery = createDiscoveryService({ driverRegistry, deviceRegistry });
+  const discovery = createDiscoveryService({ driverRegistry, deviceRegistry, settings });
   const polling = createPollingService({ deviceRegistry });
   const sceneService = createSceneService({ deviceStore, deviceRegistry });
   const yandexStation = createYandexStationClient();

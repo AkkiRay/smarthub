@@ -2,17 +2,35 @@
   <div ref="rootEl" class="orbital-chips" :aria-hidden="true">
     <div ref="cssEl" class="orbital-chips__layer" />
     <div ref="templatesEl" class="orbital-chips__templates">
-      <span v-for="tag in chips" :key="tag" class="orbital-chips__chip">
-        {{ tag }}
+      <span v-for="tag in chips" :key="tag.id" class="orbital-chips__chip">
+        <BrandMark :brand="tag.id" size="sm" />
+        <span class="orbital-chips__chip-label">{{ tag.label }}</span>
       </span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// Real 3D chip ring вокруг JarvisOrb через CSS3DRenderer.
-// CSS3DSprite — chip всегда смотрит в камеру (билборд) при rotation rings.
-// GSAP ticker — единый rAF на все кольца + parallax.
+// 3D satellite-orbit chips вокруг JarvisOrb через CSS3DRenderer.
+//
+// Architecture: каждый chip — независимый «спутник» на собственной inclined
+// орбите, как реальные satellites вокруг Земли. Стартовые позиции выбираются
+// через Fibonacci-lattice (golden-angle distribution на сфере) — гарантирует
+// max-min angular distance между chips, никогда не образуя кластеров вне
+// зависимости от их количества (3, 8, 32 chips — паттерн всегда ровный).
+//
+// Каждый chip получает:
+//   - unit-vector starting position (Fibonacci point на сфере),
+//   - per-chip orbit-axis с лёгким tilt'ом (≤26°) от world-Y,
+//   - индивидуальную speed (0.7×–1.3× базы) и направление (prograde/retrograde),
+//   - phase offset чтобы не выстраиваться в spiral сразу после mount'а.
+//
+// DOF: chips на back-стороне сферы (Z < 0) масштабируются до 0.62× и
+// тускнеют до 35% opacity. Front-side — 1.0×, 100%. Z-index синхронно
+// перемещает их над/под соседями (CSS3DSprite не делает painter-сорт сам).
+//
+// CSS3DSprite — billboard: chip всегда face-камера, не нужен manual lookAt.
+// GSAP ticker — единый rAF на orbits + DOF + render + parallax.
 
 import { onBeforeUnmount, onMounted, useTemplateRef } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -20,16 +38,45 @@ import * as THREE from 'three';
 import { CSS3DRenderer, CSS3DSprite } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { gsap } from 'gsap';
 import { useUiStore } from '@/stores/ui';
+import BrandMark from './BrandMark.vue';
+
+/**
+ * Чипы вокруг орба. Каждый — пара (driver-id, читаемый label). ID нужен для
+ * BrandMark чтобы достать SVG из реестра + accent-цвет из driverPalette.
+ * Если строкой — рендерим как label с fallback-маркой.
+ */
+export interface OrbitalChip {
+  id: string;
+  label: string;
+}
 
 interface Props {
-  chips?: string[];
+  chips?: OrbitalChip[];
 }
 const props = withDefaults(defineProps<Props>(), {
-  chips: () => ['Yeelight', 'Hue', 'Tuya', 'Сбер', 'WiZ', 'Shelly', 'miIO', 'Matter'],
+  chips: () => [
+    { id: 'yeelight', label: 'Yeelight' },
+    { id: 'hue', label: 'Hue' },
+    { id: 'tuya', label: 'Tuya' },
+    { id: 'sber-home', label: 'Сбер' },
+    { id: 'wiz', label: 'WiZ' },
+    { id: 'shelly', label: 'Shelly' },
+    { id: 'miio', label: 'Mi Home' },
+    { id: 'matter', label: 'Matter' },
+  ],
 });
 
 const ui = useUiStore();
-const { reduceMotion } = storeToRefs(ui);
+const { motionLevel } = storeToRefs(ui);
+
+// Multiplier для скорости вращения колец: off — статичная картинка,
+// reduced — медленный drift, standard — full speed, full — slightly faster.
+const RING_SPEED: Record<string, number> = {
+  off: 0,
+  reduced: 0.25,
+  standard: 1,
+  full: 1.15,
+};
 
 const rootEl = useTemplateRef<HTMLElement>('rootEl');
 const cssEl = useTemplateRef<HTMLElement>('cssEl');
@@ -38,17 +85,83 @@ const templatesEl = useTemplateRef<HTMLElement>('templatesEl');
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
 let renderer: CSS3DRenderer | null = null;
-const rings: Array<{ group: THREE.Group; speed: number }> = [];
+let orbitRadius = 0; // Текущий world-радиус сферы (зависит от размера root'а).
 let resizeObs: ResizeObserver | null = null;
 let onPointerMove: ((e: PointerEvent) => void) | null = null;
 let tickerFn: (() => void) | null = null;
 
-// Orbital config: 3 кольца, разные tilt'ы / radii / скорости.
-const RING_CONFIG = [
-  { speedDeg: 0.32, tiltX: 0.30, tiltZ: 0, count: 3, radius: 280 },
-  { speedDeg: -0.24, tiltX: -0.42, tiltZ: 0.45, count: 3, radius: 320 },
-  { speedDeg: 0.42, tiltX: 0.78, tiltZ: -0.20, count: 2, radius: 240 },
-];
+// Helpers — вынесены чтобы init() и resize-handler делили математику безшовно.
+function computeOrbitRadius(w: number, h: number): number {
+  const halfMin = Math.max(80, Math.min(w, h) / 2);
+  const focalPx = (h / 2) / Math.tan((CAMERA_FOV_DEG * Math.PI / 180) / 2);
+  const safeWorld = ((halfMin - CHIP_HALF_PX) * CAMERA_DIST) / focalPx;
+  return safeWorld * ORBIT_RADIUS_FRAC;
+}
+
+// Camera (FOV 50°, dist 700) — должны совпадать в init() и в resize-handler'е,
+// иначе пересчёт world↔screen разойдётся.
+const CAMERA_FOV_DEG = 50;
+const CAMERA_DIST = 700;
+// Полширины самого крупного чипа в CSS-pixels — safety-margin от края бокса.
+const CHIP_HALF_PX = 56;
+// Доля safe-радиуса до центра шара чипов: 0.92 даёт визуальный gap от края.
+const ORBIT_RADIUS_FRAC = 0.92;
+// Базовая угловая скорость (rad/s) — медленный drift, как у геостационарных
+// спутников: не отвлекает, но сцена не мертва. Per-chip множители разбросают
+// скорости между 0.7× и 1.3×, направление — попеременно ±.
+const BASE_SPEED = 0.05;
+// Глубина-зависимое масштабирование: front-chip = 1.0, back-chip = 0.62.
+const DOF_SCALE_MIN = 0.62;
+// Глубина-зависимая прозрачность: front = 1.0, back = 0.35.
+const DOF_OPACITY_MIN = 0.35;
+
+// Orbit-state per chip: вычисляем initial position через Fibonacci-lattice
+// (равномерное распределение точек на единичной сфере без кластеризации) и
+// per-chip ось вращения с tilt'ом — каждый чип летит по своему наклонному
+// орбит-плейну, как реальные спутники на разных inclination'ах.
+interface OrbitState {
+  sprite: CSS3DSprite;
+  initial: THREE.Vector3; // unit-vector
+  axis: THREE.Vector3;    // unit-vector; ось вращения орбиты
+  speed: number;          // rad/s, может быть отрицательной (retrograde)
+  angle: number;          // текущий угол поворота вокруг axis
+  mountDelay: number;     // сек до старта fade-in (stagger)
+  mountElapsed: number;   // сек с момента mount'а — для smooth fade-in factor
+}
+
+const orbits: OrbitState[] = [];
+
+// Golden-angle (~137.5°) — best-known даёт min-max-distance распределение точек
+// по сфере (Vogel 1979). Перебор первых N точек даст идеальный spread без
+// зависимости от N (можно менять количество чипов — паттерн остаётся ровным).
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
+/**
+ * Fibonacci-lattice positioning + per-chip tilted orbit axis.
+ *
+ * Возвращает unit-vector starting position и единичную ось вращения. Сдвиг
+ * `i + 0.5` в формуле y — стандартный hack чтобы избежать exact-poles
+ * (y = ±1), которые при rotation вокруг Y-оси давали бы chip'ы прямо
+ * за/перед орбом без horizontal-смещения.
+ */
+function fibonacciOrbit(i: number, total: number): { initial: THREE.Vector3; axis: THREE.Vector3 } {
+  const y = 1 - (2 * (i + 0.5)) / total;
+  const radiusXZ = Math.sqrt(Math.max(0, 1 - y * y));
+  const azimuth = i * GOLDEN_ANGLE;
+  const initial = new THREE.Vector3(
+    Math.cos(azimuth) * radiusXZ,
+    y,
+    Math.sin(azimuth) * radiusXZ,
+  );
+  // Per-chip orbit axis: legkий tilt от world-Y, направление зависит от i —
+  // чтобы плейны не совпадали и chips не двигались синхронной колонной.
+  // Magnitude малый (≤ 0.45 rad ≈ 26°) — иначе chip'ы выскакивают из safe-радиуса
+  // при rotation, потому что их орбит-плейн ходит outside Fibonacci-сферы.
+  const tiltX = Math.sin(i * 0.73) * 0.32;
+  const tiltZ = Math.cos(i * 0.91) * 0.32;
+  const axis = new THREE.Vector3(tiltX, 1, tiltZ).normalize();
+  return { initial, axis };
+}
 
 function init(): void {
   if (!rootEl.value || !cssEl.value || !templatesEl.value) return;
@@ -57,10 +170,8 @@ function init(): void {
   if (w === 0 || h === 0) return;
 
   scene = new THREE.Scene();
-  // FOV/position подобраны так что translateZ(220-320) попадает в кадр близко
-  // к окружности JarvisOrb (xl ≈ 420px от которого до chip ~200px радиально).
-  camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 2000);
-  camera.position.set(0, 0, 700);
+  camera = new THREE.PerspectiveCamera(CAMERA_FOV_DEG, w / h, 0.1, 2000);
+  camera.position.set(0, 0, CAMERA_DIST);
 
   renderer = new CSS3DRenderer();
   renderer.setSize(w, h);
@@ -72,30 +183,43 @@ function init(): void {
   const chipEls = Array.from(
     templatesEl.value.querySelectorAll<HTMLElement>('.orbital-chips__chip'),
   );
+  orbitRadius = computeOrbitRadius(w, h);
 
-  let cursor = 0;
-  for (const cfg of RING_CONFIG) {
-    const group = new THREE.Group();
-    group.rotation.x = cfg.tiltX;
-    group.rotation.z = cfg.tiltZ;
+  for (let i = 0; i < chipEls.length; i++) {
+    const el = chipEls[i]!;
+    // CSS3DSprite — билборд: chip всегда смотрит в камеру несмотря на rotation
+    // самой sprite'ы. Position — единственное что мы анимируем.
+    const sprite = new CSS3DSprite(el);
+    const { initial, axis } = fibonacciOrbit(i, chipEls.length);
+    // Per-chip speed: 0.7×–1.3× от BASE_SPEED, чётные — prograde, нечётные —
+    // retrograde. Даёт визуальное разнообразие (не парад одновременных орбит).
+    const speedMult = 0.7 + ((i * 0.37) % 1) * 0.6;
+    const direction = i % 2 === 0 ? 1 : -1;
+    // Phase offset — каждый чип стартует со своего угла, иначе при mount'е они
+    // выстроены в идеальную spirale (Fibonacci) и эта структурность видна
+    // первые секунды. Случайный phase разводит их сразу.
+    const phase = (i * 1.618) % (Math.PI * 2);
 
-    const taken = chipEls.slice(cursor, cursor + cfg.count);
-    cursor += cfg.count;
-
-    for (let i = 0; i < taken.length; i++) {
-      const angle = (i / taken.length) * Math.PI * 2;
-      // Sprite билбордится сам — не нужен manual lookAt каждый кадр.
-      const sprite = new CSS3DSprite(taken[i]!);
-      sprite.position.set(Math.cos(angle) * cfg.radius, 0, Math.sin(angle) * cfg.radius);
-      group.add(sprite);
-    }
-    scene.add(group);
-    rings.push({ group, speed: (cfg.speedDeg * Math.PI) / 180 });
+    // Стартовая opacity 0 — ticker подымет её через mount-fade фактор. Без
+    // initial set'а первый кадр был бы с DOF-opacity (без fade-in stagger'а).
+    sprite.element.style.opacity = '0';
+    scene.add(sprite);
+    orbits.push({
+      sprite,
+      initial,
+      axis,
+      speed: BASE_SPEED * speedMult * direction,
+      angle: phase,
+      mountDelay: 0.18 + i * 0.06,
+      mountElapsed: 0,
+    });
   }
 
   // Parallax — лёгкий, не tracking. Pointer move → плавный tween scene.rotation.
+  // На off/reduced parallax выключен (избыточная декорация для motion-sensitive).
   onPointerMove = (e) => {
     if (!scene) return;
+    if (motionLevel.value === 'off' || motionLevel.value === 'reduced') return;
     const nx = e.clientX / window.innerWidth - 0.5;
     const ny = e.clientY / window.innerHeight - 0.5;
     gsap.to(scene.rotation, {
@@ -108,14 +232,43 @@ function init(): void {
   };
   window.addEventListener('pointermove', onPointerMove, { passive: true });
 
-  // Single ticker — все кольца + render. dt из gsap уже секундах.
+  // Single ticker — все орбиты + DOF + render.
+  // dt в "frames at 60fps" единицах: deltaRatio() = (deltaMs / 16.67), делим на 60
+  // чтобы получить секунды (orbit speed задана в rad/s).
   tickerFn = () => {
     if (!scene || !renderer || !camera) return;
-    const dt = gsap.ticker.deltaRatio() / 60; // нормализуем под 60fps
-    const motionScale = reduceMotion.value ? 0.25 : 1;
-    for (const r of rings) {
-      r.group.rotation.y += r.speed * dt * motionScale;
+    const dt = gsap.ticker.deltaRatio() / 60;
+    const speedMult = RING_SPEED[motionLevel.value] ?? 1;
+
+    for (const orbit of orbits) {
+      orbit.angle += orbit.speed * dt * speedMult;
+      // Position = initial-vector, повёрнутый вокруг axis на текущий angle,
+      // отмасштабированный до orbit-радиуса. applyAxisAngle мутирует — клонируем.
+      const pos = orbit.initial.clone().applyAxisAngle(orbit.axis, orbit.angle);
+      pos.multiplyScalar(orbitRadius);
+      orbit.sprite.position.copy(pos);
+
+      // DOF: depth = 0 (позади орба) → 1 (перед камерой). Камера в +Z, поэтому
+      // нормализуем pos.z от [-orbitRadius, +orbitRadius] в [0, 1].
+      const depth = (pos.z + orbitRadius) / (2 * orbitRadius);
+      const scale = DOF_SCALE_MIN + depth * (1 - DOF_SCALE_MIN);
+      orbit.sprite.scale.set(scale, scale, 1);
+      // Z-index follows depth: chips с depth ≈ 1 поверх chips с depth ≈ 0,
+      // даже когда CSS3DRenderer не делает painter-сорт по Z (CSS3DSprite — нет).
+      orbit.sprite.element.style.zIndex = String(Math.round(depth * 1000));
+
+      // Mount-fade × DOF-opacity. Mount-фактор едет от 0 до 1 за 0.6с после
+      // персонального delay'а (stagger). DOF поверх — back-chip даже после
+      // mount'а остаётся 35% opacity, front-chip — 100%.
+      orbit.mountElapsed += dt;
+      const sinceStart = Math.max(0, orbit.mountElapsed - orbit.mountDelay);
+      const mountFactor = Math.min(1, sinceStart / 0.6);
+      // power2.out easing: 1 - (1 - t)^2 — повторяет gsap power2.out smooth-кривой.
+      const mountEased = 1 - (1 - mountFactor) * (1 - mountFactor);
+      const dofOpacity = DOF_OPACITY_MIN + depth * (1 - DOF_OPACITY_MIN);
+      orbit.sprite.element.style.opacity = String(mountEased * dofOpacity);
     }
+
     renderer.render(scene, camera);
   };
   gsap.ticker.add(tickerFn);
@@ -128,6 +281,8 @@ function init(): void {
     renderer.setSize(W, H);
     camera.aspect = W / H;
     camera.updateProjectionMatrix();
+    // Пересчитываем только радиус — позиции пересчитаются на следующем tick'е.
+    orbitRadius = computeOrbitRadius(W, H);
   });
   resizeObs.observe(rootEl.value);
 }
@@ -148,7 +303,7 @@ onBeforeUnmount(() => {
   scene = null;
   camera = null;
   renderer = null;
-  rings.length = 0;
+  orbits.length = 0;
 });
 </script>
 
@@ -180,11 +335,12 @@ onBeforeUnmount(() => {
 .orbital-chips__chip {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: var(--tracking-micro);
-  padding: 8px 14px;
+  padding: 7px 13px 7px 9px;
   border-radius: var(--radius-pill);
   background: rgba(var(--color-brand-violet-rgb), 0.16);
   border: 1px solid rgba(var(--color-brand-violet-rgb), 0.38);
@@ -196,5 +352,13 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   user-select: none;
   visibility: visible;
+}
+
+.orbital-chips__chip :deep(.brand-mark) {
+  color: var(--color-brand-purple);
+}
+
+.orbital-chips__chip-label {
+  font-weight: 600;
 }
 </style>

@@ -1,0 +1,128 @@
+@use '../abstracts/mixins' as *;
+
+// .tile — универсальная action-плитка с tone-акцентом. Поддерживает
+// .tile--{violet,pink,blue,cyan,amber,mint,coral,orange}, .tile--glass,
+// .tile--accent, .tile--interactive.
+.tile {
+  --tile-tone: var(--color-brand-violet);
+  --tile-tone-rgb: var(--color-brand-violet-rgb);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--pad-comfort);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  border: var(--border-thin) solid var(--color-border-subtle);
+  text-align: left;
+  color: var(--color-text-primary);
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-medium) var(--ease-out),
+    box-shadow var(--dur-medium) var(--ease-out);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      120% 100% at 0% 0%,
+      rgba(var(--tile-tone-rgb), 0.16) 0%,
+      transparent 55%
+    );
+    opacity: 0;
+    transition: opacity var(--dur-medium) var(--ease-out);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  &__icon {
+    --icon-tone: var(--tile-tone);
+    --icon-tone-rgb: var(--tile-tone-rgb);
+    @include icon-box(var(--icon-box-lg), var(--icon-glyph-lg));
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+
+  &__label {
+    font-size: var(--font-size-h2);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    line-height: var(--leading-normal);
+    letter-spacing: var(--tracking-h2);
+  }
+
+  &__hint {
+    font-size: var(--font-size-small);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: auto;
+    padding-top: var(--space-3);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-micro);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-micro);
+  }
+
+  &--interactive {
+    cursor: pointer;
+
+    &:hover {
+      background: var(--color-bg-elevated);
+      border-color: rgba(var(--tile-tone-rgb), 0.36);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hover);
+
+      &::before {
+        opacity: 1;
+      }
+
+      .tile__icon {
+        background: rgba(var(--tile-tone-rgb), 0.24);
+      }
+    }
+
+    &:active {
+      transform: translateY(0);
+      transition-duration: var(--dur-instant);
+    }
+
+    @include focus-ring;
+  }
+
+  &--glass {
+    background: transparent;
+    @include glass(var(--glass-alpha-medium), var(--glass-blur-soft));
+  }
+
+  &--accent {
+    border-color: rgba(var(--tile-tone-rgb), 0.32);
+    &::before {
+      opacity: 0.7;
+    }
+  }
+
+  // Tone-варианты: tile--violet, tile--pink, tile--blue, ...
+  &--violet { --tile-tone: var(--color-brand-violet); --tile-tone-rgb: var(--color-brand-violet-rgb); }
+  &--pink   { --tile-tone: var(--color-brand-pink);   --tile-tone-rgb: var(--color-brand-pink-rgb); }
+  &--blue   { --tile-tone: var(--color-brand-blue);   --tile-tone-rgb: var(--color-brand-blue-rgb); }
+  &--cyan   { --tile-tone: var(--color-brand-cyan);   --tile-tone-rgb: var(--color-brand-cyan-rgb); }
+  &--amber  { --tile-tone: var(--color-brand-amber);  --tile-tone-rgb: var(--color-brand-amber-rgb); }
+  &--mint   { --tile-tone: var(--color-brand-mint);   --tile-tone-rgb: var(--color-brand-mint-rgb); }
+  &--coral  { --tile-tone: var(--color-brand-coral);  --tile-tone-rgb: var(--color-brand-coral-rgb); }
+  &--orange { --tile-tone: var(--color-brand-orange); --tile-tone-rgb: var(--color-brand-orange-rgb); }
+}

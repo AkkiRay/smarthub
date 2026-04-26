@@ -1,15 +1,14 @@
 /**
- * @fileoverview
- * TP-Link Kasa (старая линейка HS100/HS103/HS105/HS110/HS200/HS220/KL-серия)
- * — local TCP/UDP порт 9999 + autoencrypt (XOR со starting key 0xAB).
- * UDP discovery: broadcast 9999 с зашифрованным `system.get_sysinfo` → каждое устройство отвечает.
- * Команды: TCP 9999, 4-byte big-endian length prefix перед encrypted payload.
+ * @fileoverview TP-Link Kasa LAN driver (HS100/HS103/HS105/HS110/HS200/HS220/
+ * KL-серия). Local TCP/UDP `:9999`, autoencrypt (running XOR со starting key
+ * `0xAB`). Discovery: UDP-broadcast `system.get_sysinfo`. Control: TCP `:9999`
+ * с 4-byte big-endian length prefix перед encrypted payload.
  *
- * Tapo (новая линейка P100/P110/L530/L630) использует другой KLAP-протокол — отдельный драйвер.
+ * Tapo (P100/P110/L530/L630) использует KLAP-протокол — отдельный driver.
  */
 
-import { createSocket } from 'node:dgram';
 import { Socket } from 'node:net';
+import { broadcastDiscover } from '../_shared/udp-broadcast.js';
 import type {
   Capability,
   Device,
@@ -31,7 +30,6 @@ import { hsvToRgbInt, rgbIntToHsv } from '../_shared/color.js';
 import { BaseDriver } from '../_shared/base-driver.js';
 
 const KASA_PORT = 9999;
-const KASA_BROADCAST = '255.255.255.255';
 const KASA_DISCOVER_TIMEOUT_MS = 2500;
 const KASA_TCP_TIMEOUT_MS = 2500;
 const KASA_TRANSITION_MS = 400;
@@ -78,24 +76,15 @@ export class TPLinkKasaDriver extends BaseDriver {
   readonly displayName = 'TP-Link Kasa';
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    const sock = createSocket({ type: 'udp4', reuseAddr: true });
     const found = new Map<string, DiscoveredDevice>();
     const probe = encrypt(JSON.stringify({ system: { get_sysinfo: {} } }));
-
-    return await new Promise((resolve) => {
-      let settled = false;
-      const finish = (): void => {
-        if (settled) return;
-        settled = true;
-        try {
-          sock.close();
-        } catch {
-          /* closed */
-        }
-        resolve(Array.from(found.values()));
-      };
-
-      sock.on('message', (msg, rinfo) => {
+    await broadcastDiscover({
+      driverId: 'tplink-kasa',
+      port: KASA_PORT,
+      payload: probe,
+      timeoutMs: KASA_DISCOVER_TIMEOUT_MS,
+      signal,
+      onMessage: (msg, rinfo) => {
         try {
           const obj = JSON.parse(decrypt(msg)) as KasaResponse;
           const info = obj.system?.get_sysinfo;
@@ -129,28 +118,9 @@ export class TPLinkKasaDriver extends BaseDriver {
         } catch {
           /* ignore non-kasa traffic */
         }
-      });
-
-      sock.on('error', (e) => {
-        this.logWarn('discovery error', e);
-        finish();
-      });
-
-      sock.bind(0, () => {
-        try {
-          sock.setBroadcast(true);
-        } catch {
-          /* fallback */
-        }
-        sock.send(probe, 0, probe.length, KASA_PORT, KASA_BROADCAST);
-      });
-
-      const timer = setTimeout(finish, KASA_DISCOVER_TIMEOUT_MS);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        finish();
-      });
+      },
     });
+    return Array.from(found.values());
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
@@ -345,7 +315,7 @@ function buildKasaCaps(type: DeviceType, meta: KasaMeta, sys: KasaSysInfo): Capa
   return caps;
 }
 
-// Autoencrypt: XOR с running key, начальный 0xAB.
+/** Kasa autoencrypt: running XOR с initial key `0xAB`, ключом следующего байта становится текущий ciphertext-байт. */
 function encrypt(text: string): Buffer {
   const buf = Buffer.from(text, 'utf8');
   let key = 0xab;
@@ -355,6 +325,7 @@ function encrypt(text: string): Buffer {
   }
   return buf;
 }
+/** Обратная операция к {@link encrypt}: ключом следующего байта становится текущий ciphertext-байт. */
 function decrypt(buf: Buffer): string {
   const out = Buffer.alloc(buf.length);
   let key = 0xab;
@@ -364,6 +335,7 @@ function decrypt(buf: Buffer): string {
   }
   return out.toString('utf8');
 }
+/** Encrypt + 4-byte big-endian length prefix (TCP framing для Kasa). */
 function encryptWithLength(text: string): Buffer {
   const enc = encrypt(text);
   const len = Buffer.alloc(4);

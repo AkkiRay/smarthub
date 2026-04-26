@@ -70,7 +70,7 @@ const PARTITION = YANDEX_OAUTH_PARTITION;
 export async function runYandexOauth(
   optsOrParent?: RunYandexOauthOptions | BrowserWindow,
 ): Promise<YandexOauthResult | null> {
-  // Back-compat: ранее первый аргумент был BrowserWindow.
+  // Перегрузка: первый аргумент — либо options-объект, либо BrowserWindow.
   const opts: RunYandexOauthOptions =
     optsOrParent && 'webContents' in optsOrParent
       ? { parent: optsOrParent }
@@ -116,8 +116,8 @@ export async function runYandexOauth(
       resolve(result);
     };
 
-    // Implicit flow: token прилетает в hash. Слушаем все navigation events,
-    // т.к. Yandex редиректит через несколько промежуточных URL.
+    // Implicit flow: token прилетает в hash. Yandex редиректит через
+    // несколько промежуточных URL — слушаем все navigation events.
     const inspect = (url: string): void => {
       if (!url.includes('#access_token=')) return;
       const parsed = parseOauthCallback(url);
@@ -150,12 +150,9 @@ export async function clearYandexOauthSession(): Promise<void> {
 }
 
 /**
- * Открывает embedded-BrowserWindow на yandex.ru/quasar (страница «Дома с Алисой»)
- * в той же `persist:yandex-oauth` партиции — юзер уже авторизован, видит список
- * устройств, может добавить новую лампочку прямо внутри хаба.
- *
- * Промис резолвится когда юзер закрыл окно (мы НЕ можем точно знать, добавил ли
- * он устройство — поэтому caller должен сделать `syncYandexHome()` после resolve'а).
+ * Открывает embedded-BrowserWindow на yandex.ru/quasar в партиции
+ * `persist:yandex-oauth`. Resolve'ится при close. Caller должен вызвать
+ * `syncYandexHome()` для импорта добавленных устройств.
  */
 export async function openYandexHomeBindingWindow(parent?: BrowserWindow): Promise<void> {
   return new Promise((resolve) => {

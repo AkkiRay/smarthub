@@ -27,7 +27,7 @@
     box-shadow 200ms var(--ease-out);
   @include focus-ring;
 
-  // Нормализация SVG-иконок: verbatim v-html строки иначе разъезжаются.
+  // SVG sizing: фиксированный 16×16 для inline icon slot.
   svg {
     width: 16px;
     height: 16px;
@@ -94,5 +94,34 @@
   &[disabled] {
     opacity: 0.4;
     pointer-events: none;
+  }
+
+  // Touch (coarse pointer): hover-эффекты отключены, явный tap-press через
+  // scale(0.97) и background-swap.
+  @media (hover: none) and (pointer: coarse) {
+    height: var(--control-h-md);
+    -webkit-tap-highlight-color: transparent;
+
+    &:hover {
+      background: var(--bg);
+      transform: none;
+      box-shadow: inherit;
+    }
+    &:active {
+      background: var(--bg-hover);
+      transform: scale(0.97);
+      transition-duration: 80ms;
+    }
+    &--sm {
+      height: var(--control-h-sm);
+    }
+    &--lg {
+      height: var(--control-h-lg);
+    }
+    &--icon {
+      width: var(--control-h-md);
+      &.button--sm { width: var(--control-h-sm); }
+      &.button--lg { width: var(--control-h-lg); }
+    }
   }
 }

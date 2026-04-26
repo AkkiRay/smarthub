@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-// Единый button-примитив. Variant/size/icons + auto-loading при async @click.
+// Button primitive. Variant / size / icons + auto-loading при async @click.
 
 import { computed, ref, useTemplateRef } from 'vue';
 import { gsap } from 'gsap';
@@ -91,7 +91,7 @@ const classes = computed(() => [
   },
 ]);
 
-// $slots недоступен в setup — наличие label определяем в template через v-if.
+// Label-флаг определяется в template через v-if на slot.
 const slotsHaveLabel = computed(() => false);
 
 async function onClick(event: MouseEvent): Promise<void> {
@@ -100,7 +100,7 @@ async function onClick(event: MouseEvent): Promise<void> {
   if (!props.autoLoading) return;
 }
 
-// Press-feedback noop — плоский дизайн без scale/elastic.
+// Press feedback: noop, плоский дизайн без scale / elastic.
 function animatePress(): void {
   void ui;
   void buttonEl;
@@ -114,8 +114,7 @@ function animateRelease(): void {
 @use '@/styles/abstracts/mixins' as *;
 
 .base-button {
-  // Variant-токены. Hover/active — отдельные значения, чтобы нажатие
-  // визуально отличалось от наведения.
+  // Variant tokens. Idle / hover / active — три отдельных значения.
   --bb-bg: rgba(255, 255, 255, 0.06);
   --bb-bg-hover: rgba(255, 255, 255, 0.1);
   --bb-bg-active: rgba(255, 255, 255, 0.14);
@@ -124,8 +123,7 @@ function animateRelease(): void {
   --bb-border: var(--color-border-subtle);
   --bb-border-hover: var(--color-border-soft);
 
-  // Свой stacking context — иначе glass-noise ::after перекрывает ghost-кнопку
-  // и hover не срабатывает.
+  // Own stacking context над glass-noise ::after.
   position: relative;
   z-index: var(--z-raised);
   isolation: isolate;
@@ -146,11 +144,9 @@ function animateRelease(): void {
   font-weight: 500;
   letter-spacing: -0.005em;
   white-space: nowrap;
-  // !important — defensive против parent-override'ов курсора.
   cursor: pointer !important;
   user-select: none;
-  // Transition и на `background`, и на `background-color`: hover-rule использует
-  // shorthand, без явной shorthand-transition некоторые браузеры не lerp'ают.
+  // Transition обоих background-форм: hover-rule использует shorthand.
   transition:
     background 180ms var(--ease-out),
     background-color 180ms var(--ease-out),
@@ -160,7 +156,7 @@ function animateRelease(): void {
     box-shadow 220ms var(--ease-out),
     outline-color 180ms var(--ease-out);
 
-  // ---- Hover ---------------------------------------------------------------
+  // Hover.
   &:hover:not(:disabled) {
     background: var(--bb-bg-hover);
     color: var(--bb-fg-hover);
@@ -174,7 +170,7 @@ function animateRelease(): void {
   &:active:not(:disabled) {
     background: var(--bb-bg-active);
     transform: translateY(0) scale(0.98);
-    // Active — мгновенно, без inertia.
+    // Active: instant, без inertia.
     transition-duration: 0ms;
   }
 
@@ -216,7 +212,7 @@ function animateRelease(): void {
     line-height: 1;
   }
 
-  // ---- Variants -------------------------------------------------------------
+  // Variants.
 
   &--primary {
     --bb-bg: var(--color-brand-violet);
@@ -228,8 +224,7 @@ function animateRelease(): void {
     --bb-fg-hover: #fff;
   }
 
-  // Ghost — прозрачный idle. Hover даёт brand-tinted fill + видимую рамку:
-  // белый-alpha hover на glass-фоне сливался с подложкой.
+  // Ghost: прозрачный idle, brand-tinted fill + видимая рамка на hover.
   &--ghost {
     --bb-bg: transparent;
     --bb-bg-hover: rgba(var(--color-brand-purple-rgb), 0.18);
@@ -238,7 +233,7 @@ function animateRelease(): void {
     --bb-border-hover: rgba(var(--color-brand-purple-rgb), 0.55);
     --bb-fg: var(--color-text-secondary);
     --bb-fg-hover: var(--color-text-primary);
-    // Ghost hover-glow — читабельность как interactive периферийным зрением.
+    // Ghost hover-glow для периферийной читаемости интерактивности.
     --bb-shadow-hover:
       0 6px 18px rgba(var(--color-brand-purple-rgb), 0.28),
       0 0 0 1px rgba(var(--color-brand-purple-rgb), 0.4);
@@ -266,7 +261,7 @@ function animateRelease(): void {
     --bb-fg-hover: #ff95a8;
   }
 
-  // ---- Sizes ----------------------------------------------------------------
+  // Sizes.
 
   &--sm {
     height: 30px;
@@ -325,28 +320,21 @@ function animateRelease(): void {
   }
 }
 
-// ---- Touch: гарантируем 44px тап-цель (Apple/Google HIG).
-// Ghost-варианты («.base-button--sm», icon-кнопки) на pointer:coarse получают min-height,
-// но НЕ растягивают визуальную высоту (через увеличенный hit-box ::before slot, не height).
-@media (hover: none) and (pointer: coarse) {
+// Touch: 44px tap target (Apple / Google HIG) на coarse-pointer или узком окне.
+@media (hover: none) and (pointer: coarse), (max-width: 720px) {
   .base-button {
-    // Default size 36px → 44px.
     min-height: var(--tap-min);
 
     &--sm {
-      // Small остаётся small визуально, но получает прозрачный padding-touch.
       position: relative;
-
       &::before {
         content: '';
         position: absolute;
         inset: -7px 0;
-        // Hit-area не блокирует scroll — pointer-events наследуются от button.
       }
     }
 
     &--icon-sm {
-      // 30px → 40px target. Icon-кнопки самые опасные на тач — даём явные размеры.
       width: 40px;
       height: 40px;
     }

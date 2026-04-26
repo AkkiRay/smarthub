@@ -5,7 +5,7 @@
       <span class="cap__value">{{ valueLabel }}</span>
     </div>
 
-    <!-- on/off toggle -->
+    <!-- on/off toggle. -->
     <BaseSwitch
       v-if="capability.type === 'devices.capabilities.on_off'"
       class="cap__switch"
@@ -15,7 +15,7 @@
       @update:model-value="setOnOff"
     />
 
-    <!-- range slider (brightness, volume, …) -->
+    <!-- range slider (brightness, volume, …). -->
     <div v-else-if="capability.type === 'devices.capabilities.range'" class="cap__slider">
       <input
         class="cap__range"
@@ -34,18 +34,21 @@
       </div>
     </div>
 
-    <!-- color picker -->
-    <div v-else-if="capability.type === 'devices.capabilities.color_setting'" class="cap__color">
+    <!-- Color picker: color_model ∈ {rgb, hsv} или наличие temperature_k. -->
+    <div
+      v-else-if="capability.type === 'devices.capabilities.color_setting' && (acceptsColor || hasTemperature)"
+      class="cap__color"
+    >
       <BaseSegmented
-        v-if="hasTemperature"
+        v-if="hasTemperature && acceptsColor"
         v-model="colorMode"
         :options="colorTabs"
         size="sm"
         class="cap__color-tabs"
       />
 
-      <!-- Цветовое колесо (HSL) -->
-      <div v-show="colorMode === 'rgb'" class="cap__hue">
+      <!-- HSL color wheel. -->
+      <div v-show="colorMode === 'rgb' && acceptsColor" class="cap__hue">
         <input
           class="cap__range cap__range--hue"
           type="range"
@@ -60,7 +63,7 @@
         <div class="cap__color-preview" :style="{ background: previewColor }" />
       </div>
 
-      <!-- Тёплый/холодный белый -->
+      <!-- Тёплый / холодный белый. -->
       <div v-show="colorMode === 'temperature'" class="cap__temp">
         <input
           class="cap__range cap__range--temp"
@@ -76,7 +79,7 @@
         <span class="cap__temp-value">{{ tempLocal }} K</span>
       </div>
 
-      <!-- Быстрые пресеты -->
+      <!-- Quick presets. -->
       <div class="cap__color-presets">
         <button
           v-for="c in palette"
@@ -91,7 +94,7 @@
       </div>
     </div>
 
-    <!-- mode selector -->
+    <!-- Mode selector. -->
     <div v-else-if="capability.type === 'devices.capabilities.mode'" class="cap__modes">
       <button
         v-for="m in modeOptions"
@@ -106,7 +109,7 @@
       </button>
     </div>
 
-    <!-- toggle: бинарные переключатели (mute, pause, backlight, oscillation, ...). -->
+    <!-- Toggle: mute / pause / backlight / oscillation / … (бинарные). -->
     <BaseSwitch
       v-else-if="capability.type === 'devices.capabilities.toggle'"
       class="cap__switch"
@@ -116,10 +119,7 @@
       @update:model-value="setToggle"
     />
 
-    <!-- quasar.server_action И devices.capabilities.quasar.* (без суффикса) — оба
-         семейства принимают строковый action. У station-устройств их обычно несколько
-         instance'ов (phrase_action, text_action, tts, …) — каждый кастуем как
-         input + send. -->
+    <!-- quasar.server_action / devices.capabilities.quasar: input + send строкового action'а. -->
     <div
       v-else-if="isQuasarTextAction"
       class="cap__action"
@@ -142,9 +142,7 @@
       </BaseButton>
     </div>
 
-    <!-- Fallback для незнакомых типов: показываем то, что у нас есть про cap,
-         чтобы пользователь видел отличия между несколькими карточками одного
-         type, и понимал, ЧТО именно мы пока не нарисовали. -->
+    <!-- Fallback для unknown capability type: instance + state meta. -->
     <div v-else class="cap__fallback">
       <p class="text--small cap__fallback-msg">
         Прямого UI для этой возможности пока нет — Алиса всё равно её знает,
@@ -175,7 +173,7 @@ const devices = useDevicesStore();
 
 const busy = ref(false);
 
-/** Канонический instance из parameters/state; пустая строка если неизвестен. */
+/** Canonical instance из parameters / state; пустая строка при отсутствии. */
 const instanceName = computed(() =>
   String(
     props.capability.parameters?.instance ??
@@ -204,19 +202,18 @@ const label = computed(() => {
     t === 'devices.capabilities.quasar.server_action' ||
     (t as string) === 'devices.capabilities.quasar'
   ) {
-    // Известный instance → человеческое имя; неизвестный → instance + technical type
-    // (чтобы 8 одинаковых quasar-карточек хотя бы различались).
+    // Известный instance → человеческое имя; иначе instance + technical type.
     return (
       SERVER_ACTION_LABELS[instanceName.value] ??
       (instanceName.value ? `Quasar · ${instanceName.value}` : 'Команда Алисы')
     );
   }
-  // Generic fallback: type без префикса + instance, чтобы карточки были различимы.
+  // Generic fallback: type без префикса + instance.
   const short = t.replace(/^devices\.capabilities\./, '');
   return instanceName.value ? `${short} · ${instanceName.value}` : short;
 });
 
-// Бинарные toggle-инстансы Yandex Smart Home.
+// Toggle instances Yandex Smart Home.
 const TOGGLE_LABELS: Record<string, string> = {
   mute: 'Звук выключен',
   pause: 'Пауза',
@@ -227,8 +224,7 @@ const TOGGLE_LABELS: Record<string, string> = {
   oscillation: 'Качание',
 };
 
-// Известные phrase-/text-инстансы quasar(.server_action) — есть и в `quasar`, и в
-// `quasar.server_action`, у Я.Станций обычно набор из 5-8 шт.
+// quasar phrase / text instances (both `quasar` и `quasar.server_action`).
 const SERVER_ACTION_LABELS: Record<string, string> = {
   phrase_action: 'Произнести фразу',
   text_action: 'Голосовая команда',
@@ -237,7 +233,7 @@ const SERVER_ACTION_LABELS: Record<string, string> = {
   sound_command: 'Звук',
 };
 
-/** Подсказка для placeholder-инпута в зависимости от instance'а. */
+/** Placeholder hint по instance'у. */
 const SERVER_ACTION_HINTS: Record<string, string> = {
   phrase_action: 'Например: «доброе утро»',
   text_action: 'Например: «включи свет на кухне»',
@@ -370,11 +366,18 @@ const colorParams = computed(() => {
     | undefined;
 });
 const hasTemperature = computed(() => Boolean(colorParams.value?.temperature_k));
+/** True если color_model ∈ {rgb, hsv}. */
+const acceptsColor = computed(
+  () => colorParams.value?.color_model === 'rgb' || colorParams.value?.color_model === 'hsv',
+);
 const tempMin = computed(() => Number(colorParams.value?.temperature_k?.min ?? 1700));
 const tempMax = computed(() => Number(colorParams.value?.temperature_k?.max ?? 6500));
 
+/** Initial tab: `temperature` для CCT-only либо если state.instance = temperature_k. */
 const colorMode = ref<ColorMode>(
-  props.capability.state?.instance === 'temperature_k' ? 'temperature' : 'rgb',
+  !acceptsColor.value || props.capability.state?.instance === 'temperature_k'
+    ? 'temperature'
+    : 'rgb',
 );
 
 const rgbValue = computed(() => {
@@ -396,7 +399,7 @@ const tempStateValue = computed(() => {
   return tempMin.value;
 });
 
-// hue 0..360 для UI-колеса.
+// hue 0..360 для UI колеса.
 const hueLocal = ref(rgbToHue(rgbValue.value));
 const tempLocal = ref(tempStateValue.value);
 const previewColor = computed(() => `hsl(${hueLocal.value}, 90%, 60%)`);
@@ -429,10 +432,13 @@ async function onTempChange(v: number): Promise<void> {
   await sendTemperature(v);
 }
 
-// CCT-устройствам добавляем temperature-пресеты в хвост RGB-набора.
-const palette = computed<ColorPreset[]>(() =>
-  hasTemperature.value ? [...RGB_PRESETS, ...TEMPERATURE_PRESETS] : RGB_PRESETS,
-);
+/** Preset palette: RGB при acceptsColor, CCT при hasTemperature. */
+const palette = computed<ColorPreset[]>(() => {
+  const out: ColorPreset[] = [];
+  if (acceptsColor.value) out.push(...RGB_PRESETS);
+  if (hasTemperature.value) out.push(...TEMPERATURE_PRESETS);
+  return out;
+});
 
 async function applyPreset(p: ColorPreset): Promise<void> {
   activePreset.value = p.value;
@@ -450,9 +456,8 @@ async function applyPreset(p: ColorPreset): Promise<void> {
 async function sendRgb(rgb: number): Promise<void> {
   busy.value = true;
   try {
-    // Driver сам перенаправит color_setting на /m/v3/user/custom/group/color/apply
-    // (см. yandex-iot-api.ts). UI отдаёт rgb-int, формат `color_model` — забота
-    // драйвера, нам важно только послать целое число.
+    // Driver маппит color_setting → /m/v3/user/custom/group/color/apply (yandex-iot-api.ts).
+    // UI отдаёт rgb-int, color_model resolution — на стороне драйвера.
     await devices.execute({
       deviceId: props.device.id,
       capability: 'devices.capabilities.color_setting',
@@ -530,7 +535,7 @@ async function setMode(value: string): Promise<void> {
   }
 }
 
-// ---- toggle ----------------------------------------------------------------
+// Toggle.
 
 const isToggleOn = computed(() => Boolean(props.capability.state?.value));
 
@@ -548,19 +553,13 @@ async function setToggle(next: boolean): Promise<void> {
   }
 }
 
-// ---- quasar.server_action / devices.capabilities.quasar -------------------
+// quasar.server_action / devices.capabilities.quasar.
 
-/**
- * Принимает ли эта capability свободный строковый action? Для известных
- * instance'ов (phrase_action, text_action, tts, voice_action, sound_command)
- * — да; для остальных под `quasar` намespace'ом считаем что да тоже, иначе
- * пользователь вообще не сможет с ними взаимодействовать.
- */
+/** Принимает ли capability строковый action (phrase_action, text_action, tts, …). */
 const isQuasarTextAction = computed(() => {
   const t = props.capability.type as string;
   if (t === 'devices.capabilities.quasar.server_action') return true;
-  // `devices.capabilities.quasar` без суффикса — у Я.Станций это набор text-action'ов
-  // с разными instance'ами.
+  // `devices.capabilities.quasar` без суффикса: text-action на Я.Станциях.
   return t === 'devices.capabilities.quasar';
 });
 
@@ -577,7 +576,7 @@ async function runServerAction(): Promise<void> {
   try {
     await devices.execute({
       deviceId: props.device.id,
-      // type должен совпадать с capability — иначе iot.quasar отклонит action.
+      // type должен совпадать с capability: иначе iot.quasar отклонит action.
       capability: props.capability.type,
       instance: instanceName.value || 'phrase_action',
       value: text,
@@ -588,14 +587,14 @@ async function runServerAction(): Promise<void> {
   }
 }
 
-// ---- Generic fallback meta -------------------------------------------------
+// Generic fallback meta.
 
 interface FallbackEntry {
   k: string;
   v: string;
 }
 
-/** Что показать в fallback-карточке: instance, текущее значение, retrievable. */
+/** Fallback meta: instance, текущее значение, retrievable. */
 const fallbackDetails = computed<FallbackEntry[]>(() => {
   const out: FallbackEntry[] = [];
   if (instanceName.value) out.push({ k: 'instance', v: instanceName.value });
@@ -625,7 +624,7 @@ function rgbToHue(rgb: number): number {
 }
 
 function hueToRgbInt(h: number): number {
-  // Фиксированные s=0.9, l=0.55 — насыщенные, но не выжженные цвета.
+  // s=0.9, l=0.55 — насыщенные цвета.
   const s = 0.9;
   const l = 0.55;
   const c = (1 - Math.abs(2 * l - 1)) * s;
@@ -646,7 +645,7 @@ function hueToRgbInt(h: number): number {
   return (ri << 16) | (gi << 8) | bi;
 }
 
-/** HSV (Yandex-формат: 0..360, 0..100, 0..100) → RGB-int. Для отрисовки swatch'а. */
+/** HSV (Yandex format: 0..360, 0..100, 0..100) → RGB-int для swatch'а. */
 function hsvToRgbInt(h: number, s: number, v: number): number {
   const hh = ((h % 360) + 360) % 360;
   const ss = Math.max(0, Math.min(100, s)) / 100;
@@ -669,7 +668,7 @@ function hsvToRgbInt(h: number, s: number, v: number): number {
   return (ri << 16) | (gi << 8) | bi;
 }
 
-/** RGB-int → `{h:0..360, s:0..100, v:0..100}` для Yandex hsv-instance. */
+/** RGB-int → `{h:0..360, s:0..100, v:0..100}` для Yandex hsv instance. */
 function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
   const r = ((rgb >> 16) & 0xff) / 255;
   const g = ((rgb >> 8) & 0xff) / 255;
@@ -730,7 +729,7 @@ function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
     font-family: var(--font-family-mono);
   }
 
-  // Визуал в BaseSwitch — здесь только align.
+  // Visual in BaseSwitch; здесь только align.
   &__switch {
     align-self: flex-start;
   }
@@ -787,7 +786,7 @@ function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
         0 0 0 4px rgba(var(--color-brand-purple-rgb), 0.45),
         0 4px 12px rgba(0, 0, 0, 0.4);
     }
-    // Firefox: свой селектор thumb-а.
+    // Firefox thumb selector.
     &::-moz-range-thumb {
       width: 22px;
       height: 22px;
@@ -807,7 +806,7 @@ function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
       transform: scale(1.3);
     }
 
-    // Hue-режим — радужный gradient.
+    // Hue mode: rainbow gradient.
     &--hue {
       background: linear-gradient(
         90deg,
@@ -821,7 +820,7 @@ function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
       );
     }
 
-    // Температура: от тёплого к холодному.
+    // Temperature: warm → cool gradient.
     &--temp {
       background: linear-gradient(
         90deg,
@@ -1026,7 +1025,7 @@ function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
   }
 }
 
-// reduce-motion: убираем spring-transition. BaseSwitch гасит свои анимации сам.
+// reduce-motion: убираем spring-transition. BaseSwitch гасит сам.
 :global(.app--reduce-motion) {
   .cap__color-swatch,
   .cap__mode,

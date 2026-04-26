@@ -50,8 +50,7 @@
       data-anim="block"
     />
 
-    <!-- Room-based фильтр: показывается только когда есть >= 2 комнат, чтобы
-         не плодить лишний контрол при «Без комнаты» + 0/1 room. -->
+    <!-- Room-based фильтр: видим при >= 2 комнат с устройствами. -->
     <BaseSegmented
       v-if="roomFilterOptions.length > 2"
       v-model="roomFilter"
@@ -144,29 +143,27 @@ const search = ref('');
 const filter = ref<FilterId>('all');
 const roomFilter = ref<RoomFilterId>('__all');
 
-// Yandex sync — кнопка активна только если юзер авторизован в Яндексе.
+// Yandex sync: кнопка активна при authorized OAuth-сессии.
 const yandexAuthorized = ref(false);
 const syncing = ref(false);
 
-// Backfill yandex-rooms сделан один раз за сессию — иначе каждый visit /devices
-// триггерил бы sync, что бесполезно нагружает iot.quasar.
+// Backfill yandex-rooms — once per session.
 let backfillTried = false;
 
 onMounted(async () => {
-  // Rooms-store нужен для DeviceCard (резолв room.id → name) и для room-фильтра.
-  // Bootstrap идемпотентен: если стор уже открывался — он просто переzаписывает.
+  // Rooms-store: для DeviceCard (room.id → name) и room-filter'а. Bootstrap идемпотентен.
   if (rooms.rooms.length === 0) {
     try {
       await rooms.bootstrap();
     } catch {
-      /* offline — карточки покажут roomName из meta как fallback */
+      /* offline → fallback на roomName из meta */
     }
   }
   try {
     const auth = await window.smarthome.yandexStation.getAuthStatus();
     yandexAuthorized.value = auth.authorized;
   } catch {
-    /* offline / api недоступен — кнопка остаётся disabled */
+    /* offline / api недоступен → button disabled */
   }
 
   if (!backfillTried && yandexAuthorized.value) {
@@ -176,7 +173,7 @@ onMounted(async () => {
     );
     if (unrooted.length > 0) {
       void devices.syncYandexHome({ silent: true }).catch(() => {
-        /* sync best-effort: ошибки уже логируются в main.log */
+        /* best-effort: errors logged в main.log */
       });
     }
   }
@@ -188,7 +185,7 @@ async function onSyncYandex(): Promise<void> {
   try {
     await devices.syncYandexHome();
   } catch {
-    /* toast уже показан */
+    /* toast выведен из store */
   } finally {
     syncing.value = false;
   }
@@ -215,7 +212,7 @@ const filterOptions = computed<SegmentedOption[]>(() => {
     { value: 'sensors', label: 'Датчики', icon: 'sensor', count: counts.value.sensors },
     { value: 'on', label: 'Включено', count: counts.value.on },
   ];
-  // Source-сегменты появляются только если есть смысл различать (хотя бы один yandex и один local).
+  // Source-сегменты — при наличии и yandex, и local устройств.
   if (counts.value.yandex > 0 && counts.value.local > 0) {
     opts.push({ value: 'yandex', label: 'Yandex', icon: 'alice', count: counts.value.yandex });
     opts.push({ value: 'local', label: 'Локальные', count: counts.value.local });
@@ -224,9 +221,8 @@ const filterOptions = computed<SegmentedOption[]>(() => {
 });
 
 /**
- * Room-фильтр: «Все» + комнаты в которых есть устройства + «Без комнаты» если
- * есть устройства без `room`. Пустые комнаты не показываем — фильтрация по ним
- * даст 0 результатов и запутает.
+ * Room-фильтр: «Все» + комнаты с >= 1 device + «Без комнаты» при наличии
+ * устройств без `room`. Пустые комнаты исключены.
  */
 const roomFilterOptions = computed<SegmentedOption[]>(() => {
   const counts = new Map<string, number>();
@@ -279,7 +275,7 @@ function onAdd(): void {
 }
 
 useViewMount({
-  scope: root.value,
+  scope: root,
   itemsSelector: '.devices__grid > *',
 });
 </script>
@@ -396,13 +392,53 @@ useViewMount({
     }
   }
 
+  // ---- Mobile: hero компактнее, actions full-width column, фильтры скроллятся.
   @media (max-width: 720px) {
+    gap: 12px;
+
+    &__hero {
+      padding: 14px;
+      border-radius: var(--radius-lg);
+      gap: 14px;
+
+      &::before {
+        background:
+          radial-gradient(80% 60% at 0% 0%, rgba(var(--color-brand-violet-rgb), 0.22) 0%, transparent 65%),
+          radial-gradient(70% 60% at 100% 100%, rgba(var(--color-brand-pink-rgb), 0.14) 0%, transparent 65%);
+      }
+    }
+
+    &__title {
+      // __title наследует --font-size-display token (mobile clamp 22→28px).
+
+    &__lead {
+      font-size: var(--font-size-small);
+    }
+
     &__hero-actions {
       width: 100%;
+      flex-direction: column;
+      gap: 8px;
+
+      :deep(.button) {
+        width: 100%;
+        justify-content: center;
+      }
     }
     &__search {
       width: 100%;
       flex: 1 1 100%;
+    }
+
+    // Сегменты: горизонтальный scroll на узких viewport'ах.
+    &__filters,
+    &__rooms {
+      :deep(.segmented) {
+        overflow-x: auto;
+        scrollbar-width: none;
+        &::-webkit-scrollbar { display: none; }
+        flex-wrap: nowrap;
+      }
     }
   }
 }

@@ -1,0 +1,145 @@
+@use '../abstracts/mixins' as *;
+
+// .hero — большая glass-карточка page-header'а. Eyebrow + title + subtitle +
+// actions + opt visual. Применяется на Welcome / Home / Discovery / Devices /
+// Rooms / Scenes / Alice / Settings.
+.hero {
+  --hero-glow: rgba(var(--color-brand-violet-rgb), 0.35);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--pad-roomy);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  isolation: isolate;
+  @include glass(var(--glass-alpha-soft), var(--glass-blur-medium));
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(60% 80% at 0% 0%, var(--hero-glow) 0%, transparent 60%),
+      radial-gradient(50% 60% at 100% 100%, rgba(var(--color-brand-pink-rgb), 0.18) 0%, transparent 60%);
+    opacity: 0.95;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  &__copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+
+  &__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px var(--space-3);
+    border-radius: var(--radius-pill);
+    background: rgba(var(--color-brand-violet-rgb), 0.16);
+    border: var(--border-thin) solid rgba(var(--color-brand-violet-rgb), 0.28);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-micro);
+    font-weight: 600;
+    letter-spacing: var(--tracking-micro);
+    text-transform: uppercase;
+    width: fit-content;
+
+    &-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--gradient-brand);
+      box-shadow: 0 0 12px var(--color-brand-violet);
+    }
+  }
+
+  &__title {
+    font-family: var(--font-family-display);
+    font-size: var(--font-size-display);
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-display);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  &__subtitle {
+    font-size: var(--font-size-body);
+    line-height: var(--leading-relaxed);
+    color: var(--color-text-secondary);
+    max-width: 60ch;
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+
+  &__visual {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 220px;
+  }
+
+  &__stats {
+    display: flex;
+    gap: var(--space-6);
+    margin-top: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  &__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    &-value {
+      font-family: var(--font-family-display);
+      font-size: var(--font-size-h1);
+      font-weight: 600;
+      line-height: 1;
+      color: var(--color-text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    &-label {
+      font-size: var(--font-size-micro);
+      color: var(--color-text-secondary);
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-micro);
+    }
+  }
+
+  // На узких контейнерах визуал прячется, hero становится одноколоночным.
+  @container (max-width: 720px) {
+    grid-template-columns: minmax(0, 1fr);
+    &__visual {
+      display: none;
+    }
+  }
+  @media (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr);
+    &__visual {
+      display: none;
+    }
+  }
+}

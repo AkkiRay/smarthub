@@ -1,7 +1,7 @@
 /** Pinia store колонки Алисы: connection status + candidates + IPC-обёртки. */
 
 import { acceptHMRUpdate, defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import type {
   HubInfo,
   YandexHomeSnapshot,
@@ -14,7 +14,7 @@ import type {
 const MAX_UI_EVENTS = 80;
 import { YANDEX_STATION_PORT, YANDEX_STATION_SCAN_MS } from '@smarthome/shared';
 
-/** Plain-clone Vue reactive proxy для IPC structured-clone. */
+/** Plain-clone Vue reactive proxy для IPC `structured-clone`. */
 const toPlain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 import { useToasterStore } from './toaster';
 
@@ -25,10 +25,12 @@ export const useYandexStationStore = defineStore('yandexStation', () => {
   const isScanning = ref(false);
   /** Журнал glagol-событий (старое → новое). */
   const events = ref<YandexStationEvent[]>([]);
-  /** Snapshot «Дома с Алисой». */
+  /** Snapshot «Дома с Алисой» (raw — все households аккаунта). */
   const home = ref<YandexHomeSnapshot | null>(null);
   const isLoadingHome = ref(false);
   const homeError = ref<string | null>(null);
+  /** Активный household — backend-truth, обновляется через listHouseholds/setHousehold. */
+  const selectedHouseholdId = ref<string | null>(null);
 
   async function fetchHome(): Promise<YandexHomeSnapshot | null> {
     if (isLoadingHome.value) return home.value;
@@ -45,9 +47,70 @@ export const useYandexStationStore = defineStore('yandexStation', () => {
     }
   }
 
-  // HMR-safe: setup-script of root view может перезапуститься (Vite HMR / Suspense remount),
-  // и onMounted дёрнет bootstrap повторно. Без guard'а на каждый IPC-event навешивается
-  // новый listener — один клик начинает писать N дубликатов в журнал.
+  /**
+   * Snapshot, отфильтрованный по `selectedHouseholdId`. Quasar API возвращает
+   * все households одним ответом — фильтрация на стороне UI.
+   *
+   * При `selectedHouseholdId === null` возвращает raw без фильтра.
+   */
+  const homeFiltered = computed<YandexHomeSnapshot | null>(() => {
+    const raw = home.value;
+    if (!raw) return null;
+    const id = selectedHouseholdId.value;
+    if (!id) return raw;
+    const filteredDevices = raw.devices.filter((d) => d.householdId === id);
+    const deviceIds = new Set(filteredDevices.map((d) => d.id));
+    return {
+      ...raw,
+      devices: filteredDevices,
+      rooms: raw.rooms.filter((r) => !r.householdId || r.householdId === id),
+      groups: raw.groups.filter((g) => !g.householdId || g.householdId === id),
+      // Scenario не содержит `householdId` — match по device-membership.
+      scenarios: raw.scenarios.filter((s) => s.devices.some((d) => deviceIds.has(d))),
+    };
+  });
+
+  function setSelectedHousehold(id: string | null): void {
+    selectedHouseholdId.value = id;
+  }
+
+  /**
+   * Голосовое состояние Алисы, нормализованное к 4 значениям для JarvisOrb:
+   * `idle | listening | speaking | busy`. Glagol-states `SHAZAM` и прочие → `busy`.
+   *
+   * При `connection !== 'connected'` всегда `idle`.
+   */
+  const voiceState = computed<'idle' | 'listening' | 'speaking' | 'busy'>(() => {
+    if (status.value?.connection !== 'connected') return 'idle';
+
+    // Glagol-resolver: `aliceState` может пропустить SPEAKING (BUSY → response →
+    // IDLE). `aliceText` свежее `aliceState` → активный TTS-ответ, отдаём speaking.
+    let latestStateIdx = -1;
+    let latestState: string | undefined;
+    let latestSpeakingSignalIdx = -1;
+    for (let i = events.value.length - 1; i >= 0; i--) {
+      const e = events.value[i];
+      if (!e) continue;
+      if (latestStateIdx === -1 && e.aliceState) {
+        latestStateIdx = i;
+        latestState = e.aliceState;
+      }
+      if (latestSpeakingSignalIdx === -1 && e.aliceText) {
+        latestSpeakingSignalIdx = i;
+      }
+      if (latestStateIdx !== -1 && latestSpeakingSignalIdx !== -1) break;
+    }
+
+    if (latestSpeakingSignalIdx > latestStateIdx) return 'speaking';
+
+    if (latestState === 'LISTENING') return 'listening';
+    if (latestState === 'SPEAKING') return 'speaking';
+    if (latestState === 'IDLE') return 'idle';
+    if (latestState) return 'busy'; // BUSY, SHAZAM, прочее
+    return 'idle';
+  });
+
+  // HMR-guard: bootstrap идемпотентен, IPC-listener'ы регистрируются один раз.
   let subscribed = false;
 
   async function bootstrap(): Promise<void> {
@@ -65,8 +128,7 @@ export const useYandexStationStore = defineStore('yandexStation', () => {
       status.value = next;
     });
     window.smarthome.events.on('yandexStation:event', (evt) => {
-      // Defense-in-depth: даже если listener зарегался повторно (или main по ошибке
-      // дублирует push), один и тот же event.id попадает в журнал ровно один раз.
+      // Дедуп по `event.id` — гарантирует at-most-once в журнале.
       if (events.value.length > 0 && events.value[events.value.length - 1]?.id === evt.id) return;
       events.value.push(evt);
       if (events.value.length > MAX_UI_EVENTS) {
@@ -134,8 +196,12 @@ export const useYandexStationStore = defineStore('yandexStation', () => {
     isScanning,
     events,
     home,
+    homeFiltered,
     isLoadingHome,
     homeError,
+    selectedHouseholdId,
+    setSelectedHousehold,
+    voiceState,
     bootstrap,
     scan,
     connect,

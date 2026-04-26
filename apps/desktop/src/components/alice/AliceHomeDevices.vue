@@ -32,8 +32,7 @@
 
     <p v-if="station.homeError" class="home-dash__error">{{ station.homeError }}</p>
 
-    <!-- ============================ Household selector =================== -->
-    <!-- Виден если households.length > 1; импорт фильтрует по выбранному. -->
+    <!-- Household selector: виден при households.length > 1, импорт фильтрует по выбранному. -->
     <section v-if="households.length > 1" class="home-dash__household">
       <div class="home-dash__household-row">
         <span class="home-dash__household-label">Активный дом</span>
@@ -74,7 +73,7 @@
       </div>
     </section>
 
-    <!-- ============================ Stats grid ============================ -->
+    <!-- Stats grid. -->
     <div class="home-dash__stats">
       <div class="home-dash__stat">
         <strong>{{ deviceCount }}</strong>
@@ -98,7 +97,7 @@
       </div>
     </div>
 
-    <!-- ============================ Type breakdown ======================== -->
+    <!-- Type breakdown. -->
     <div v-if="hasSnapshot && deviceCount > 0" class="home-dash__breakdown">
       <h4 class="home-dash__breakdown-title">По типам</h4>
       <ul class="home-dash__type-list">
@@ -112,7 +111,7 @@
       </ul>
     </div>
 
-    <!-- ============================ Rooms ================================= -->
+    <!-- Rooms. -->
     <section v-if="hasSnapshot && roomCount > 0" class="home-dash__rooms">
       <h4 class="home-dash__rooms-title">Комнаты</h4>
       <div class="home-dash__room-list">
@@ -123,7 +122,7 @@
       </div>
     </section>
 
-    <!-- ============================ Groups ================================ -->
+    <!-- Groups. -->
     <section v-if="hasSnapshot && groupCount > 0" class="home-dash__groups">
       <h4 class="home-dash__groups-title">Группы</h4>
       <div class="home-dash__group-list">
@@ -135,7 +134,7 @@
       </div>
     </section>
 
-    <!-- ============================ Scenarios ============================= -->
+    <!-- Scenarios. -->
     <section v-if="hasSnapshot && scenarioCount > 0" class="home-dash__scenarios">
       <h4 class="home-dash__scenarios-title">Сценарии Алисы</h4>
       <div class="home-dash__scenario-list">
@@ -159,7 +158,7 @@
       </p>
     </section>
 
-    <!-- ============================ Empty state =========================== -->
+    <!-- Empty state. -->
     <div v-if="!hasSnapshot && !station.isLoadingHome" class="home-dash__empty">
       <BaseIcon name="alice" :size="28" />
       <p>
@@ -173,9 +172,8 @@
 </template>
 
 <script setup lang="ts">
-// Дашборд «Дом с Алисой»: сводка + переход на /devices, где живёт реальное управление.
-// Длинный список устройств был перенесён туда — рендерится через DeviceCard и
-// унифицированно работает для всех драйверов (yeelight, yandex-iot, …).
+// Дашборд «Дом с Алисой»: сводка по аккаунту + ссылка на /devices.
+// Управление устройствами живёт во вкладке «Устройства» через DeviceCard.
 
 import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
@@ -190,8 +188,8 @@ const station = useYandexStationStore();
 const devices = useDevicesStore();
 const toaster = useToasterStore();
 
-// Snapshot уже отфильтрован по активному household'у в store — единый источник
-// правды для всех потребителей (этот компонент + segmented-badge в AliceView).
+// Snapshot фильтруется по активному household'у в store — single source of truth
+// для этого компонента и segmented-badge в AliceView.
 const snapshot = computed<YandexHomeSnapshot | null>(() => station.homeFiltered);
 const hasSnapshot = computed(() => snapshot.value !== null);
 
@@ -203,9 +201,9 @@ const scenarioCount = computed(() => snapshot.value?.scenarios.length ?? 0);
 const syncing = ref(false);
 const runningScenarioId = ref<string | null>(null);
 
-// Households dropdown — виден только при households.length > 1.
-// `selectedHouseholdId` — single source of truth в store (используется для
-// фильтрации snapshot'а в station.homeFiltered и счётчика в AliceView segmented).
+// Households dropdown — рендерится при households.length > 1.
+// selectedHouseholdId хранится в store: фильтр snapshot'а в station.homeFiltered
+// и счётчик в AliceView segmented.
 const households = ref<Array<{ id: string; name: string }>>([]);
 const selectedHouseholdId = computed({
   get: () => station.selectedHouseholdId,
@@ -251,7 +249,7 @@ async function loadHouseholds(): Promise<void> {
     boundHouseholdId.value = r.boundHouseholdId;
     allowCloudControlOffNetwork.value = r.allowCloudControlOffNetwork;
   } catch {
-    /* not authorized yet — UI скроется автоматически households.length === 0 */
+    /* not authorized: households.length === 0 → UI скрыт */
   }
 }
 
@@ -263,6 +261,9 @@ async function onHouseholdChange(id: string): Promise<void> {
     await window.smarthome.yandexStation.setHousehold(next);
     selectedHouseholdId.value = next;
     await Promise.all([station.fetchHome(), devices.syncYandexHome()]);
+    // Backend rebind'ит network на новый household внутри setHousehold + sync.
+    // Перечитываем households — обновляем badge boundHouseholdId.
+    await loadHouseholds();
   } catch (e) {
     toaster.push({ kind: 'error', message: (e as Error).message });
   } finally {
@@ -299,7 +300,7 @@ function iconForGroupType(type?: string): IconName {
 }
 
 onMounted(() => {
-  // Lazy fetch — если юзер уже авторизован, тянем snapshot для type-breakdown.
+  // Lazy fetch snapshot для type-breakdown при наличии авторизации.
   if (!station.home && !station.isLoadingHome) {
     void station.fetchHome();
   }
@@ -311,6 +312,7 @@ async function onSync(): Promise<void> {
   syncing.value = true;
   try {
     // Параллельно: snapshot для дашборда + импорт в реестр устройств.
+
     const [, summary] = await Promise.all([
       station.fetchHome(),
       devices.syncYandexHome().catch(() => null),
@@ -320,15 +322,14 @@ async function onSync(): Promise<void> {
       selectedHouseholdId.value = summary.householdId;
       currentNetwork.value = summary.currentNetwork;
     }
-    // После sync — пересмотреть network binding (sync мог обновить).
+    // Перечитываем network binding после sync.
     void loadHouseholds();
   } finally {
     syncing.value = false;
   }
 }
 
-// ---- Type breakdown ----------------------------------------------------------
-// Группируем yandex-types в читаемые «свет / розетки / климат / медиа / прочее».
+// Type breakdown: группировка yandex-types в bucket'ы свет / розетки / климат / медиа / прочее.
 interface TypeBucket {
   key: string;
   label: string;
@@ -509,7 +510,7 @@ function pluralize(n: number, forms: [string, string, string]): string {
 
   &__title {
     font-family: var(--font-family-display);
-    font-size: clamp(18px, 1vw + 14px, 22px);
+    font-size: var(--font-size-h1);
     font-weight: 600;
     letter-spacing: var(--tracking-h1);
     margin: 0;

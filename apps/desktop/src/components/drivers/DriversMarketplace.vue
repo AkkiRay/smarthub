@@ -1,6 +1,11 @@
 <template>
-  <div class="marketplace">
-    <div v-for="group in groups" :key="group.category" class="marketplace__group">
+  <div ref="rootEl" class="marketplace">
+    <div
+      v-for="group in groups"
+      :key="group.category"
+      class="marketplace__group"
+      data-anim="block"
+    >
       <header class="marketplace__group-head">
         <h3 class="marketplace__group-title">{{ group.title }}</h3>
         <span class="marketplace__group-count">{{ group.drivers.length }}</span>
@@ -15,6 +20,7 @@
             'is-expanded': expanded === d.id,
             [`maturity--${d.maturity}`]: true,
           }"
+          data-anim="item"
         >
           <div class="marketplace__row" @click="toggleExpand(d)">
             <DriverIcon :driver="d.id as DriverId" size="md" :active="d.active" />
@@ -81,14 +87,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue';
 import type { DriverCategory, DriverDescriptor, DriverId } from '@smarthome/shared';
 import { useToasterStore } from '@/stores/toaster';
+import { useViewMount } from '@/composables/useViewMount';
+import { useGsap } from '@/composables/useGsap';
 import DriverIcon from '@/components/visuals/DriverIcon.vue';
 import DriverCredentialsForm from './DriverCredentialsForm.vue';
 
 const toaster = useToasterStore();
 
+const rootEl = useTemplateRef<HTMLElement>('rootEl');
 const drivers = ref<DriverDescriptor[]>([]);
 const expanded = ref<string | null>(null);
 const busyId = ref<string | null>(null);
@@ -198,6 +207,28 @@ async function saveCreds(d: DriverDescriptor, values: Record<string, string>): P
 }
 
 onMounted(load);
+
+// Mount-cascade: group-блоки → driver-ряды одной волной (stagger из useViewMount).
+// `load()` асинхронный — драйверы появляются через tick, поэтому повторно
+// прогоняем stagger когда массив наполнился (иначе на первом mount'е
+// querySelectorAll('[data-anim="item"]') вернёт пусто).
+useViewMount({ scope: rootEl });
+const { from } = useGsap(rootEl.value);
+watch(
+  () => drivers.value.length,
+  async (next, prev) => {
+    if (next === 0 || prev !== 0) return;
+    await nextTick();
+    from('[data-anim="item"]', {
+      opacity: 0,
+      y: 8,
+      stagger: { each: 0.025, amount: 0.45, from: 'start' },
+      duration: 0.34,
+      ease: 'power2.out',
+      clearProps: 'opacity,transform',
+    });
+  },
+);
 
 defineExpose({ reload: load });
 </script>

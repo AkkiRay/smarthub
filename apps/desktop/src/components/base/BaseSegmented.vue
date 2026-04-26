@@ -1,9 +1,15 @@
 <template>
   <div class="segmented" :class="`segmented--${size}`" role="tablist" ref="root">
-    <!-- Pill следит за активной кнопкой через translateX + width. -->
-    <span v-if="activeIndex >= 0" class="segmented__pill" :style="pillStyle" aria-hidden="true" />
+    <!-- Pill: translateX + width активного item'а. `is-ready` включает transition после первого syncPill. -->
+    <span
+      v-if="activeIndex >= 0"
+      class="segmented__pill"
+      :class="{ 'is-ready': pillReady }"
+      :style="pillStyle"
+      aria-hidden="true"
+    />
     <button
-      v-for="(opt, idx) in options"
+      v-for="opt in options"
       :key="String(opt.value)"
       ref="itemRefs"
       type="button"
@@ -12,10 +18,7 @@
       :class="{ 'is-active': isActive(opt.value) }"
       :aria-selected="isActive(opt.value)"
       :data-tour="opt.tour"
-      @click="onSelect(opt.value, idx)"
-      @pointerdown="animatePress($event.currentTarget as HTMLElement)"
-      @pointerup="animateRelease($event.currentTarget as HTMLElement)"
-      @pointerleave="animateRelease($event.currentTarget as HTMLElement)"
+      @click="onSelect(opt.value)"
     >
       <BaseIcon v-if="opt.icon" :name="opt.icon" class="segmented__icon" />
       <span class="segmented__label">{{ opt.label }}</span>
@@ -25,13 +28,11 @@
 </template>
 
 <script setup lang="ts">
-// Segmented-control. Pill переезжает между табами, ResizeObserver следит
-// за позицией при resize/смене языка.
+// Segmented control. Pill ездит через CSS transition на translateX / width.
+// ResizeObserver пересчитывает позицию при resize / locale change.
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
-import { gsap } from 'gsap';
 import BaseIcon, { type IconName } from './BaseIcon.vue';
-import { useUiStore } from '@/stores/ui';
 
 export interface SegmentedOption {
   value: string | number;
@@ -56,7 +57,6 @@ const emit = defineEmits<{
   'update:modelValue': [value: string | number];
 }>();
 
-const ui = useUiStore();
 const root = useTemplateRef<HTMLElement>('root');
 const itemRefs = ref<HTMLElement[]>([]);
 
@@ -66,18 +66,15 @@ function isActive(value: string | number): boolean {
   return props.modelValue === value;
 }
 
-function onSelect(value: string | number, index: number): void {
+function onSelect(value: string | number): void {
   if (props.modelValue === value) return;
   emit('update:modelValue', value);
-  void index;
 }
 
-// ---- Pill positioning ------------------------------------------------------
-// Геометрия из getBoundingClientRect() — pill совпадает с табом при любой
-// длине текста.
-
 const pillStyle = ref<Record<string, string>>({});
+const pillReady = ref(false);
 
+/** Geometry активного item'а через getBoundingClientRect → pill transform / width. */
 async function syncPill(): Promise<void> {
   await nextTick();
   if (!root.value || activeIndex.value < 0) return;
@@ -89,6 +86,12 @@ async function syncPill(): Promise<void> {
     transform: `translateX(${itemRect.left - rootRect.left}px)`,
     width: `${itemRect.width}px`,
   };
+  if (!pillReady.value) {
+    // Включаем transition на следующем frame после initial positioning.
+    requestAnimationFrame(() => {
+      pillReady.value = true;
+    });
+  }
 }
 
 watch(
@@ -105,14 +108,6 @@ onMounted(() => {
   }
 });
 onBeforeUnmount(() => resizeObs?.disconnect());
-
-// Press/release-feedback отключён — плоский дизайн.
-function animatePress(_el: HTMLElement): void {
-  void ui;
-}
-function animateRelease(_el: HTMLElement): void {
-  /* noop */
-}
 </script>
 
 <style scoped lang="scss">
@@ -122,27 +117,35 @@ function animateRelease(_el: HTMLElement): void {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
+  gap: var(--space-1);
+  padding: var(--space-1);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border-subtle);
-  isolation: isolate; // pill живёт под кнопками
+  border: var(--border-thin) solid var(--color-border-subtle);
+  isolation: isolate; // pill под кнопками в z-стэке
   flex-wrap: wrap;
   max-width: 100%;
 
   &__pill {
     position: absolute;
-    top: 4px;
-    bottom: 4px;
+    top: var(--space-1);
+    bottom: var(--space-1);
     left: 0;
     border-radius: var(--radius-pill);
     background: var(--color-brand-violet);
-    transition:
-      transform 280ms var(--ease-out),
-      width 280ms var(--ease-out);
+    box-shadow: 0 6px 18px rgba(var(--color-brand-violet-rgb), 0.36);
     z-index: 0;
     pointer-events: none;
+    will-change: transform, width;
+    // Initial mount без animation. После `is-ready` — smooth slide.
+    transition: none;
+
+    &.is-ready {
+      transition:
+        transform var(--dur-medium) var(--ease-emphasis),
+        width var(--dur-medium) var(--ease-emphasis),
+        box-shadow var(--dur-medium) var(--ease-out);
+    }
   }
 
   &__item {
@@ -150,21 +153,21 @@ function animateRelease(_el: HTMLElement): void {
     z-index: 1;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     height: 30px;
-    padding: 0 14px;
+    padding: 0 var(--space-4);
     border: 0;
     background: transparent;
     color: var(--color-text-secondary);
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--font-size-small);
     font-weight: 600;
     border-radius: var(--radius-pill);
     cursor: pointer;
-    transition: color 240ms var(--ease-out);
+    transition: color var(--dur-medium) var(--ease-out);
     white-space: nowrap;
 
-    &:hover {
+    &:hover:not(.is-active) {
       color: var(--color-text-primary);
     }
 
@@ -195,17 +198,47 @@ function animateRelease(_el: HTMLElement): void {
     font-weight: 700;
     letter-spacing: 0;
     flex-shrink: 0;
+    transition: background var(--dur-fast) var(--ease-out);
   }
 
-  // На active-табе count прозрачнее — тёмный пузырь поверх pill плохо читается.
+  // Active count: прозрачнее, чтобы badge читался поверх pill'а.
   &__item.is-active &__count {
     background: rgba(255, 255, 255, 0.22);
   }
 
   &--sm &__item {
     height: 26px;
-    padding: 0 12px;
-    font-size: 12px;
+    padding: 0 var(--space-3);
+    font-size: var(--font-size-small);
+  }
+
+  // Mobile (≤ 720px): horizontal scroll вместо wrap, hidden scrollbar.
+  @media (max-width: 720px) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    // Compact: padding 12px, gap 6px, flex-shrink: 0 для tap-target.
+    &__item {
+      padding: 0 12px;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+  }
+
+  // Narrow screens: ужимаем font-size и padding.
+  @media (max-width: 380px) {
+    &__item {
+      padding: 0 10px;
+      font-size: 12px;
+    }
   }
 }
 </style>

@@ -8,27 +8,52 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, useTemplateRef } from 'vue';
+import { onBeforeUnmount, useTemplateRef, watch } from 'vue';
+import { storeToRefs } from 'pinia';
 import { gsap } from 'gsap';
 import { useUiStore } from '@/stores/ui';
 
 const root = useTemplateRef<HTMLElement>('root');
 const ui = useUiStore();
+const { motionLevel } = storeToRefs(ui);
 
-onMounted(() => {
-  if (ui.reduceMotion || !root.value) return;
+let tweens: gsap.core.Tween[] = [];
+
+function killTweens(): void {
+  tweens.forEach((t) => t.kill());
+  tweens = [];
+}
+
+function startDrift(): void {
+  killTweens();
+  if (!root.value) return;
+  // off / reduced — никакого drift'а: на reduced backdrop-filter уже выключен в _motion.scss,
+  // плюс animated-translate через blur(140px) даёт реальный hit по FPS на iGPU.
+  if (motionLevel.value === 'off' || motionLevel.value === 'reduced') return;
   const blobs = root.value.querySelectorAll('.aura__blob');
+  // На full — slightly faster + amplified amplitude для «живой» dynamic background.
+  const amp = motionLevel.value === 'full' ? 1.2 : 1;
+  const speed = motionLevel.value === 'full' ? 0.85 : 1;
   blobs.forEach((blob, idx) => {
-    gsap.to(blob, {
-      x: '+=120',
-      y: '+=80',
-      duration: 14 + idx * 3,
-      yoyo: true,
-      repeat: -1,
-      ease: 'sine.inOut',
-    });
+    tweens.push(
+      gsap.to(blob, {
+        x: `+=${120 * amp}`,
+        y: `+=${80 * amp}`,
+        duration: (14 + idx * 3) * speed,
+        yoyo: true,
+        repeat: -1,
+        ease: 'sine.inOut',
+        force3D: true,
+      }),
+    );
   });
-});
+}
+
+// Реагируем на смену motionLevel в runtime (settings -> кнопка) — тут же стартуем
+// или останавливаем drift, без F5.
+watch(motionLevel, () => startDrift(), { immediate: true, flush: 'post' });
+
+onBeforeUnmount(killTweens);
 </script>
 
 <style scoped lang="scss">

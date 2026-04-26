@@ -1,21 +1,23 @@
 /**
- * @fileoverview Оркестратор discovery — параллельно вызывает
- * `driver.discover(signal)` для всех активных драйверов и собирает
- * кандидатов в единый stream.
+ * @fileoverview Discovery orchestrator. Параллельно вызывает
+ * `driver.discover(signal)` для всех зарегистрированных драйверов и
+ * агрегирует кандидатов в единый stream.
  *
  * Lifecycle одного цикла:
- *   1. `start({ mode: 'once' | 'continuous' })` — создаёт `AbortController`,
- *      запускает все driver'ы в параллель.
- *   2. На каждой смене phase (`scanning` → `done` / `error`) эмитит
- *      `discovery:progress` — UI рисует live-индикатор сканирования.
- *   3. Найденные кандидаты эмитятся как `discovery:candidate`.
- *   4. После завершения всех драйверов цикл закрывается; в `continuous`-режиме
- *      ставится timer на следующий цикл (по умолчанию через 15s).
- *   5. `stop()` — abort'ит signal, все драйверы должны корректно выйти.
+ *   1. `start({ mode: 'once' | 'continuous' })` — детектит current network,
+ *      создаёт `AbortController`, запускает все драйверы параллельно.
+ *   2. На каждой смене phase эмитит `discovery:progress`.
+ *   3. Найденные кандидаты эмитятся как `discovery:candidate`. LAN-кандидаты
+ *      получают штамп текущей network signature; cloud-кандидаты yandex-iot
+ *      проходят household-фильтр.
+ *   4. После завершения всех драйверов цикл закрывается; в `continuous`-
+ *      режиме ставится timer на следующий цикл.
+ *   5. `stop()` — abort'ит signal, драйверы корректно выходят.
  *
- * Concurrency: все driver'ы стартуют одновременно (LAN-discovery — это в
- * основном UDP-broadcast, можно безопасно параллелить). Cloud-driver'ы
- * сами решают throttling внутри.
+ * Network filter:
+ *   В начале цикла все кандидаты с не-matching network signature удаляются
+ *   из cache. Yandex-iot фильтруется по `householdId === activeHousehold`,
+ *   где `activeHousehold = boundHousehold ?? selectedHouseholdId`.
  */
 
 import { EventEmitter } from 'node:events';
@@ -23,6 +25,14 @@ import log from 'electron-log/main.js';
 import type { DiscoveredDevice, DiscoveryProgress, DriverScanProgress } from '@smarthome/shared';
 import type { DriverRegistry } from '../drivers/driver-registry.js';
 import type { DeviceRegistry } from '../registry/device-registry.js';
+import type { SettingsStore } from '../storage/settings-store.js';
+import {
+  detectCurrentNetwork,
+  findHouseholdForNetwork,
+  networkMatches,
+  type NetworkSignature,
+} from '../network/network-identity.js';
+import { invalidateInterfaceCache } from '../network/lan-interfaces.js';
 
 interface DiscoveryEvents {
   candidate: (candidate: DiscoveredDevice) => void;
@@ -35,6 +45,7 @@ export type DiscoveryService = ReturnType<typeof createDiscoveryService>;
 export function createDiscoveryService(deps: {
   driverRegistry: DriverRegistry;
   deviceRegistry: DeviceRegistry;
+  settings: SettingsStore;
 }) {
   const emitter = new EventEmitter();
   const candidates = new Map<string, DiscoveredDevice>();
@@ -42,10 +53,8 @@ export function createDiscoveryService(deps: {
   let running = false;
   let abortController: AbortController | null = null;
   let intervalTimer: ReturnType<typeof setInterval> | null = null;
-  // Race condition guard: новый cycle ждёт предыдущий — иначе драйверы конкурируют за UDP-сокеты.
   let cycleInProgress = false;
 
-  // Re-assigned при каждой эмиссии, чтобы renderer мог делать референсное сравнение.
   let progress: DiscoveryProgress = {
     cycleActive: false,
     cycleStartedAt: 0,
@@ -58,6 +67,37 @@ export function createDiscoveryService(deps: {
     emitter.emit('progress', progress);
   };
 
+  /**
+   * Удаляет из cache кандидатов с network signature, отличной от текущей.
+   * Yandex-iot фильтруется по `householdId === activeHousehold`.
+   * Возвращает количество удалённых записей.
+   */
+  const pruneStaleCandidates = (
+    current: NetworkSignature,
+    activeHousehold: string | null,
+  ): number => {
+    let pruned = 0;
+    for (const [key, c] of candidates) {
+      if (c.driver === 'yandex-iot') {
+        if (activeHousehold && c.meta?.['householdId'] !== activeHousehold) {
+          candidates.delete(key);
+          pruned++;
+        }
+        continue;
+      }
+      if (!c.network) {
+        candidates.delete(key);
+        pruned++;
+        continue;
+      }
+      if (!networkMatches(c.network as NetworkSignature, current)) {
+        candidates.delete(key);
+        pruned++;
+      }
+    }
+    return pruned;
+  };
+
   const runCycle = async (): Promise<void> => {
     if (cycleInProgress) return;
     cycleInProgress = true;
@@ -66,6 +106,18 @@ export function createDiscoveryService(deps: {
     const drivers = deps.driverRegistry.list();
     const cycleSignal = abortController.signal;
     const cycleStartedAt = Date.now();
+
+    invalidateInterfaceCache();
+    const currentNetwork = await detectCurrentNetwork();
+    const bindings = deps.settings.get('householdNetworks');
+    const boundHousehold = findHouseholdForNetwork(currentNetwork, bindings);
+    const selectedHousehold = deps.settings.get('selectedHouseholdId');
+    const householdFilter = boundHousehold ?? selectedHousehold ?? null;
+
+    const pruned = pruneStaleCandidates(currentNetwork, householdFilter);
+    if (pruned > 0) {
+      log.info(`DiscoveryService: pruned ${pruned} stale candidates`);
+    }
 
     progress = {
       cycleActive: true,
@@ -80,11 +132,10 @@ export function createDiscoveryService(deps: {
     };
     emitter.emit('progress', progress);
 
-    const timeoutMs = Number(process.env['HUB_DISCOVERY_TIMEOUT_MS'] ?? 4000);
+    const timeoutMs = Number(process.env['HUB_DISCOVERY_TIMEOUT_MS'] ?? 8000);
     const timeoutHandle = setTimeout(() => abortController?.abort(), timeoutMs);
 
     try {
-      // Race с abort — late-arriving результаты от не-cooperative drivers игнорятся.
       const abortPromise = new Promise<never>((_, reject) => {
         cycleSignal.addEventListener(
           'abort',
@@ -105,19 +156,34 @@ export function createDiscoveryService(deps: {
               });
               return;
             }
-            for (const c of found) {
+
+            const filtered =
+              driver.id === 'yandex-iot' && householdFilter
+                ? found.filter((c) => c.meta?.['householdId'] === householdFilter)
+                : found;
+
+            for (const c of filtered) {
               const key = `${c.driver}:${c.externalId}`;
               const known = deps.deviceRegistry.findByExternalId(c.driver, c.externalId);
               const enriched: DiscoveredDevice = {
                 ...c,
                 ...(known ? { knownDeviceId: known.id } : {}),
+                ...(c.driver !== 'yandex-iot'
+                  ? {
+                      network: {
+                        gatewayMac: currentNetwork.gatewayMac,
+                        ssid: currentNetwork.ssid,
+                        subnet: currentNetwork.subnet,
+                      },
+                    }
+                  : {}),
               };
               candidates.set(key, enriched);
               emitter.emit('candidate', enriched);
             }
             setDriverPhase(driver.id, {
               phase: 'done',
-              found: found.length,
+              found: filtered.length,
               durationMs: Date.now() - driverStartedAt,
             });
           } catch (e) {
@@ -146,14 +212,12 @@ export function createDiscoveryService(deps: {
     }
   };
 
-  // Шарится между public stop() и auto-stop в режиме 'once' после first cycle.
   const internalStop = (): void => {
     if (!running) return;
     running = false;
     abortController?.abort();
     if (intervalTimer) clearInterval(intervalTimer);
     intervalTimer = null;
-    // Драйверы, оставшиеся в scanning, помечаем idle — иначе UI зафиксирует «вечный» спиннер.
     progress = {
       ...progress,
       cycleActive: false,
@@ -171,7 +235,7 @@ export function createDiscoveryService(deps: {
       return () => emitter.off(event, listener as never);
     },
 
-    /** mode 'once' (default) — один цикл; 'continuous' — повтор каждые HUB_DISCOVERY_INTERVAL_MS. */
+    /** mode 'once' (default) — один цикл; 'continuous' — повтор каждые `HUB_DISCOVERY_INTERVAL_MS`. */
     async start(opts: { mode?: 'once' | 'continuous' } = {}): Promise<void> {
       if (running) return;
       const mode = opts.mode ?? 'once';

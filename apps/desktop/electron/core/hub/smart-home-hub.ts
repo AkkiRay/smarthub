@@ -100,10 +100,10 @@ export type SmartHomeHub = ReturnType<typeof createSmartHomeHub>;
 
 export function createSmartHomeHub(deps: SmartHomeHubDeps) {
   const emitter = new EventEmitter();
-  // Memory-leak guard: warning при > 30 listener-ов.
+  // Memory-leak guard: warning при > 30 listener'ов.
   emitter.setMaxListeners(30);
 
-  // Forward подсистемных событий в общий bus.
+  // Forward событий подсистем в общий bus.
   deps.deviceRegistry.on('device:updated', (device) => {
     emitter.emit('device:updated', device);
   });
@@ -144,14 +144,13 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
   const init = async (): Promise<void> => {
     await deps.deviceRegistry.init();
     await deps.driverRegistry.init();
-    // Push-стримы (yandex-iot updates_url WS, в будущем MQTT/HomeAssistant) —
-    // подписываемся ПОСЛЕ driverRegistry.init(), иначе driverRegistry.list()
-    // ещё пустой и subscribePush ни разу не вызовется.
+    // Push-стримы (yandex-iot updates_url WS) — подписка после
+    // driverRegistry.init(), иначе driverRegistry.list() пустой.
     deps.deviceRegistry.wirePushSubscriptions();
     await deps.sceneService.init();
     await deps.aliceBridge.init();
 
-    // Auto-reconnect к колонке (fire-and-forget, не блокируем bootstrap).
+    // Auto-reconnect к колонке — fire-and-forget, не блокирует bootstrap.
     const stationCreds = deps.settings.get('yandexStation');
     if (stationCreds) {
       void deps.yandexStation.connect(stationCreds).catch((e) => {
@@ -165,7 +164,7 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
       });
     }
 
-    // Auto-start туннеля если skill уже привязывался ранее.
+    // Auto-start tunnel при saved skill config и хотя бы одном issued token.
     const aliceState = deps.settings.getAlice();
     if (aliceState.config && Object.keys(aliceState.issuedTokens).length > 0) {
       void deps.aliceBridge.startTunnel().catch((e) => {
@@ -173,7 +172,7 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
       });
     }
 
-    // Polling — после deviceRegistry.init (иначе первый цикл по пустому реестру).
+    // Polling — после deviceRegistry.init, чтобы первый цикл шёл по непустому реестру.
     deps.polling.start();
   };
 

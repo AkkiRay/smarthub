@@ -239,7 +239,7 @@ onMounted(refreshAuth);
 
   &__title {
     font-family: var(--font-family-display);
-    font-size: clamp(16px, 0.6vw + 14px, 19px);
+    font-size: var(--font-size-h1);
     font-weight: 600;
     letter-spacing: var(--tracking-h1);
     color: var(--color-text-primary);

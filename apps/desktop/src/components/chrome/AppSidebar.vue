@@ -1,12 +1,19 @@
 <template>
   <aside class="sidebar" ref="root" aria-labelledby="sidebar-heading">
-    <!-- Eyebrow `<h2>` — метка nav-секции для screen-readers, в compact скрывается. -->
+    <!-- Eyebrow `<h2>`: метка nav-секции для screen-readers, скрывается в compact. -->
     <h2 id="sidebar-heading" class="sidebar__heading">
       <span class="sidebar__heading-mark" aria-hidden="true" />
       <span class="sidebar__heading-label text--micro">Меню</span>
       <span class="sidebar__heading-line" aria-hidden="true" />
     </h2>
-    <nav class="sidebar__nav">
+    <nav class="sidebar__nav" ref="navEl">
+      <!-- Sliding rail: один elem, geometry из активного item'а. На route change top / height пересчитываются. -->
+      <span
+        class="sidebar__rail"
+        :class="{ 'is-ready': railReady, 'is-active': railActive }"
+        :style="railStyle"
+        aria-hidden="true"
+      />
       <RouterLink
         v-for="item in items"
         :key="item.to"
@@ -18,7 +25,6 @@
         <BaseIcon :name="item.icon" :size="22" class="sidebar__icon" :aria-hidden="true" />
         <span class="sidebar__label">{{ item.label }}</span>
         <span v-if="item.badge" class="sidebar__badge">{{ item.badge }}</span>
-        <span class="sidebar__indicator" />
       </RouterLink>
     </nav>
 
@@ -32,7 +38,15 @@
         @click="onHubCardClick"
       >
         <span class="sidebar__hub-avatar">
-          <BaseIcon name="alice" :size="20" aria-hidden="true" />
+          <span class="sidebar__hub-orb">
+            <JarvisOrb
+              size="sm"
+              :state="stationOrbState"
+              :detail="2"
+              voice-mode
+              :voice-state="station.voiceState"
+            />
+          </span>
           <span class="sidebar__hub-pip" />
         </span>
         <span class="sidebar__hub-info">
@@ -56,27 +70,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, useTemplateRef } from 'vue';
-import { useDevicesStore } from '@/stores/devices';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useAliceStore } from '@/stores/alice';
 import { useUiStore } from '@/stores/ui';
 import { useGsap } from '@/composables/useGsap';
 import { useSpeakerNavigation } from '@/composables/useSpeakerNavigation';
-import BaseIcon, { type IconName } from '@/components/base/BaseIcon.vue';
+import { useNavItems } from '@/composables/useNavItems';
+import BaseIcon from '@/components/base/BaseIcon.vue';
+import JarvisOrb from '@/components/visuals/JarvisOrb.vue';
 
-const devices = useDevicesStore();
 const station = useYandexStationStore();
 const alice = useAliceStore();
 const ui = useUiStore();
 const speakerNav = useSpeakerNavigation();
 const root = useTemplateRef<HTMLElement>('root');
 
-/**
- * Hub-card в одно касание открывает пульт колонки. Логика «найти Device-запись или
- * запустить sync» инкапсулирована в `useSpeakerNavigation` — используется и здесь,
- * и в AliceView (две CTA на странице подключения).
- */
+/** Hub-card → пульт колонки. Lookup / sync инкапсулирован в useSpeakerNavigation. */
 function onHubCardClick(): void {
   void speakerNav.openSpeaker();
 }
@@ -96,7 +107,7 @@ const stationOrbState = computed<'idle' | 'active' | 'error'>(() => {
   return 'idle';
 });
 
-/** Чип под station-label со статусом skill-моста. */
+/** Skill bridge status chip под station-label. */
 const skillBadge = computed<{ label: string; tone: 'success' | 'warn' | 'idle' } | null>(() => {
   const stage = alice.status?.skill.stage;
   if (!stage || stage === 'idle') return null;
@@ -113,41 +124,55 @@ const hubAriaLabel = computed(() => {
   return 'Подключить колонку Алисы';
 });
 
-// `icon` — registry-key из `src/assets/icons/*.svg`.
-interface NavItem {
-  to: string;
-  label: string;
-  icon: IconName;
-  badge?: number;
-  tour?: string;
-}
-const items = computed<NavItem[]>(() => [
-  { to: '/home', label: 'Главная', icon: 'home' },
-  {
-    to: '/devices',
-    label: 'Устройства',
-    icon: 'devices',
-    badge: devices.devices.length || undefined,
-    tour: 'sidebar-devices',
-  },
-  { to: '/rooms', label: 'Комнаты', icon: 'rooms', tour: 'sidebar-rooms' },
-  { to: '/scenes', label: 'Сценарии', icon: 'scenes', tour: 'sidebar-scenes' },
-  {
-    to: '/discovery',
-    label: 'Поиск',
-    icon: 'search',
-    // Только НЕпривязанные — иначе badge «Поиск» зеркалит «Устройства»
-    // (один и тот же физический девайс остаётся в `candidates` и после pair'а).
-    badge: devices.unpairedCandidates.length || undefined,
-    tour: 'sidebar-discovery',
-  },
-  { to: '/alice', label: 'Подключение Алисы', icon: 'alice', tour: 'sidebar-alice' },
-  { to: '/settings', label: 'Настройки', icon: 'settings', tour: 'sidebar-settings' },
-]);
+// Items + badge counters: shared composable между sidebar и bottom-nav.
+const items = useNavItems();
 
 const { from } = useGsap(root.value);
+const route = useRoute();
+const navEl = useTemplateRef<HTMLElement>('navEl');
+
+// Sliding rail: top / height активного item'а в inline-style, transition по ним.
+// `is-ready` включает transition после первого syncRail.
+const railStyle = ref<Record<string, string>>({});
+const railReady = ref(false);
+const railActive = ref(false);
+let railResize: ResizeObserver | null = null;
+
+async function syncRail(): Promise<void> {
+  await nextTick();
+  if (!navEl.value) return;
+  const active = navEl.value.querySelector<HTMLElement>('.sidebar__item.is-active');
+  if (!active) {
+    railActive.value = false;
+    return;
+  }
+  const navRect = navEl.value.getBoundingClientRect();
+  const itemRect = active.getBoundingClientRect();
+  // Pill 26px по центру item'а с поправкой на scrollTop nav-контейнера.
+  const railHeight = 26;
+  const top = itemRect.top - navRect.top + navEl.value.scrollTop + (itemRect.height - railHeight) / 2;
+  railStyle.value = {
+    top: `${Math.round(top)}px`,
+    height: `${railHeight}px`,
+  };
+  railActive.value = true;
+  if (!railReady.value) {
+    requestAnimationFrame(() => {
+      railReady.value = true;
+    });
+  }
+}
+
+watch(() => route.path, () => syncRail());
 
 onMounted(() => {
+  void syncRail();
+  if (navEl.value) {
+    railResize = new ResizeObserver(() => {
+      void syncRail();
+    });
+    railResize.observe(navEl.value);
+  }
   from('.sidebar__item', {
     opacity: 0,
     x: -16,
@@ -155,6 +180,11 @@ onMounted(() => {
     duration: 0.5,
     ease: 'power3.out',
   });
+});
+
+onBeforeUnmount(() => {
+  railResize?.disconnect();
+  railResize = null;
 });
 </script>
 
@@ -164,22 +194,22 @@ onMounted(() => {
 .sidebar {
   display: flex;
   flex-direction: column;
-  // Width задаёт parent (`.app__sidebar`); rail full-fill.
+  // Width — у parent `.app__sidebar`, rail full-fill.
   width: 100%;
   height: 100%;
   min-height: 0;
-  // 14px ритм по вертикали: items / hub-card / version.
+  // 14px вертикальный ритм: items / hub-card / version.
   padding: 14px;
   position: relative;
   border-radius: 0;
-  // Glass без border/bevel — full-bleed rail иначе рисовал линию на стыке с titlebar.
+  // Glass без border / bevel.
   @include glass(var(--glass-alpha-medium), var(--glass-blur-strong));
   @include glass-noise();
   background: var(--sidebar-surface);
   border: 0;
   box-shadow: none;
 
-  // Heading: eyebrow «Меню» — мини-dot + label + hairline.
+  // Heading: eyebrow «Меню» = dot + label + hairline.
   &__heading {
     display: flex;
     align-items: center;
@@ -204,7 +234,7 @@ onMounted(() => {
     color: var(--color-text-muted);
     line-height: 1;
     flex-shrink: 0;
-    // Tracking шире text--micro — eyebrow читается на blur-фоне.
+    // Wider tracking для eyebrow на blur-фоне.
     letter-spacing: 0.12em;
   }
 
@@ -258,7 +288,7 @@ onMounted(() => {
       color 180ms var(--ease-out),
       background 180ms var(--ease-out);
 
-    // Hover (non-active): цвет + soft tint, без motion.
+    // Hover (non-active): brand tint + subtle background.
     &:hover:not(.is-active) {
       color: var(--color-text-primary);
       background: rgba(255, 255, 255, 0.04);
@@ -268,22 +298,18 @@ onMounted(() => {
       }
     }
 
-    // Active: brand tint + indicator pill слева.
+    // Active: brand tint + brand-purple на иконке. Pill rail рендерится отдельно.
     &.is-active {
       color: var(--color-text-primary);
       background: var(--gradient-brand-soft);
 
-      .sidebar__indicator {
-        opacity: 1;
-        transform: translateY(-50%) scaleY(1);
-      }
       .sidebar__icon {
         color: var(--color-brand-purple);
       }
     }
   }
 
-  // Icon slot — чистый SVG, transition по color.
+  // Icon slot: clean SVG, transition по color.
   &__icon {
     width: 38px;
     height: 38px;
@@ -323,25 +349,35 @@ onMounted(() => {
     font-weight: 700;
   }
 
-  // Indicator pill: `left: -14px` компенсирует sidebar padding, pill ложится на внешнюю кромку.
-  &__indicator {
+  // Sliding rail: один pill, top / height inline через JS, transition по ним.
+  // `left: -14px` компенсирует sidebar padding и кладёт rail на внешнюю кромку.
+  &__rail {
     position: absolute;
     left: -14px;
-    top: 50%;
-    transform: translateY(-50%) scaleY(0);
-    transform-origin: center;
     width: 3px;
-    height: 26px;
     border-radius: 0 3px 3px 0;
     background: var(--gradient-brand);
+    box-shadow: 0 0 12px rgba(var(--color-brand-purple-rgb), 0.55);
     opacity: 0;
-    transition:
-      transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
-      opacity 200ms var(--ease-out);
+    pointer-events: none;
+    transform: scaleX(1);
+    will-change: top, height, opacity;
+
+    // is-ready: включает transition после первого позиционирования.
+    &.is-ready {
+      transition:
+        top 360ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        height 280ms var(--ease-out),
+        opacity 220ms var(--ease-out);
+    }
+
+    &.is-active {
+      opacity: 1;
+    }
   }
 
   &__bottom {
-    // Whitespace вместо hairline'а — sidebar background уже даёт разделение.
+    // Whitespace вместо hairline'а: sidebar background уже разделяет.
     margin-top: 18px;
     flex-shrink: 0;
     display: flex;
@@ -349,7 +385,7 @@ onMounted(() => {
     gap: 12px;
   }
 
-  // Hub-card — кликабельный row в стиле sidebar__item, без glass-эффекта.
+  // Hub-card: кликабельный row в стиле sidebar__item, без glass.
   &__hub-card {
     --status-color: var(--color-text-muted);
     width: 100%;
@@ -404,13 +440,29 @@ onMounted(() => {
     position: relative;
     width: 38px;
     height: 38px;
+    flex-shrink: 0;
+    // Без overflow:hidden: pip torчит за периметр, halo клипуется на `__hub-orb`.
+  }
+
+  &__hub-orb {
+    position: absolute;
+    inset: 0;
     border-radius: 50%;
-    display: grid;
-    place-items: center;
+    overflow: hidden;
     background: color-mix(in srgb, var(--color-brand-purple) 14%, transparent);
     color: var(--color-brand-purple);
-    flex-shrink: 0;
+    display: grid;
+    place-items: center;
     transition: background-color 200ms var(--ease-out);
+
+    // JarvisOrb sized для 38px avatar.
+    :deep(.orb) {
+      --orb-size: 38px;
+    }
+    :deep(.orb__halo) {
+      // Halo внутрь avatar clip-зоны.
+      transform: scale(0.8);
+    }
 
     .sidebar__hub-card.is-active & {
       background: color-mix(in srgb, var(--color-brand-purple) 22%, transparent);
@@ -427,6 +479,8 @@ onMounted(() => {
     background: var(--status-color);
     border: 2px solid var(--color-bg, #0d0d12);
     transition: background-color 200ms var(--ease-out);
+    // Pip поверх орба без клипа.
+    z-index: 2;
 
     .sidebar__hub-card.is-active & {
       animation: hubPipPulse 2.4s ease-in-out infinite;
@@ -464,7 +518,7 @@ onMounted(() => {
   }
 
   &__hub-skill {
-    // Без border'а — tint-заливка отделяет чип от soft-bg карточки.
+    // Tint-fill вместо border'а отделяет чип от soft-bg карточки.
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -510,49 +564,62 @@ onMounted(() => {
   }
 }
 
-// Tablet 720–1100px: compact-режим (только иконки). Drawer на мобиле остаётся full-width.
+// Tablet 720–1100px: compact-режим (icon-only), иконки по центру column.
+// Track на всю ширину (`1fr`) + `justify-items: center`.
 @media (min-width: 721px) and (max-width: 1100px) {
-  .app__sidebar:not(.app__sidebar--drawer) {
-    .sidebar {
-      padding: 12px 8px;
+  .sidebar {
+    padding: 12px 8px;
 
-      &__item {
-        grid-template-columns: 38px;
-        padding: 0;
-        justify-items: center;
-      }
+    &__nav {
+      align-items: stretch;
+    }
 
-      // В compact только dot-маркер; label и hairline скрываем (иначе налезли бы на 38px chips).
-      &__heading {
-        justify-content: center;
-        margin: 2px 0 8px;
-        padding: 0;
-        gap: 0;
-      }
+    &__item {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 0;
+      justify-items: center;
+      justify-self: stretch;
+    }
 
-      &__heading-label,
-      &__heading-line {
-        display: none;
-      }
+    &__icon {
+      // 38×38, justify-self: center.
+      justify-self: center;
+    }
 
-      &__label,
-      &__badge,
-      &__hub-info,
-      &__hub-cta,
-      &__version {
-        display: none;
-      }
+    // Compact heading: только dot-маркер, без label / hairline.
+    &__heading {
+      justify-content: center;
+      margin: 2px 0 8px;
+      padding: 0;
+      gap: 0;
+    }
 
-      &__hub-card {
-        grid-template-columns: 38px;
-        padding: 6px;
-        justify-items: center;
-      }
+    &__heading-label,
+    &__heading-line {
+      display: none;
+    }
 
-      &__indicator {
-        // На compact pill ближе к краю.
-        left: -8px;
-      }
+    &__label,
+    &__badge,
+    &__hub-info,
+    &__hub-cta,
+    &__version {
+      display: none;
+    }
+
+    &__hub-card {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 6px;
+      justify-items: center;
+    }
+
+    &__hub-avatar {
+      justify-self: center;
+    }
+
+    &__rail {
+      // Compact: pill у внешней кромки (padding 8px → -8px).
+      left: -8px;
     }
   }
 }

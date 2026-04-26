@@ -1,7 +1,8 @@
 /**
- * @fileoverview
- * Tuya Cloud driver. Подпись v1.0 BUSINESS: sign = HMAC-SHA256(clientId + accessToken + t + nonce + stringToSign).
- * Bug fix: body sha256 нужно считать честно даже для пустого body (sha256("")), иначе POST-команды падают с `sign invalid`.
+ * @fileoverview Tuya Cloud driver. Подпись v1.0 BUSINESS:
+ * `sign = HMAC-SHA256(clientId + accessToken + t + nonce + stringToSign)`.
+ * Body SHA-256 считается всегда, включая пустое body (`sha256("")`); пропуск
+ * приводит к `sign invalid` на POST-командах.
  */
 
 import axios, { type AxiosInstance } from 'axios';
@@ -402,7 +403,7 @@ function buildCapsAndProps(
     if (prop) properties.push(prop);
   }
 
-  // Частичный status-read — fallback на previous, чтобы caps не «исчезли» в UI.
+  // Partial status-read: fallback на prevCaps / prevProps для сохранения capabilities.
   if (!capabilities.length && opts.prevCaps?.length) {
     return {
       capabilities: opts.prevCaps,
