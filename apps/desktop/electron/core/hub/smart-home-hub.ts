@@ -158,9 +158,6 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
       });
     }
 
-    // Если юзер залогинен в Яндексе — фоном синхронизируем «Дом с Алисой».
-    // Локальные устройства уже подняты deviceRegistry.init(), здесь догоняем
-    // дельту (новые / удалённые / изменённые).
     if (deps.settings.get('quasarAuth')?.musicToken && deps.driverRegistry.get('yandex-iot')) {
       void yandexImport.sync().catch((e) => {
         log.warn(`Yandex IoT auto-sync at boot failed: ${(e as Error).message}`);
@@ -388,9 +385,6 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
         throw new Error('Сначала войдите через Яндекс — без авторизации окно покажет пустую страницу.');
       }
       await openYandexHomeBindingWindow();
-      // После закрытия окна — auto-sync. Используем тот же import-сервис что и
-      // ручная кнопка «Синхронизировать с Яндексом», чтобы счётчики и события
-      // совпадали с обычным flow.
       return yandexImport.sync();
     },
 

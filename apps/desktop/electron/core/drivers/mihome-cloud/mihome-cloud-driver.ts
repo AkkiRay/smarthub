@@ -199,10 +199,6 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
     this.session = null;
   }
 
-  // Mi Cloud signing: nonce(16 bytes) + sign(HMAC-SHA256 of method+'&'+url+'&'+ssecurity+'&'+nonce)
-  // Body содержит data, signed_nonce, signature (Base64 RC4 of payload). Здесь — упрощённая
-  // версия без RC4 (POST plain JSON), которая работает на части регионов; для cn-региона иногда
-  // требуется encrypt-mode — добавим, если пользователь зарегистрирует в этом регионе.
   private async callApi<T = unknown>(path: string, body: object): Promise<T> {
     const session = await this.ensureSession();
 

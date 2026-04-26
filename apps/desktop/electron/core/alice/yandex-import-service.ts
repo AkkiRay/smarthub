@@ -62,9 +62,6 @@ export class YandexImportService {
     const yandexDeviceIds = new Set(candidates.map((c) => c.externalId));
     const snapshot = this.cachedSnapshot();
 
-    // Комнаты импортируем ДО устройств: yandex-iot driver выставляет device.room на
-    // yandex roomId; если соответствующая room-запись отсутствует — UI покажет
-    // «Без комнаты» до следующего sync'а.
     const roomsImported = snapshot ? this.importRooms(snapshot) : 0;
     if (!snapshot) {
       log.warn('YandexImport: snapshot cache empty after discover() — rooms skipped');

@@ -317,8 +317,6 @@ const { from } = useGsap(root.value);
 onMounted(async () => {
   if (!scenes.scenes.length) await scenes.bootstrap();
 
-  // Active integrations check — для onboarding-баннера. Mock и yandex-station исключаем,
-  // потому что mock — debug-режим, а yandex-station учитывается отдельным шагом.
   try {
     const drivers = await window.smarthome.drivers.list();
     hasAnyIntegration.value = drivers.some(

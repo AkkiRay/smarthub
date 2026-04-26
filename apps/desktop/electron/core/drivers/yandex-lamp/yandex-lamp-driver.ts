@@ -144,9 +144,6 @@ export class YandexLampDriver extends BaseDriver {
     });
 
     sock.on('error', (err) => {
-      // EADDRINUSE — нормально, если SmartLife/TuyaApp уже слушает порт. С reuseAddr
-      // Linux/macOS нас пускают, на Windows иногда нет — тогда detection не работает,
-      // но Hub не падает.
       this.logWarn(`UDP listener error on :${port}`, err);
     });
 
@@ -167,9 +164,6 @@ export class YandexLampDriver extends BaseDriver {
   }
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    // Listener запущен в constructor — broadcasts накапливаются непрерывно.
-    // Здесь мы просто ждём `DISCOVERY_LISTEN_MS`, чтобы успеть поймать минимум
-    // один broadcast (10s interval — ловим в среднем 1-2 за 3.5s окно).
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, DISCOVERY_LISTEN_MS);
       signal.addEventListener('abort', () => {

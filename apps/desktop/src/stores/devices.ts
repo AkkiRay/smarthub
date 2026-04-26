@@ -230,9 +230,6 @@ export const useDevicesStore = defineStore('devices', () => {
       const fresh = await window.smarthome.devices.list();
       devices.value = fresh;
 
-      // Yandex-комнаты тоже подсосались в registry. Рефрешим rooms-store, если он
-      // уже забутстраплен, чтобы RoomsView мгновенно показал свежие комнаты.
-      // Импорт делаем lazy — не плодим зависимость, если стор ещё не открывался.
       try {
         const rooms = await window.smarthome.rooms.list();
         const roomsStore = (await import('./rooms')).useRoomsStore();

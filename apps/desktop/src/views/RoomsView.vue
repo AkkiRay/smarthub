@@ -367,10 +367,6 @@ const roomsWithStats = computed(() =>
         (c) => c.type === 'devices.capabilities.range' && c.parameters?.['instance'] === 'brightness',
       ),
     );
-    // Colorable = лампа реально принимает RGB или HSV, а не только CCT.
-    // Yandex отвечает 400 BAD_REQUEST если послать `instance:'rgb'` лампе с
-    // `parameters: { temperature_k: {...} }` без `color_model`. Поэтому фильтруем
-    // строго — иначе UI обещает кастом-цвет, который не сработает.
     const colorable = inRoom.filter((d) => acceptsRgbOrHsv(d));
     return {
       ...r,

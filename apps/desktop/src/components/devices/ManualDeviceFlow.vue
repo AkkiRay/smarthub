@@ -276,8 +276,6 @@ async function submit(): Promise<void> {
 
   step.value = 'pairing';
 
-  // generic-http не имеет autodiscovery: собираем DiscoveredDevice вручную.
-  // externalId = uuid, потому что у user-устройства нет стабильного native-id.
   const externalId = `manual:${cryptoRandomId()}`;
   const candidate: DiscoveredDevice = {
     driver: 'generic-http',

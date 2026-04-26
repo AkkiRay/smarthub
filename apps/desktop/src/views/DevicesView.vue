@@ -149,11 +149,6 @@ onMounted(async () => {
     /* offline / api недоступен — кнопка остаётся disabled */
   }
 
-  // Self-heal: устройства, спаренные ДО того как room-binding научился тянуть
-  // roomId из снапшота, лежат в БД с пустым `device.room`. Если пользователь
-  // авторизован — тихо запускаем sync (он перепрочитает state каждого устройства
-  // через readState, который теперь обновляет room). Триггерим максимум один
-  // раз за сессию, и только если есть кому помогать.
   if (!backfillTried && yandexAuthorized.value) {
     backfillTried = true;
     const unrooted = devices.devices.filter(

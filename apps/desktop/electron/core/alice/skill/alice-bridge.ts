@@ -222,9 +222,6 @@ export class AliceBridge extends EventEmitter {
   setDeviceExposure(exposure: AliceDeviceExposure): AliceDeviceExposure[] {
     this.deps.settings.setDeviceExposure(exposure);
     this.emitStatus();
-    // Push discovery в Алису fire-and-forget — UI не ждёт результата (оптимистичный toggle).
-    // Но если push падает (нет интернета / skill отвязан), логируем явно: иначе у юзера
-    // toggle обновился, а Алиса ещё минут 5 показывает старое — без объяснения причины.
     this.pushDiscoveryAsync('device-exposure');
     return Object.values(this.deps.settings.getAlice().deviceExposures);
   }

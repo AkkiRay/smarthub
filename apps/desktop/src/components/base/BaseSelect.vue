@@ -80,9 +80,6 @@
 </template>
 
 <script setup lang="ts">
-// Custom select c popover. Native <select> в Electron Windows игнорирует тёмную
-// тему. Поддержка: keyboard-nav, click-outside, smart-positioning, Teleport
-// в <body> чтобы не клиппило overflow:hidden родителем.
 
 import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
 

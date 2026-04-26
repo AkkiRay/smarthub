@@ -322,10 +322,6 @@ export class YandexIotDriver extends BaseDriver {
         return { ...device, status: 'unreachable', updatedAt: new Date().toISOString() };
       }
       const now = new Date().toISOString();
-      // Подтягиваем room: если пользователь переложил устройство в Я.Доме в другую
-      // комнату, локальная привязка должна догнаться через polling без ручного sync'а.
-      // Также важно для устройств, спаренных ДО фикса room.id-мапинга — у них в БД
-      // лежит пустой `room`, а в свежем snapshot'е roomId уже есть.
       const roomPatch = fresh.roomId ? { room: fresh.roomId } : {};
       return {
         ...device,

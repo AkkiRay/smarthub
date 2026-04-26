@@ -95,9 +95,6 @@ function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
 
     // drivers
     'drivers:list': () => hub.drivers.list(),
-    // IPC канал не сужает driverId до DriverId-union на runtime — driver-registry
-    // отбрасывает неизвестные id с warn'ом. На compile-time приводим к DriverId, чтобы
-    // согласовать с generic-сигнатурой hub.drivers.setCredentials/getCredentials.
     'drivers:set-credentials': (driverId, creds) =>
       hub.drivers.setCredentials(driverId as DriverId, creds as DriverCredentials<DriverId>),
     'drivers:get-credentials': (driverId) => hub.drivers.getCredentials(driverId as DriverId),

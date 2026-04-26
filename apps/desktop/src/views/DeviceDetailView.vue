@@ -214,12 +214,6 @@ const device = computed(() => devices.byId.get(id.value));
 /** Yandex-импортированные устройства редактировать локально нельзя — sync затрёт изменения. */
 const isYandexImported = computed(() => device.value?.driver === 'yandex-iot');
 
-// ---- Speaker bridge --------------------------------------------------------
-// «Это Я.Станция?» — определяем по driver+type+capability, а НЕ по совпадению
-// с deviceId активной WS-сессии: cloud-IoT отдаёт собственный UUID, тогда как
-// glagol-сессия знает только hardware deviceId — для одной и той же физической
-// колонки эти два ID часто разные. Раньше пользователь видел generic-капабилки
-// вместо пульта, потому что сравнение всегда провалилось.
 const isYandexStation = computed(() => {
   const d = device.value;
   if (!d) return false;
@@ -518,9 +512,6 @@ const roomOptions = computed<SelectOption[]>(() => [
 
 onMounted(async () => {
   if (!rooms.rooms.length) await rooms.bootstrap();
-  // Тихий refresh при заходе — UI должен показывать актуальный state без явного
-  // нажатия «Обновить». Polling работает, но интервал 30s — этого мало для UX,
-  // когда пользователь только что открыл карточку.
   if (id.value && devices.byId.get(id.value)) {
     void devices.refresh(id.value).catch(() => {
       /* refresh — best-effort: ошибки уже логируются в registry/driver */

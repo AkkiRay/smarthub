@@ -367,9 +367,6 @@ async function postJsonWithCsrf<T>(
         'user-agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
         'x-csrf-token': csrfToken,
-        // Origin/Referer НЕ ставим: Chromium net-stack тогда включает CORS-preflight,
-        // а iot.quasar не отвечает CORS-headers'ами → ERR_BLOCKED_BY_CLIENT. AlexxIT
-        // через aiohttp эти headers не шлёт, и всё работает на чистых cookies+CSRF.
         accept: 'application/json',
         'content-type': 'application/json',
       },
@@ -629,10 +626,6 @@ export class YandexIotClient {
     const allScenarios: RawScenario[] = [...scenariosRaw];
     const allHouseholds: RawHousehold[] = raw.households ?? [];
 
-    // Сначала обходим rooms[].items[] и собираем карту deviceId → roomId. Записи
-    // в `h.all` приходят БЕЗ привязки к комнате; embedded-копии в `h.rooms[].items[]`
-    // имеют roomId, но дальнейший dedup по `id` сохраняет первую встреченную версию,
-    // поэтому без этой карты `h.all` побеждает и комната теряется (UI рисует 0/0).
     const roomIdByDeviceId = new Map<string, string>();
     for (const h of allHouseholds) {
       if (!Array.isArray(h.rooms)) continue;
@@ -791,9 +784,6 @@ export class YandexIotClient {
       devices,
       scenarios,
       fetchedAt: new Date().toISOString(),
-      // Кэшируем `updates_url` тут же, чтобы driver мог открыть WS на push-обновления
-      // capability/property-state без отдельного round-trip'а. Yandex кладёт его на
-      // верхний уровень ответа `m/v3/user/devices`.
       ...(raw.updates_url ? { updatesUrl: raw.updates_url } : {}),
     };
     log.info(
