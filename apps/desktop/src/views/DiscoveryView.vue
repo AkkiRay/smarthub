@@ -173,7 +173,7 @@
         :class="{ 'candidate--paired': isPaired(c) }"
       >
         <div class="candidate__icon" :style="{ '--accent': accentFor(c.driver) }">
-          <span class="candidate__icon-glyph" v-html="iconForType(c.type)" />
+          <span class="candidate__icon-glyph" v-safe-html="iconForType(c.type)" />
         </div>
 
         <div class="candidate__body">

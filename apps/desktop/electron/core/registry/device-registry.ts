@@ -50,6 +50,11 @@ export function createDeviceRegistry(deps: {
   const cache = new Map<string, Device>();
   const roomCache = new Map<string, Room>();
 
+  /** Per-device in-flight `refresh()` — concurrent callers await one HTTP. */
+  const refreshLocks = new Map<string, Promise<Device>>();
+  /** Tracked post-execute timers — clear on shutdown, иначе late `refresh()` падает. */
+  const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
+
   const emitUpdated = (device: Device): void => {
     emitter.emit('device:updated', device);
   };
@@ -174,26 +179,39 @@ export function createDeviceRegistry(deps: {
     },
 
     async refresh(id: string): Promise<Device> {
+      const inflight = refreshLocks.get(id);
+      if (inflight) return inflight;
+
       const existing = cache.get(id);
       if (!existing) throw new Error(`Unknown device ${id}`);
       const driver = deps.driverRegistry.require(existing.driver);
+
+      const promise = (async (): Promise<Device> => {
+        try {
+          const fresh = await driver.readState(existing);
+          const merged: Device = {
+            ...existing,
+            ...fresh,
+            updatedAt: new Date().toISOString(),
+            lastSeenAt: new Date().toISOString(),
+          };
+          return persistAndEmit(merged);
+        } catch (e) {
+          const offline: Device = {
+            ...existing,
+            status: 'unreachable',
+            updatedAt: new Date().toISOString(),
+          };
+          log.warn(`refresh(${id}) failed: ${(e as Error).message}`);
+          return persistAndEmit(offline);
+        }
+      })();
+
+      refreshLocks.set(id, promise);
       try {
-        const fresh = await driver.readState(existing);
-        const merged: Device = {
-          ...existing,
-          ...fresh,
-          updatedAt: new Date().toISOString(),
-          lastSeenAt: new Date().toISOString(),
-        };
-        return persistAndEmit(merged);
-      } catch (e) {
-        const offline: Device = {
-          ...existing,
-          status: 'unreachable',
-          updatedAt: new Date().toISOString(),
-        };
-        log.warn(`refresh(${id}) failed: ${(e as Error).message}`);
-        return persistAndEmit(offline);
+        return await promise;
+      } finally {
+        refreshLocks.delete(id);
       }
     },
 
@@ -225,17 +243,17 @@ export function createDeviceRegistry(deps: {
         };
         persistAndEmit(updated);
 
-        // Подтягиваем свежий state через ~1.5s — за это время большинство девайсов
-        // успевают применить команду И обновить связанные properties (потребление,
-        // температура и т.п.). Без этого пользователь видит обновлённую capability,
-        // но property-карточки остаются stale до следующего polling-цикла (30s).
-        setTimeout(() => {
+        // ~1.5s — большинство девайсов успевают применить action и обновить properties.
+        // Tracked timer — отменяется в shutdown'е.
+        const timer = setTimeout(() => {
+          pendingTimers.delete(timer);
           void this.refresh(command.deviceId).catch((e) => {
             log.debug(
               `post-execute refresh ${command.deviceId} failed: ${(e as Error).message}`,
             );
           });
         }, 1500);
+        pendingTimers.add(timer);
       }
       return result;
     },
@@ -322,7 +340,7 @@ export function createDeviceRegistry(deps: {
       },
     },
 
-    /** Hub вызывает при app shutdown — отписываемся от всех push-стримов. */
+    /** Hub вызывает при app shutdown — отписываемся от всех push-стримов и таймеров. */
     shutdown(): void {
       for (const unsub of pushUnsubscribes) {
         try {
@@ -332,6 +350,9 @@ export function createDeviceRegistry(deps: {
         }
       }
       pushUnsubscribes.length = 0;
+      for (const timer of pendingTimers) clearTimeout(timer);
+      pendingTimers.clear();
+      refreshLocks.clear();
     },
   };
 }

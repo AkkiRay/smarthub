@@ -32,6 +32,26 @@
 
     <p v-if="station.homeError" class="home-dash__error">{{ station.homeError }}</p>
 
+    <!-- ============================ Household selector =================== -->
+    <!-- Виден если households.length > 1; импорт фильтрует по выбранному. -->
+    <section v-if="households.length > 1" class="home-dash__household">
+      <label class="home-dash__household-label" for="household-select">
+        Активный дом
+      </label>
+      <select
+        id="household-select"
+        class="home-dash__household-select"
+        :value="selectedHouseholdId ?? ''"
+        :disabled="switchingHousehold"
+        @change="onHouseholdChange(($event.target as HTMLSelectElement).value)"
+      >
+        <option v-for="h in households" :key="h.id" :value="h.id">
+          {{ h.name }}
+        </option>
+      </select>
+      <span v-if="switchingHousehold" class="home-dash__household-hint">Переключаем…</span>
+    </section>
+
     <!-- ============================ Stats grid ============================ -->
     <div class="home-dash__stats">
       <div class="home-dash__stat">
@@ -159,6 +179,35 @@ const scenarioCount = computed(() => snapshot.value?.scenarios.length ?? 0);
 const syncing = ref(false);
 const runningScenarioId = ref<string | null>(null);
 
+// Households dropdown — виден только при households.length > 1.
+const households = ref<Array<{ id: string; name: string }>>([]);
+const selectedHouseholdId = ref<string | null>(null);
+const switchingHousehold = ref(false);
+
+async function loadHouseholds(): Promise<void> {
+  try {
+    const r = await window.smarthome.yandexStation.listHouseholds();
+    households.value = r.households;
+    selectedHouseholdId.value = r.selected;
+  } catch {
+    /* not authorized yet — UI скроется автоматически households.length === 0 */
+  }
+}
+
+async function onHouseholdChange(id: string): Promise<void> {
+  if (switchingHousehold.value || id === selectedHouseholdId.value) return;
+  switchingHousehold.value = true;
+  try {
+    await window.smarthome.yandexStation.setHousehold(id || null);
+    selectedHouseholdId.value = id || null;
+    await Promise.all([station.fetchHome(), devices.syncYandexHome()]);
+  } catch (e) {
+    toaster.push({ kind: 'error', message: (e as Error).message });
+  } finally {
+    switchingHousehold.value = false;
+  }
+}
+
 async function onRunScenario(id: string): Promise<void> {
   if (runningScenarioId.value) return;
   runningScenarioId.value = id;
@@ -192,6 +241,7 @@ onMounted(() => {
   if (!station.home && !station.isLoadingHome) {
     void station.fetchHome();
   }
+  void loadHouseholds();
 });
 
 async function onSync(): Promise<void> {
@@ -199,7 +249,14 @@ async function onSync(): Promise<void> {
   syncing.value = true;
   try {
     // Параллельно: snapshot для дашборда + импорт в реестр устройств.
-    await Promise.all([station.fetchHome(), devices.syncYandexHome().catch(() => null)]);
+    const [, summary] = await Promise.all([
+      station.fetchHome(),
+      devices.syncYandexHome().catch(() => null),
+    ]);
+    if (summary) {
+      households.value = summary.availableHouseholds;
+      selectedHouseholdId.value = summary.householdId;
+    }
   } finally {
     syncing.value = false;
   }
@@ -302,6 +359,46 @@ function pluralize(n: number, forms: [string, string, string]): string {
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+  }
+
+  &__household {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  &__household-label {
+    font-size: 12px;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    letter-spacing: var(--tracking-meta);
+    text-transform: uppercase;
+  }
+
+  &__household-select {
+    flex: 1 1 auto;
+    min-width: 160px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary, #fff);
+    font-size: 13px;
+    cursor: pointer;
+    appearance: auto;
+    &:disabled {
+      opacity: 0.6;
+      cursor: progress;
+    }
+  }
+
+  &__household-hint {
+    font-size: 12px;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
   }
 
   &__title {

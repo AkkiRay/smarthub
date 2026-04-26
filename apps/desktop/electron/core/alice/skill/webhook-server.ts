@@ -49,6 +49,26 @@ import type { SettingsStore } from '../../storage/settings-store.js';
 
 const RESPONSE_BUDGET_MS = 2_500; // Алиса даёт 3с total → оставляем 500мс на сеть
 
+/** Allow-list redirect_uri для /authorize — open-redirect защита. */
+const ALLOWED_REDIRECT_PREFIXES = [
+  'https://social.yandex.net/',
+  'https://social.yandex.ru/',
+  'https://dialogs.yandex.ru/',
+];
+
+function isAllowedRedirectUri(uri: string): boolean {
+  if (typeof uri !== 'string' || uri.length === 0 || uri.length > 1024) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  const normalized = parsed.origin + parsed.pathname;
+  return ALLOWED_REDIRECT_PREFIXES.some((p) => normalized.startsWith(p));
+}
+
 export interface WebhookActivityEvent {
   method: 'devices' | 'query' | 'action' | 'unlink';
   ok: boolean;
@@ -93,12 +113,15 @@ export class SkillWebhookServer {
           }
         });
       });
-      server.on('error', reject);
+      // `once` — startup-error → reject; runtime errors ловит долгоживущий ниже.
+      server.once('error', reject);
       // Bind на 127.0.0.1 — туннель проксирует на localhost; никаких external listeners.
       server.listen(0, '127.0.0.1', () => {
         this.server = server;
         const addr = server.address() as AddressInfo;
         this.port = addr.port;
+        server.removeListener('error', reject);
+        server.on('error', (err) => log.error('[skill-webhook] runtime server error', err));
         log.info(`[skill-webhook] listening on 127.0.0.1:${this.port}`);
         resolve({ port: this.port });
       });
@@ -182,6 +205,8 @@ export class SkillWebhookServer {
     if (config && clientId !== config.oauthClientId) errors.push('Неверный client_id.');
     if (responseType !== 'code')
       errors.push(`response_type должен быть "code", получен "${responseType}".`);
+    if (!isAllowedRedirectUri(redirectUri))
+      errors.push('redirect_uri не из allow-list (ожидается social.yandex.net/.ru или dialogs.yandex.ru).');
 
     res.statusCode = errors.length ? 400 : 200;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -202,6 +227,20 @@ export class SkillWebhookServer {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.end(
         renderAuthorizePage({ clientId, redirectUri, state, errors: ['Неверный client_id.'] }),
+      );
+      return;
+    }
+    if (!isAllowedRedirectUri(redirectUri)) {
+      // Никогда не делаем 302 на произвольный URL.
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.end(
+        renderAuthorizePage({
+          clientId,
+          redirectUri,
+          state,
+          errors: ['redirect_uri вне allow-list — отказ в редиректе.'],
+        }),
       );
       return;
     }
@@ -241,8 +280,16 @@ export class SkillWebhookServer {
 
     if (grantType === 'authorization_code') {
       const code = body.get('code') ?? '';
+      const requestRedirectUri = body.get('redirect_uri') ?? '';
       const record = this.tokens.consumeCode(code);
       if (!record) return fail(400, 'invalid_grant', 'Code expired or unknown');
+      // RFC 6749 §4.1.3 — client_id и redirect_uri должны совпасть с /authorize.
+      if (record.clientId !== clientId) {
+        return fail(400, 'invalid_grant', 'client_id mismatch');
+      }
+      if (record.redirectUri !== requestRedirectUri) {
+        return fail(400, 'invalid_grant', 'redirect_uri mismatch');
+      }
       const pair = this.tokens.issueTokenPair(record.internalUserId);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');

@@ -166,8 +166,21 @@ export interface IpcApi {
       failed: number;
       total: number;
       rooms: number;
+      householdId: string | null;
+      availableHouseholds: Array<{ id: string; name: string }>;
       lastError?: string;
     }>;
+    /**
+     * Список households («домов»), доступных в Yandex-аккаунте, и текущий выбор.
+     * Импорт фильтрует устройства по `selected` — если null, выбирается дом с
+     * максимальным числом устройств при первом sync'е.
+     */
+    listHouseholds: () => Promise<{
+      households: Array<{ id: string; name: string }>;
+      selected: string | null;
+    }>;
+    /** Сохраняет активный household; UI обычно сразу зовёт `syncHomeDevices()`. */
+    setHousehold: (id: string | null) => Promise<void>;
     /**
      * Открывает embedded-окно «Дома с Алисой» (yandex.ru/quasar/iot) в той же
      * OAuth-партиции — юзер уже авторизован, может добавить лампочку прямо
@@ -181,6 +194,8 @@ export interface IpcApi {
       failed: number;
       total: number;
       rooms: number;
+      householdId: string | null;
+      availableHouseholds: Array<{ id: string; name: string }>;
       lastError?: string;
     }>;
     /**

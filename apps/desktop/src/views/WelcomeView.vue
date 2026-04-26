@@ -52,7 +52,7 @@
                   }"
                 >
                   <span class="welcome__feature-glyph">
-                    <span v-html="f.icon" />
+                    <span v-safe-html="f.icon" />
                   </span>
                   <h3 class="welcome__feature-title">{{ f.title }}</h3>
                   <p class="welcome__feature-text">{{ f.text }}</p>

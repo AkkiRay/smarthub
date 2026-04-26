@@ -19,11 +19,12 @@
  * в {@link HUB_EVENTS}.
  */
 
-import { app, shell } from 'electron';
+import { app } from 'electron';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import log from 'electron-log/main.js';
 import type { DriverCredentials, DriverId } from '@smarthome/shared';
 import type { SmartHomeHub } from '@core/hub/smart-home-hub.js';
+import { safeOpenExternal } from '@main/security/open-external.js';
 
 export interface IpcHandlerDeps {
   ipcMain: IpcMain;
@@ -55,7 +56,7 @@ function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
     'app:get-version': () => app.getVersion(),
     'app:get-platform': () => process.platform,
     'app:get-hub-info': () => hub.getInfo(),
-    'app:open-external': (url) => shell.openExternal(url as string),
+    'app:open-external': (url) => safeOpenExternal(url),
 
     // devices
     'devices:list': () => hub.devices.list(),
@@ -117,6 +118,9 @@ function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
     'yandexStation:fetch-stations': () => hub.yandexStation.fetchStations(),
     'yandexStation:fetch-home-devices': () => hub.yandexStation.fetchHomeDevices(),
     'yandexStation:sync-home-devices': () => hub.yandexStation.syncHomeDevices(),
+    'yandexStation:list-households': () => hub.yandexStation.listYandexHouseholds(),
+    'yandexStation:set-household': (id) =>
+      hub.yandexStation.setYandexHousehold(id as string | null),
     'yandexStation:open-home-binding-window': () => hub.yandexStation.openHomeBindingWindow(),
     'yandexStation:run-home-scenario': (id) =>
       hub.yandexStation.runHomeScenario(id as string),

@@ -11,7 +11,7 @@
   >
     <div class="device-card__top">
       <div class="device-card__icon">
-        <span v-html="iconSvg" />
+        <span v-safe-html="iconSvg" />
       </div>
       <span class="chip" :class="device.status === 'online' ? 'chip--online' : 'chip--offline'">
         {{ device.status === 'online' ? 'Онлайн' : 'Оффлайн' }}
