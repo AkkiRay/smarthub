@@ -431,19 +431,18 @@ onMounted(() => {
 @use '@/styles/abstracts/mixins' as *;
 
 .welcome {
-  position: relative;
+  // Absolute-positioned поверх app__fullscreen (он `position: relative; flex: 1`).
+  // Это исключает любые flex/grid-конфликты с parent — welcome всегда занимает
+  // ровно слот fullscreen, не больше и не меньше.
+  position: absolute;
+  inset: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: clamp(10px, 1.4vw, 18px);
-  // height: 100% — наследуем от .app__fullscreen (flex: 1 в .app колонке).
-  // Раньше был 100dvh который выходил за parent и срезался → бар уезжал в центр.
-  height: 100%;
-  width: 100%;
   padding: clamp(12px, 1.6vw, 24px) clamp(20px, 3.2vw, 44px);
   color: var(--color-text-primary);
   outline: none;
   overflow: hidden;
-  min-height: 0;
 
   @media (max-height: 720px) {
     gap: 8px;
