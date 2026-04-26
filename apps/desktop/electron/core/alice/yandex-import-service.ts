@@ -21,6 +21,7 @@ import type { DeviceRegistry } from '../registry/device-registry.js';
 import {
   detectCurrentNetwork,
   findHouseholdForNetwork,
+  networkMatches,
   type NetworkSignature,
 } from '../network/network-identity.js';
 import { guessRoomIcon } from './room-icon-guesser.js';
@@ -73,6 +74,22 @@ export class YandexImportService {
 
     // Bind current network to active household — следующий sync на этой сети auto-pick.
     if (householdId) this.rememberNetworkForHousehold(householdId, currentNetwork);
+
+    // Self-heal: каждый sync чистит yandex-iot записи, не принадлежащие active
+    // household (включая legacy без meta.householdId). Иначе старые устройства
+    // живут в БД и /devices показывает их при том что dashboard их не считает.
+    if (householdId) {
+      let preWiped = 0;
+      for (const d of this.deps.deviceRegistry.list()) {
+        if (d.driver !== YandexImportService.DRIVER_ID) continue;
+        const hid = d.meta?.['householdId'];
+        if (typeof hid !== 'string' || hid !== householdId) {
+          this.deps.deviceRegistry.remove(d.id);
+          preWiped++;
+        }
+      }
+      if (preWiped > 0) log.info(`YandexImport.sync: pre-wiped ${preWiped} foreign-household devices`);
+    }
 
     const filteredCandidates = householdId
       ? candidates.filter((c) => c.meta?.['householdId'] === householdId)
@@ -132,33 +149,42 @@ export class YandexImportService {
   }
 
   /**
-   * Сохраняет выбор + purge yandex-устройств других домов + асинхронно отвязывает
-   * текущую сеть от прежних bindings (anti-stale при перепривязке).
+   * Сохраняет выбор + purge yandex-устройств других домов + асинхронно
+   * перепривязывает current network: убирает её из других households и
+   * добавляет к keepId. Explicit user-action «выбираю этот дом» = «эта сеть
+   * принадлежит этому дому» — иначе binding ждал следующего sync(), который
+   * мог упасть/не случиться, и UI вечно показывал «не привязана».
    */
   setSelectedHousehold(id: string | null): void {
     const prev = this.deps.settings.get('selectedHouseholdId');
     this.deps.settings.set('selectedHouseholdId', id);
     log.info(`YandexImport: selectedHouseholdId ${prev ?? 'null'} → ${id ?? 'null'}`);
     if (id && prev !== id) {
+      // Wipe also legacy devices без `meta.householdId` (импорт до household-tracking) —
+      // verify невозможен → safer удалить, sync re-импортирует если они принадлежат `id`.
       let pruned = 0;
       for (const d of this.deps.deviceRegistry.list()) {
-        if (
-          d.driver === YandexImportService.DRIVER_ID &&
-          d.meta?.['householdId'] !== id
-        ) {
+        if (d.driver !== YandexImportService.DRIVER_ID) continue;
+        const hid = d.meta?.['householdId'];
+        if (typeof hid !== 'string' || hid !== id) {
           this.deps.deviceRegistry.remove(d.id);
           pruned++;
         }
       }
-      if (pruned > 0) log.info(`YandexImport: pruned ${pruned} devices from other households`);
-      void this.unbindCurrentNetworkFromOtherHouseholds(id).catch((e) =>
-        log.warn(`YandexImport: stale-binding cleanup failed: ${(e as Error).message}`),
+      if (pruned > 0) log.info(`YandexImport: pruned ${pruned} devices on household switch`);
+      void this.rebindCurrentNetworkOnHouseholdSwitch(id).catch((e) =>
+        log.warn(`YandexImport: rebind on switch failed: ${(e as Error).message}`),
       );
     }
   }
 
-  /** Удаляет current network signature из bindings всех households кроме `keepId`. */
-  private async unbindCurrentNetworkFromOtherHouseholds(keepId: string): Promise<void> {
+  /**
+   * Single anti-stale + auto-bind операция при смене household:
+   *   1. Чистит current network из bindings других households (не оставляем
+   *      призрак — иначе resolveHousehold переключится обратно на следующем sync).
+   *   2. Добавляет current network к `keepId` — explicit user choice.
+   */
+  private async rebindCurrentNetworkOnHouseholdSwitch(keepId: string): Promise<void> {
     const current = await detectCurrentNetwork();
     if (!current.gatewayMac && !current.ssid && !current.subnet) return;
     const bindings = { ...this.deps.settings.get('householdNetworks') };
@@ -171,20 +197,31 @@ export class YandexImportService {
         changed = true;
       }
     }
-    if (changed) {
-      this.deps.settings.set('householdNetworks', bindings);
-      log.info('YandexImport: cleaned stale network bindings from other households');
+    const list = bindings[keepId] ? [...bindings[keepId]] : [];
+    if (!list.some((s) => this.signaturesMatch(s, current))) {
+      list.push(current);
+      bindings[keepId] = list;
+      changed = true;
+      log.info(
+        `YandexImport: bound network mac=${current.gatewayMac ?? '-'} ssid=${current.ssid ?? '-'} subnet=${current.subnet ?? '-'} → ${keepId} (on household switch)`,
+      );
     }
+    if (changed) this.deps.settings.set('householdNetworks', bindings);
   }
 
+  /**
+   * Тонкий wrapper над shared `networkMatches`: единственный source of truth
+   * для логики match'а. Принимает stored-shape (gatewayMac optional, без
+   * detectedAt) — нормализует к NetworkSignature и делегирует.
+   */
   private signaturesMatch(
     a: { gatewayMac?: string | null; ssid: string | null; subnet: string | null },
     b: NetworkSignature,
   ): boolean {
-    if (a.gatewayMac && b.gatewayMac) return a.gatewayMac === b.gatewayMac;
-    if (a.ssid && b.ssid) return a.ssid === b.ssid;
-    if (a.subnet && b.subnet) return a.subnet === b.subnet;
-    return false;
+    return networkMatches(
+      { gatewayMac: a.gatewayMac ?? null, ssid: a.ssid, subnet: a.subnet, detectedAt: '' },
+      b,
+    );
   }
 
   // ---- private --------------------------------------------------------------

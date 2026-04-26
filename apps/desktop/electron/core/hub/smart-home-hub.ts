@@ -317,7 +317,11 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
   deps.deviceRegistry.setCommandPrecheck(async (device) => {
     if (device.driver !== 'yandex-iot') return { allowed: true };
     if (deps.settings.get('allowCloudControlOffNetwork')) return { allowed: true };
-    const householdId = device.meta?.['householdId'];
+    // Legacy записи без meta.householdId — fallback на active household, иначе
+    // unmetadat'ные устройства проходили gate, а размеченные — нет (асимметрия).
+    const meta = device.meta?.['householdId'];
+    const householdId =
+      typeof meta === 'string' ? meta : deps.settings.get('selectedHouseholdId');
     if (typeof householdId !== 'string') return { allowed: true };
     const bindings = deps.settings.get('householdNetworks')[householdId] ?? [];
     if (bindings.length === 0) return { allowed: true };
@@ -329,7 +333,7 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     return {
       allowed: false,
       errorCode: 'NETWORK_MISMATCH',
-      errorMessage: `Текущая сеть (${current.ssid ?? current.subnet ?? 'неизвестна'}) не привязана к дому устройства. Включите «Удалённое управление» в настройках если хотите управлять отсюда.`,
+      errorMessage: `Текущая сеть (${current.ssid ?? current.subnet ?? 'неизвестна'}) не привязана к дому устройства. Включите «Удалённое управление» если хотите управлять отсюда.`,
     };
   });
 
