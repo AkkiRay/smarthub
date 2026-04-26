@@ -91,7 +91,43 @@
   --radius-md: 16px;
   --radius-lg: 22px;
   --radius-xl: 28px;
+  --radius-2xl: 36px;
   --radius-pill: 999px;
+
+  // ---- Border width ----
+  --border-thin: 1px;
+  --border-bold: 2px;
+
+  // ---- Density / card padding ----
+  --pad-tight: clamp(12px, 1vw, 16px);
+  --pad-comfort: clamp(16px, 1.4vw, 22px);
+  --pad-roomy: clamp(20px, 2vw, 32px);
+  --pad-grand: clamp(28px, 3vw, 56px);
+
+  // ---- Icon-box scale ----
+  --icon-box-xs: 24px;
+  --icon-box-sm: 32px;
+  --icon-box-md: 40px;
+  --icon-box-lg: 48px;
+  --icon-box-xl: 56px;
+  --icon-box-2xl: 72px;
+  --icon-glyph-xs: 12px;
+  --icon-glyph-sm: 16px;
+  --icon-glyph-md: 20px;
+  --icon-glyph-lg: 24px;
+  --icon-glyph-xl: 28px;
+  --icon-glyph-2xl: 36px;
+
+  // ---- Control height (input / button / select) ----
+  --control-h-sm: 32px;
+  --control-h-md: 40px;
+  --control-h-lg: 48px;
+
+  // ---- Grid cell min-width ----
+  --cell-sm: 200px;
+  --cell-md: 240px;
+  --cell-lg: 320px;
+  --cell-xl: 380px;
 
   // ---- Motion ----
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -145,8 +181,10 @@
 
   // Fluid type-scale через clamp.
   --font-size-display: clamp(26px, 2.2vw + 12px, 44px);
+  --font-size-display-2: clamp(22px, 1.6vw + 14px, 34px);
   --font-size-h1: clamp(20px, 1vw + 14px, 28px);
   --font-size-h2: clamp(15px, 0.4vw + 13px, 19px);
+  --font-size-h3: clamp(14px, 0.2vw + 13px, 16px);
   --font-size-body: clamp(13.5px, 0.2vw + 12px, 14.5px);
   --font-size-small: clamp(12px, 0.1vw + 11.5px, 13px);
   --font-size-micro: 11px;
@@ -154,8 +192,15 @@
   --tracking-display: -0.025em;
   --tracking-h1: -0.018em;
   --tracking-h2: -0.008em;
+  --tracking-h3: -0.004em;
   --tracking-body: -0.003em;
   --tracking-micro: 0.06em;
+
+  --leading-tight: 1.05;
+  --leading-snug: 1.2;
+  --leading-normal: 1.4;
+  --leading-relaxed: 1.55;
+  --leading-loose: 1.7;
 
   // Inter OpenType features: contextual nums, single-storey a/g, open aperture.
   --font-features-sans: 'cv11', 'ss01', 'ss03', 'cv09', 'kern', 'liga', 'calt';
@@ -165,6 +210,46 @@
   --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-elev: 0 18px 48px rgba(0, 0, 0, 0.45);
   --shadow-glow: 0 0 32px rgba(var(--color-brand-violet-rgb), 0.45);
+  --shadow-hover: 0 14px 36px rgba(0, 0, 0, 0.5);
+  --shadow-violet-glow: 0 18px 48px rgba(var(--color-brand-violet-rgb), 0.32);
+  --shadow-pink-glow: 0 18px 48px rgba(var(--color-brand-pink-rgb), 0.28);
+
+  // ---- Motion durations ----
+  --dur-instant: 80ms;
+  --dur-fast: 160ms;
+  --dur-medium: 280ms;
+  --dur-slow: 480ms;
+  --dur-stage: 720ms;
+  --ease-snap: cubic-bezier(0.4, 0, 0, 1);
+  --ease-emphasis: cubic-bezier(0.2, 0, 0, 1.2);
+
+  // ---- Semantic spacing scale (not opinionated about layout) ----
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 44px;
+  --space-9: 64px;
+
+  // ---- Status soft tones (for banners, hints, badges) ----
+  --tone-success-soft: rgba(var(--color-success-rgb), 0.12);
+  --tone-success-edge: rgba(var(--color-success-rgb), 0.32);
+  --tone-warning-soft: rgba(var(--color-warning-rgb), 0.14);
+  --tone-warning-edge: rgba(var(--color-warning-rgb), 0.36);
+  --tone-danger-soft: rgba(var(--color-danger-rgb), 0.14);
+  --tone-danger-edge: rgba(var(--color-danger-rgb), 0.36);
+  --tone-info-soft: rgba(var(--color-brand-cyan-rgb), 0.14);
+  --tone-info-edge: rgba(var(--color-brand-cyan-rgb), 0.36);
+  --tone-violet-soft: rgba(var(--color-brand-violet-rgb), 0.14);
+  --tone-violet-edge: rgba(var(--color-brand-violet-rgb), 0.36);
+
+  // ---- Surface overlays for hover/press states ----
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-press: rgba(255, 255, 255, 0.08);
+  --surface-active: rgba(var(--color-brand-violet-rgb), 0.16);
 
   // ---- Aura blobs ----
   // BackgroundAura читает эти токены, темы переопределяют под себя.
@@ -229,6 +314,12 @@
   --aura-blob-2: rgba(var(--color-brand-violet-rgb), 0.55);
   --aura-blob-3: rgba(var(--color-brand-cyan-rgb), 0.5);
 
+  --shadow-hover: 0 16px 44px rgba(0, 0, 0, 0.6);
+  --shadow-violet-glow: 0 18px 48px rgba(var(--color-brand-violet-rgb), 0.4);
+
+  --surface-hover: rgba(180, 200, 255, 0.04);
+  --surface-press: rgba(180, 200, 255, 0.08);
+
   --color-bg-sidebar: #010108;
   --sidebar-surface:
     linear-gradient(
@@ -259,6 +350,18 @@
     --content-gap: 18px;
     --grid-gap: 12px;
     --bento-tile-min: 100%;
+  }
+}
+
+// Mobile width — компактные паддинги для всех views, дублируем coarse-ветку
+// поскольку windowed mobile (Electron на узком окне) — pointer: fine, но
+// layout всё равно должен быть mobile-first.
+@media (max-width: 720px) {
+  :root {
+    --content-pad-x: 12px;
+    --content-pad-y: 12px;
+    --content-gap: 16px;
+    --grid-gap: 10px;
   }
 }
 

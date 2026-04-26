@@ -206,35 +206,41 @@ onBeforeUnmount(() => {
   &__lead {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 0 4px 0 16px;
+    gap: 6px;
+    padding: 0 4px 0 12px;
     -webkit-app-region: no-drag;
+
+    @media (max-width: 720px) {
+      padding-left: 8px;
+      gap: 8px;
+    }
   }
 
-  // Hamburger (mobile only)
+  // Hamburger (mobile only) — tap target ≥44×44, видимые контрастные lines.
   &__burger {
-    width: 36px;
-    height: 32px;
-    margin-right: 4px;
+    width: 44px;
+    height: 36px;
+    margin-right: 2px;
     border: 0;
     background: transparent;
     display: inline-flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 5px;
     cursor: pointer;
-    color: var(--color-text-secondary);
-    transition: color 160ms var(--ease-out);
+    color: var(--color-text-primary);
+    transition: background 160ms var(--ease-out);
+    border-radius: var(--radius-sm);
 
     &:hover {
-      color: var(--color-text-primary);
+      background: rgba(255, 255, 255, 0.06);
     }
 
     &-line {
-      width: 16px;
-      height: 1.4px;
-      border-radius: 1px;
+      width: 20px;
+      height: 2px;
+      border-radius: 2px;
       background: currentColor;
       transform-origin: center;
       transition:
@@ -244,14 +250,14 @@ onBeforeUnmount(() => {
 
     &.is-open {
       .title-bar__burger-line:nth-child(1) {
-        transform: translateY(5.4px) rotate(45deg);
+        transform: translateY(7px) rotate(45deg);
       }
       .title-bar__burger-line:nth-child(2) {
         opacity: 0;
         transform: scaleX(0);
       }
       .title-bar__burger-line:nth-child(3) {
-        transform: translateY(-5.4px) rotate(-45deg);
+        transform: translateY(-7px) rotate(-45deg);
       }
     }
   }
@@ -279,6 +285,10 @@ onBeforeUnmount(() => {
     letter-spacing: -0.012em;
     line-height: 1;
     user-select: none;
+
+    @media (max-width: 720px) {
+      display: none; // бургер + mark достаточно identify-нет brand
+    }
   }
 
   &__wordmark-name {
@@ -297,6 +307,11 @@ onBeforeUnmount(() => {
     align-items: center;
     min-width: 0;
     padding: 0 14px;
+
+    @media (max-width: 720px) {
+      padding: 0 6px;
+      justify-content: flex-start;
+    }
   }
 
   &__status {
@@ -348,6 +363,16 @@ onBeforeUnmount(() => {
       text-overflow: ellipsis;
       white-space: nowrap;
       min-width: 0;
+
+      @media (max-width: 720px) {
+        display: none;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .title-bar__status-sep {
+        display: none;
+      }
     }
 
     &--online {
