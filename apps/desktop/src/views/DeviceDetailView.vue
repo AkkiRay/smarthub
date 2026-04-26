@@ -42,7 +42,7 @@
         :style="heroStyle"
         data-anim="block"
       >
-        <div class="detail__hero-icon" v-html="iconFor(device.type)" />
+        <div class="detail__hero-icon" v-safe-html="iconFor(device.type)" />
         <div class="detail__hero-text">
           <span class="text--micro">{{ statusLabel }}</span>
           <h2 class="text--display detail__hero-title">{{ device.name }}</h2>
@@ -89,7 +89,7 @@
             :class="{ 'prop--has-bar': hasProgressBar(p.parameters.instance) }"
             :style="{ '--prop-accent': propAccent(p.parameters.instance) }"
           >
-            <span class="prop__icon" v-html="propIcon(p.parameters.instance)" />
+            <span class="prop__icon" v-safe-html="propIcon(p.parameters.instance)" />
             <span class="prop__label">{{ propLabel(p.parameters.instance) }}</span>
             <strong class="prop__value">
               {{ formatPropValue(p.state?.value) }}{{ unitFor(p.parameters.unit) }}

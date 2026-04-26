@@ -6,7 +6,7 @@
     :aria-hidden="!ariaLabel"
     :aria-label="ariaLabel"
     role="img"
-    v-html="content"
+    v-safe-html="content"
   />
 </template>
 

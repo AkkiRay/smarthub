@@ -19,7 +19,11 @@
  */
 
 import Store from 'electron-store';
-import { randomUUID } from 'node:crypto';
+import { app, safeStorage } from 'electron';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import log from 'electron-log/main.js';
 import type {
   AliceDeviceExposure,
   AliceSceneExposure,
@@ -36,6 +40,8 @@ export interface YandexStationCreds {
   token: string;
   /** Epoch-секунды (`exp` claim из JWT). 0 если не удалось распарсить. */
   tokenExpiresAt?: number;
+  /** SHA-256 fingerprint TLS-cert (TOFU pin). Mismatch → terminate connection. */
+  certFingerprint?: string;
   platform?: string;
   name?: string;
 }
@@ -81,6 +87,8 @@ export interface HubSettings {
   yandexStation: YandexStationCreds | null;
   /** OAuth Я.Музыки для Quasar API. */
   quasarAuth: QuasarAuthCreds | null;
+  /** Активный household; null — авто-выбор при первом sync'е. */
+  selectedHouseholdId: string | null;
   alice: AliceSkillState;
   ui: {
     theme: 'alice-dark' | 'alice-midnight';
@@ -94,6 +102,7 @@ const defaults: HubSettings = {
   driverCredentials: {},
   yandexStation: null,
   quasarAuth: null,
+  selectedHouseholdId: null,
   alice: {
     config: null,
     yandexXToken: null,
@@ -110,13 +119,81 @@ const defaults: HubSettings = {
 
 export type SettingsStore = Awaited<ReturnType<typeof createSettingsStore>>;
 
+/** Hardcoded ключ предыдущих версий — только для one-shot миграции. */
+const LEGACY_ENCRYPTION_KEY = 'smarthome-hub-local-key';
+const KEY_FILE_NAME = '.store-key';
+
+/** Per-install random ключ, шифруется через `safeStorage` (DPAPI/Keychain/libsecret). */
+function loadOrCreateEncryptionKey(): string {
+  const keyPath = join(app.getPath('userData'), KEY_FILE_NAME);
+  if (existsSync(keyPath)) {
+    const buf = readFileSync(keyPath);
+    if (safeStorage.isEncryptionAvailable()) {
+      try {
+        return safeStorage.decryptString(buf);
+      } catch (e) {
+        log.error('settings-store: safeStorage decrypt failed — regenerating key', e);
+        // fallthrough к регенерации
+      }
+    } else {
+      return buf.toString('utf8');
+    }
+  }
+  const key = randomBytes(32).toString('hex');
+  if (safeStorage.isEncryptionAvailable()) {
+    writeFileSync(keyPath, safeStorage.encryptString(key), { mode: 0o600 });
+  } else {
+    log.warn(`settings-store: safeStorage unavailable — key written plaintext at ${keyPath}`);
+    writeFileSync(keyPath, key, { encoding: 'utf8', mode: 0o600 });
+  }
+  return key;
+}
+
+/** Перешифровывает `hub-settings.json` со старого hardcoded ключа на per-install. */
+function migrateLegacyEncryptedSettings(newKey: string): void {
+  const filePath = join(app.getPath('userData'), 'hub-settings.json');
+  if (!existsSync(filePath)) return;
+
+  let legacyData: HubSettings | null = null;
+  try {
+    const legacy = new Store<HubSettings>({
+      name: 'hub-settings',
+      defaults,
+      encryptionKey: LEGACY_ENCRYPTION_KEY,
+      clearInvalidConfig: false,
+    });
+    legacyData = legacy.store;
+  } catch {
+    return; // already migrated or corrupt — new Store ниже разберётся
+  }
+  // Без hubId это decrypt-by-chance на чистых defaults — не трогаем файл.
+  if (!legacyData?.hubId) return;
+
+  try {
+    unlinkSync(filePath);
+  } catch (e) {
+    log.error('settings-store: failed to delete legacy file before migration', e);
+    return;
+  }
+  const fresh = new Store<HubSettings>({
+    name: 'hub-settings',
+    defaults,
+    encryptionKey: newKey,
+  });
+  for (const [k, v] of Object.entries(legacyData)) {
+    fresh.set(k as keyof HubSettings, v as never);
+  }
+  log.info('settings-store: migrated from legacy hardcoded key to per-install key');
+}
+
 export async function createSettingsStore() {
+  const encryptionKey = loadOrCreateEncryptionKey();
+  migrateLegacyEncryptedSettings(encryptionKey);
+
   const store = new Store<HubSettings>({
     name: 'hub-settings',
     defaults,
-    // Обфускация, не криптография — защита от случайного шаринга конфига.
-    // TODO: вынести в per-install secret через keytar / OS keychain.
-    encryptionKey: 'smarthome-hub-local-key',
+    encryptionKey,
     clearInvalidConfig: true,
   });
 

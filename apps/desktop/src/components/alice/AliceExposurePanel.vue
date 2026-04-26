@@ -100,7 +100,7 @@
           class="exposure-row__icon exposure-row__icon--scene"
           :style="{ '--accent': scene.accent }"
         >
-          <span v-html="scene.icon" />
+          <span v-safe-html="scene.icon" />
         </div>
         <div class="exposure-row__main">
           <div class="exposure-row__head">

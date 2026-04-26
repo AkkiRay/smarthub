@@ -64,7 +64,7 @@
             type="button"
             class="editor__icon-btn"
             :class="{ 'is-selected': form.icon === svg }"
-            v-html="svg"
+            v-safe-html="svg"
             @click="form.icon = svg"
           />
         </div>

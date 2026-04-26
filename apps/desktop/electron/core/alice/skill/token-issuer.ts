@@ -15,15 +15,28 @@
  * TTL:
  *   - Access:  30 дней (Алиса дёрнет refresh за неделю до истечения).
  *   - Refresh: 1 год.
+ *
+ * Хранение: на диске только `sha256(token)`; lookup — хэшированием и
+ * constant-time match через `timingSafeEqual`.
  */
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { SettingsStore } from '../../storage/settings-store.js';
 
 const ACCESS_TTL_SEC = 60 * 60 * 24 * 30; // 30 дней; Алиса дёрнет refresh за неделю до конца
 const REFRESH_TTL_SEC = 60 * 60 * 24 * 365; // 1 год — достаточно
 
 const randomToken = (): string => randomBytes(32).toString('base64url');
+const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
+
+/** Constant-time hex-string compare (защита от timing attacks при lookup). */
+function safeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const aBuf = Buffer.from(a, 'hex');
+  const bBuf = Buffer.from(b, 'hex');
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
 
 export interface IssuedTokenPair {
   accessToken: string;
@@ -49,7 +62,9 @@ export interface AuthorizationCodeRecord {
 export class TokenIssuer {
   private codes = new Map<string, AuthorizationCodeRecord>();
 
-  constructor(private readonly settings: SettingsStore) {}
+  constructor(private readonly settings: SettingsStore) {
+    this.migrateLegacyPlaintextTokens();
+  }
 
   // ===== Authorization code =====
 
@@ -82,15 +97,15 @@ export class TokenIssuer {
 
     const alice = this.settings.getAlice();
     const issuedTokens = { ...alice.issuedTokens };
-    issuedTokens[accessToken] = {
+    issuedTokens[hashToken(accessToken)] = {
       internalUserId,
       issuedAt: now,
       expiresAt: now + ACCESS_TTL_SEC * 1000,
-      refreshToken,
+      refreshToken: hashToken(refreshToken),
     };
     // Чистим истёкшие — не растёт бесконечно при regeneration loop'ах.
-    for (const [token, record] of Object.entries(issuedTokens)) {
-      if (record.expiresAt < now) delete issuedTokens[token];
+    for (const [tokenHash, record] of Object.entries(issuedTokens)) {
+      if (record.expiresAt < now) delete issuedTokens[tokenHash];
     }
     this.settings.patchAlice({ issuedTokens });
 
@@ -107,22 +122,33 @@ export class TokenIssuer {
     internalUserId: string;
     expiresAt: number;
   } | null {
-    const record = this.settings.getAlice().issuedTokens[accessToken];
-    if (!record) return null;
-    if (record.expiresAt < Date.now()) return null;
-    return { internalUserId: record.internalUserId, expiresAt: record.expiresAt };
+    if (typeof accessToken !== 'string' || accessToken.length === 0) return null;
+    const candidate = hashToken(accessToken);
+    let match: { internalUserId: string; expiresAt: number } | null = null;
+    for (const [storedHash, record] of Object.entries(this.settings.getAlice().issuedTokens)) {
+      if (safeEqualHex(storedHash, candidate)) {
+        match = { internalUserId: record.internalUserId, expiresAt: record.expiresAt };
+      }
+    }
+    if (!match) return null;
+    if (match.expiresAt < Date.now()) return null;
+    return match;
   }
 
   /** Refresh: ищем запись по refresh_token, выдаём новую пару, старый access инвалидируем. */
   refresh(refreshToken: string): IssuedTokenPair | null {
+    if (typeof refreshToken !== 'string' || refreshToken.length === 0) return null;
+    const candidate = hashToken(refreshToken);
     const alice = this.settings.getAlice();
     const entries = Object.entries(alice.issuedTokens);
-    const found = entries.find(([, v]) => v.refreshToken === refreshToken);
+    const found = entries.find(
+      ([, v]) => typeof v.refreshToken === 'string' && safeEqualHex(v.refreshToken, candidate),
+    );
     if (!found) return null;
-    const [oldAccess, record] = found;
+    const [oldAccessHash, record] = found;
     // Удаляем старый access и выдаём новую пару
     const issuedTokens = { ...alice.issuedTokens };
-    delete issuedTokens[oldAccess];
+    delete issuedTokens[oldAccessHash];
     this.settings.patchAlice({ issuedTokens });
     return this.issueTokenPair(record.internalUserId);
   }
@@ -130,6 +156,17 @@ export class TokenIssuer {
   /** Полная инвалидация — Алиса дёрнула /unlink. */
   revokeAll(): void {
     this.settings.patchAlice({ issuedTokens: {} });
+  }
+
+  /** Чистит plaintext-токены из старых версий (key.length !== 64 = не sha256-hex). */
+  private migrateLegacyPlaintextTokens(): void {
+    const tokens = this.settings.getAlice().issuedTokens;
+    for (const key of Object.keys(tokens)) {
+      if (key.length !== 64) {
+        this.settings.patchAlice({ issuedTokens: {} });
+        return;
+      }
+    }
   }
 }
 

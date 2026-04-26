@@ -1,21 +1,20 @@
 /**
  * Импорт «Дома с Алисой» в локальный реестр.
  *
- * Один публичный метод — `sync()`. Внутри:
- *   1. validateAuth     — кидает понятную ошибку, если юзер не вошёл через Яндекс.
- *   2. ensureDriver     — реактивирует yandex-iot-driver (после signIn).
- *   3. discoverFromYandex — driver.discover() + кэш-snapshot.
- *   4. importRooms      — yandex room.id ↦ локальная Room (origin='yandex').
- *   5. importDevices    — pair / refresh / remove orphans.
- *   6. summary          — счётчики для toast'а.
- *
- * Расширения (когда понадобятся): importGroups, importScenarios, importHouseholds —
- * добавляются как новые private-методы, sync() вызывает их между импортом комнат
- * и устройств. Все side-effect'ы локализованы здесь, а не размазаны по hub'у.
+ * `sync()`:
+ *   1. validateAuth / ensureDriver
+ *   2. discover() из yandex-iot
+ *   3. resolveHousehold — settings.selectedHouseholdId | авто-выбор по max devices
+ *   4. importRooms / importDevices с фильтром по household
+ *   5. orphan-sweep с sanity-gates (skip если candidates=0 или ≥50% paired)
  */
 
 import log from 'electron-log/main.js';
-import type { DiscoveredDevice, YandexHomeSnapshot } from '@smarthome/shared';
+import type {
+  DiscoveredDevice,
+  YandexHomeHousehold,
+  YandexHomeSnapshot,
+} from '@smarthome/shared';
 import type { SettingsStore } from '../storage/settings-store.js';
 import type { DriverRegistry } from '../drivers/driver-registry.js';
 import type { DeviceRegistry } from '../registry/device-registry.js';
@@ -30,10 +29,14 @@ export interface YandexImportSummary {
   removed: number;
   /** Сколько pair/refresh упало (auth протух / single-device 404 / etc). */
   failed: number;
-  /** Всего обнаружено устройств в Yandex'е (target). */
+  /** Всего обнаружено устройств в Yandex'е (target, после фильтра household). */
   total: number;
   /** Сколько yandex-комнат прошло upsert. */
   rooms: number;
+  /** ID активного дома, в который импортируем. */
+  householdId: string | null;
+  /** Все доступные дома — для UI selector'а. */
+  availableHouseholds: YandexHomeHousehold[];
   /** Сообщение последней ошибки — пробрасываем в toast вместе с failed > 0. */
   lastError?: string;
 }
@@ -51,6 +54,8 @@ interface YandexIotDriverLike {
 
 export class YandexImportService {
   private static readonly DRIVER_ID = 'yandex-iot';
+  /** Если orphan-sweep попытается удалить ≥ этого порога paired-устройств — отменяем. */
+  private static readonly ORPHAN_SWEEP_MAX_RATIO = 0.5;
 
   constructor(private readonly deps: YandexImportServiceDeps) {}
 
@@ -58,28 +63,59 @@ export class YandexImportService {
     this.validateAuth();
     await this.ensureDriver();
 
+    // discover() может бросить (auth, network, 5xx) — пускаем наверх БЕЗ mutation'ов.
     const candidates = await this.discoverFromYandex();
-    const yandexDeviceIds = new Set(candidates.map((c) => c.externalId));
     const snapshot = this.cachedSnapshot();
+    const households = snapshot?.households ?? [];
+    const householdId = this.resolveHousehold(households, candidates);
 
-    const roomsImported = snapshot ? this.importRooms(snapshot) : 0;
+    const filteredCandidates = householdId
+      ? candidates.filter((c) => c.meta?.['householdId'] === householdId)
+      : candidates;
+    const yandexDeviceIds = new Set(filteredCandidates.map((c) => c.externalId));
+
+    const roomsImported = snapshot ? this.importRooms(snapshot, householdId) : 0;
     if (!snapshot) {
       log.warn('YandexImport: snapshot cache empty after discover() — rooms skipped');
     }
 
-    const deviceStats = await this.importDevices(candidates, yandexDeviceIds);
+    const deviceStats = await this.importDevices(filteredCandidates, yandexDeviceIds);
 
     const summary: YandexImportSummary = {
       ...deviceStats,
-      total: candidates.length,
+      total: filteredCandidates.length,
       rooms: roomsImported,
+      householdId,
+      availableHouseholds: households,
     };
     log.info(
-      `YandexImport.sync: +${summary.imported} imported, ${summary.updated} updated, ` +
+      `YandexImport.sync: household=${householdId ?? 'all'} | ` +
+        `+${summary.imported} imported, ${summary.updated} updated, ` +
         `-${summary.removed} removed, ${summary.failed} failed, ${summary.rooms} rooms ` +
-        `(total ${summary.total})`,
+        `(total ${summary.total}, ${households.length} households available)`,
     );
     return summary;
+  }
+
+  /** Возвращает список households без mutation'ов — для UI селектора. */
+  async listHouseholds(): Promise<{
+    households: YandexHomeHousehold[];
+    selected: string | null;
+  }> {
+    this.validateAuth();
+    await this.ensureDriver();
+    await this.discoverFromYandex();
+    const snapshot = this.cachedSnapshot();
+    return {
+      households: snapshot?.households ?? [],
+      selected: this.deps.settings.get('selectedHouseholdId'),
+    };
+  }
+
+  /** Сохраняет выбор юзера. Следующий `sync()` отфильтрует по этому ID. */
+  setSelectedHousehold(id: string | null): void {
+    this.deps.settings.set('selectedHouseholdId', id);
+    log.info(`YandexImport: selectedHouseholdId set to ${id ?? 'null'}`);
   }
 
   // ---- private --------------------------------------------------------------
@@ -115,16 +151,52 @@ export class YandexImportService {
     return driver?.getCachedSnapshot?.() ?? null;
   }
 
+  /** stored ID если валиден → max-devices auto-pick → null (households пуст). */
+  private resolveHousehold(
+    households: YandexHomeHousehold[],
+    candidates: DiscoveredDevice[],
+  ): string | null {
+    if (households.length === 0) return null;
+
+    const stored = this.deps.settings.get('selectedHouseholdId');
+    if (stored && households.some((h) => h.id === stored)) return stored;
+
+    // Авто-выбор: дом с максимальным числом устройств.
+    const counts = new Map<string, number>();
+    for (const c of candidates) {
+      const hid = c.meta?.['householdId'];
+      if (typeof hid === 'string') counts.set(hid, (counts.get(hid) ?? 0) + 1);
+    }
+    let bestId = households[0]!.id;
+    let bestCount = counts.get(bestId) ?? 0;
+    for (const h of households) {
+      const cnt = counts.get(h.id) ?? 0;
+      if (cnt > bestCount) {
+        bestId = h.id;
+        bestCount = cnt;
+      }
+    }
+    this.deps.settings.set('selectedHouseholdId', bestId);
+    log.warn(
+      `YandexImport: auto-selected household ${bestId} (${bestCount} devices) ` +
+        `from ${households.length} available — set in settings.`,
+    );
+    return bestId;
+  }
+
   /**
    * Идемпотентный upsert yandex-комнат + cleanup orphans.
    * ID локальной комнаты === yandex roomId — так фильтр устройств по комнате
    * работает join-style: device.room === room.id.
    */
-  private importRooms(snapshot: YandexHomeSnapshot): number {
-    const yandexRoomIds = new Set(snapshot.rooms.map((r) => r.id));
+  private importRooms(snapshot: YandexHomeSnapshot, householdId: string | null): number {
+    const filteredRooms = householdId
+      ? snapshot.rooms.filter((r) => !r.householdId || r.householdId === householdId)
+      : snapshot.rooms;
+    const yandexRoomIds = new Set(filteredRooms.map((r) => r.id));
     let imported = 0;
-    for (let i = 0; i < snapshot.rooms.length; i++) {
-      const r = snapshot.rooms[i]!;
+    for (let i = 0; i < filteredRooms.length; i++) {
+      const r = filteredRooms[i]!;
       try {
         this.deps.deviceRegistry.rooms.upsert({
           id: r.id,
@@ -141,11 +213,12 @@ export class YandexImportService {
         );
       }
     }
-    // Удаляем yandex-комнаты, которых больше нет в Я.Доме. Локальные (origin='local')
-    // не трогаем — пользователь создал их вручную.
-    for (const room of this.deps.deviceRegistry.rooms.list()) {
-      if (room.origin === 'yandex' && !yandexRoomIds.has(room.id)) {
-        this.deps.deviceRegistry.rooms.remove(room.id);
+    // Cleanup yandex-rooms; origin='local' не трогаем. Skip если filteredRooms пуст.
+    if (filteredRooms.length > 0) {
+      for (const room of this.deps.deviceRegistry.rooms.list()) {
+        if (room.origin === 'yandex' && !yandexRoomIds.has(room.id)) {
+          this.deps.deviceRegistry.rooms.remove(room.id);
+        }
       }
     }
     return imported;
@@ -187,8 +260,24 @@ export class YandexImportService {
     }
 
     let removed = 0;
-    for (const d of this.deps.deviceRegistry.list()) {
-      if (d.driver === YandexImportService.DRIVER_ID && !yandexDeviceIds.has(d.externalId)) {
+    const orphanCandidates = this.deps.deviceRegistry
+      .list()
+      .filter((d) => d.driver === YandexImportService.DRIVER_ID && !yandexDeviceIds.has(d.externalId));
+    const pairedCount = this.deps.deviceRegistry
+      .list()
+      .filter((d) => d.driver === YandexImportService.DRIVER_ID).length;
+
+    // Sanity-gates: skip sweep если candidates=0 при paired>0, или ratio≥50%.
+    const willWipeAll = candidates.length === 0 && pairedCount > 0;
+    const willWipeMost =
+      pairedCount > 0 && orphanCandidates.length / pairedCount >= YandexImportService.ORPHAN_SWEEP_MAX_RATIO;
+    if (willWipeAll || willWipeMost) {
+      log.warn(
+        `YandexImport: orphan sweep aborted — would remove ${orphanCandidates.length}/${pairedCount} ` +
+          `(candidates=${candidates.length}). Likely API issue, not real removals.`,
+      );
+    } else {
+      for (const d of orphanCandidates) {
         this.deps.deviceRegistry.remove(d.id);
         removed++;
       }

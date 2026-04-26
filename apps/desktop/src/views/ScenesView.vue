@@ -19,7 +19,7 @@
         :style="{ '--accent': s.accent }"
       >
         <div class="scene__head">
-          <span class="scene__icon" v-html="s.icon" />
+          <span class="scene__icon" v-safe-html="s.icon" />
           <BaseButton
             variant="ghost"
             size="icon-sm"

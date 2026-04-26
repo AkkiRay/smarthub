@@ -37,6 +37,9 @@ export type YandexStationClient = ReturnType<typeof createYandexStationClient>;
 /** Колбек, возвращающий свежий per-device JWT (или null если music_token отсутствует). */
 export type DeviceTokenRefresher = () => Promise<string | null>;
 
+/** Колбек: hub персистит обновлённые creds (token rotation, cert pin'инг). */
+export type CredsPersister = (creds: YandexStationCreds) => void;
+
 /** Сколько событий хранить в ring-buffer'e (UI-снимок при mount). */
 const EVENT_BUFFER_SIZE = 80;
 /** Если суммарный детальный JSON длиннее — обрезаем (защита от player-state c URL'ами в ответ). */
@@ -91,6 +94,7 @@ export function createYandexStationClient() {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   let tokenRefresher: DeviceTokenRefresher | null = null;
+  let credsPersister: CredsPersister | null = null;
   let lastRefreshedAt = 0;
   /** true — disconnect() вызван явно, reconnect-loop отключён. */
   let manualDisconnect = false;
@@ -216,8 +220,42 @@ export function createYandexStationClient() {
 
       const url = `wss://${target.host}:${target.port}/?token=${encodeURIComponent(target.token)}`;
       const ws = new WebSocket(url, {
+        // Self-signed cert — Web PKI неприменим, защита через TOFU pin ниже.
         rejectUnauthorized: false,
         handshakeTimeout: ALICE_TIMEOUT.WS_HANDSHAKE_MS,
+      });
+
+      // TOFU fingerprint pin: pin при первом connect, mismatch → terminate.
+      ws.on('upgrade', (response) => {
+        const sock = (response as unknown as { socket?: { getPeerCertificate?: () => { fingerprint256?: string } } }).socket;
+        const cert = sock?.getPeerCertificate?.();
+        const fp = cert?.fingerprint256;
+        if (!fp) {
+          log.warn(`YandexStation: peer cert fingerprint unavailable for ${target.host}`);
+          return;
+        }
+        if (target.certFingerprint && target.certFingerprint !== fp) {
+          log.error(
+            `YandexStation: TLS fingerprint MISMATCH for ${target.host} ` +
+              `(expected ${target.certFingerprint}, got ${fp}) — terminating connection`,
+          );
+          pushEvent({
+            kind: 'error',
+            summary: `TLS отпечаток колонки изменился — возможна атака MITM. Connection отклонено.`,
+          });
+          try {
+            ws.terminate();
+          } catch {
+            /* already closed */
+          }
+          return;
+        }
+        if (!target.certFingerprint) {
+          target.certFingerprint = fp;
+          if (creds) creds.certFingerprint = fp;
+          credsPersister?.(target);
+          log.info(`YandexStation: pinned TLS fingerprint for ${target.host}: ${fp}`);
+        }
       });
 
       socket = ws;
@@ -428,6 +466,11 @@ export function createYandexStationClient() {
     /** Hub внедряет refresher после конструирования (избегаем circular dep). */
     setTokenRefresher(fn: DeviceTokenRefresher | null): void {
       tokenRefresher = fn;
+    },
+
+    /** Hub передаёт колбэк для persist'а обновлённых creds (token rotation, cert pin'инг). */
+    setCredsPersister(fn: CredsPersister | null): void {
+      credsPersister = fn;
     },
 
     async sendCommand(command: YandexStationCommand): Promise<{ ok: boolean; error?: string }> {

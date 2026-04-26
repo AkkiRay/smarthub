@@ -84,12 +84,27 @@ export function createDiscoveryService(deps: {
     const timeoutHandle = setTimeout(() => abortController?.abort(), timeoutMs);
 
     try {
-      // Не allSettled-на-массив: нужно знать момент завершения КАЖДОГО, чтобы UI обновлялся постепенно.
+      // Race с abort — late-arriving результаты от не-cooperative drivers игнорятся.
+      const abortPromise = new Promise<never>((_, reject) => {
+        cycleSignal.addEventListener(
+          'abort',
+          () => reject(new DOMException('Discovery cycle aborted', 'AbortError')),
+          { once: true },
+        );
+      });
+
       await Promise.all(
         drivers.map(async (driver) => {
           const driverStartedAt = Date.now();
           try {
-            const found = await driver.discover(cycleSignal);
+            const found = await Promise.race([driver.discover(cycleSignal), abortPromise]);
+            if (cycleSignal.aborted) {
+              setDriverPhase(driver.id, {
+                phase: 'idle',
+                durationMs: Date.now() - driverStartedAt,
+              });
+              return;
+            }
             for (const c of found) {
               const key = `${c.driver}:${c.externalId}`;
               const known = deps.deviceRegistry.findByExternalId(c.driver, c.externalId);
@@ -106,6 +121,14 @@ export function createDiscoveryService(deps: {
               durationMs: Date.now() - driverStartedAt,
             });
           } catch (e) {
+            const isAbort = (e as Error)?.name === 'AbortError';
+            if (isAbort) {
+              setDriverPhase(driver.id, {
+                phase: 'idle',
+                durationMs: Date.now() - driverStartedAt,
+              });
+              return;
+            }
             log.warn(`DiscoveryService: ${driver.id} discovery failed`, e);
             setDriverPhase(driver.id, {
               phase: 'error',

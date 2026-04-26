@@ -14,7 +14,7 @@
       <div v-if="step === 'preview'" key="preview" class="pf">
         <div class="pf__device" :style="{ '--accent': accentColor }">
           <span class="pf__device-glow" />
-          <span class="pf__device-icon" v-html="deviceIcon" />
+          <span class="pf__device-icon" v-safe-html="deviceIcon" />
         </div>
 
         <dl class="pf__meta">
@@ -45,7 +45,7 @@
         />
 
         <p v-if="driverInfo.tip" class="pf__tip">
-          <span class="pf__tip-icon" v-html="iconBulb" />
+          <span class="pf__tip-icon" v-safe-html="iconBulb" />
           <span>{{ driverInfo.tip }}</span>
         </p>
       </div>
@@ -124,7 +124,7 @@
         <p class="pf__done-name">Не удалось подключить</p>
         <p class="pf__done-text">{{ errorMessage || 'Неизвестная ошибка' }}</p>
         <p v-if="driverInfo.errorHint" class="pf__tip">
-          <span class="pf__tip-icon" v-html="iconBulb" />
+          <span class="pf__tip-icon" v-safe-html="iconBulb" />
           <span>{{ driverInfo.errorHint }}</span>
         </p>
       </div>

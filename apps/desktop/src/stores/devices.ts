@@ -213,6 +213,8 @@ export const useDevicesStore = defineStore('devices', () => {
     failed: number;
     total: number;
     rooms: number;
+    householdId: string | null;
+    availableHouseholds: Array<{ id: string; name: string }>;
     lastError?: string;
   }> {
     const toaster = useToasterStore();

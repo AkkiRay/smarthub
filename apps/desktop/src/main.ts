@@ -8,6 +8,7 @@ import { createPinia } from 'pinia';
 import { gsap } from 'gsap';
 import App from './App.vue';
 import { router } from './router/index';
+import { vSafeHtml } from './directives/v-safe-html';
 
 // Variable-fonts локально — CSP запрещает CDN.
 import '@fontsource-variable/inter';
@@ -23,6 +24,8 @@ const pinia = createPinia();
 
 app.use(pinia);
 app.use(router);
+// XSS-безопасная замена v-html — через DOMPurify, см. directives/v-safe-html.ts.
+app.directive('safe-html', vSafeHtml);
 
 // Дублируем все renderer-ошибки в main process — иначе теряются между
 // перезагрузками DevTools и не попадают в log-файлы.

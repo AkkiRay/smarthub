@@ -297,6 +297,10 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     }
   };
   deps.yandexStation.setTokenRefresher(refreshDeviceToken);
+  // Persist creds на token rotation / TLS-fingerprint pin.
+  deps.yandexStation.setCredsPersister((updated) => {
+    deps.settings.set('yandexStation', updated);
+  });
 
   /**
    * Сервис импорта «Дома с Алисой» — pair устройств, upsert комнат, cleanup orphans.
@@ -370,6 +374,19 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     /** Ручной триггер импорта (кнопка «Синхронизировать с Яндексом»). */
     syncHomeDevices(): Promise<import('../alice/yandex-import-service.js').YandexImportSummary> {
       return yandexImport.sync();
+    },
+
+    /** Список доступных households + текущий выбор — для UI селектора дома. */
+    listYandexHouseholds(): Promise<{
+      households: import('@smarthome/shared').YandexHomeHousehold[];
+      selected: string | null;
+    }> {
+      return yandexImport.listHouseholds();
+    },
+
+    /** Сохраняет выбранный household; UI обычно сразу зовёт syncHomeDevices(). */
+    setYandexHousehold(id: string | null): void {
+      yandexImport.setSelectedHousehold(id);
     },
 
     /**

@@ -24,7 +24,7 @@
       >
         <!-- ============== Hero: icon + name + meta ============== -->
         <header class="room__hero">
-          <span class="room__icon" v-html="room.icon" />
+          <span class="room__icon" v-safe-html="room.icon" />
           <div class="room__hero-copy">
             <h3 class="room__name">{{ room.name }}</h3>
             <p class="room__meta">
@@ -257,7 +257,7 @@
               type="button"
               class="rooms__icon-btn"
               :class="{ 'is-selected': form.icon === svg }"
-              v-html="svg"
+              v-safe-html="svg"
               @click="form.icon = svg"
             />
           </div>

@@ -13,7 +13,7 @@
             <circle cx="16" cy="16" r="13" stroke="currentColor" stroke-width="3" fill="none" />
           </svg>
         </span>
-        <span v-else class="toast__icon" v-html="iconFor(t.kind)" />
+        <span v-else class="toast__icon" v-safe-html="iconFor(t.kind)" />
 
         <span class="toast__copy">
           <span class="toast__message">{{ t.message }}</span>

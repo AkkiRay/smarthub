@@ -101,7 +101,7 @@
         :disabled="busy"
         @click="setMode(m.value)"
       >
-        <span v-if="m.icon" v-html="m.icon" />
+        <span v-if="m.icon" v-safe-html="m.icon" />
         <span>{{ m.label }}</span>
       </button>
     </div>

@@ -6,7 +6,7 @@
  * и закрываем окно. Если пользователь закрыл окно сам — резолвим null.
  */
 
-import { BrowserWindow, session } from 'electron';
+import { BrowserWindow, session, shell } from 'electron';
 import log from 'electron-log/main.js';
 import { resolveAppIcon } from '../../main/app-icon.js';
 import {
@@ -14,6 +14,41 @@ import {
   YANDEX_DIALOGS_CALLBACK_CLIENT_ID,
   parseOauthCallback,
 } from './yandex-quasar-api.js';
+
+/** Allow-list хостов для OAuth-окна. Навигация вне списка → preventDefault. */
+const YANDEX_HOST_SUFFIXES = ['.yandex.ru', '.yandex.com', '.yandex.by', '.yandex.kz', '.yandex.net'];
+
+function isYandexHost(host: string): boolean {
+  return YANDEX_HOST_SUFFIXES.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix));
+}
+
+/** Deny popup'ов + filter `will-navigate` по `*.yandex.*` host suffix. */
+function lockdownOauthWindow(win: BrowserWindow): void {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const u = new URL(url);
+      if (u.protocol === 'http:' || u.protocol === 'https:') {
+        void shell.openExternal(u.toString());
+      }
+    } catch {
+      /* malformed url */
+    }
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    let allowed = false;
+    try {
+      const target = new URL(url);
+      allowed = (target.protocol === 'https:' || target.protocol === 'http:') && isYandexHost(target.hostname);
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) {
+      event.preventDefault();
+      log.warn(`YandexOauth: blocked navigation to ${url}`);
+    }
+  });
+}
 
 export interface YandexOauthResult {
   accessToken: string;
@@ -92,6 +127,8 @@ export async function runYandexOauth(
       }
     };
 
+    lockdownOauthWindow(win);
+
     win.webContents.on('will-redirect', (_e, url) => inspect(url));
     win.webContents.on('did-redirect-navigation', (_e, url) => inspect(url));
     win.webContents.on('did-navigate', (_e, url) => inspect(url));
@@ -139,6 +176,8 @@ export async function openYandexHomeBindingWindow(parent?: BrowserWindow): Promi
         sandbox: true,
       },
     });
+
+    lockdownOauthWindow(win);
 
     let resolved = false;
     const finish = (): void => {

@@ -40,6 +40,7 @@ import { AliceBridge } from '@core/alice/skill/alice-bridge.js';
 import { createSmartHomeHub, type SmartHomeHub } from '@core/hub/smart-home-hub.js';
 import { registerIpcHandlers } from '@main/ipc/handlers.js';
 import { installCsp } from '@main/security/csp.js';
+import { safeOpenExternal } from '@main/security/open-external.js';
 import { createTray, type TrayController } from '@main/tray.js';
 import { loadRuntimeEnv } from '@main/env-loader.js';
 import { resolveAppIcon } from '@main/app-icon.js';
@@ -63,10 +64,13 @@ const _envLoad = loadRuntimeEnv(app);
 const APP_ROOT = join(__dirname, '..', '..');
 process.env['APP_ROOT'] = APP_ROOT;
 
-const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
+// IS_DEV строго через `app.isPackaged` — env-flag из `userData/.env` не должен
+// включать dev-CSP / DevTools в production.
+const IS_DEV = !app.isPackaged;
+const VITE_DEV_SERVER_URL = IS_DEV ? process.env['VITE_DEV_SERVER_URL'] : undefined;
 const RENDERER_DIST = join(APP_ROOT, 'dist');
 const PRELOAD = join(__dirname, '..', 'preload', 'index.js');
-const IS_DEV = !!VITE_DEV_SERVER_URL;
+
 
 // Single-instance lock: иначе SQLite WAL побьётся и multicast-сокеты подерутся за порт.
 const gotLock = app.requestSingleInstanceLock();
@@ -142,13 +146,29 @@ async function createWindow(): Promise<void> {
       preload: PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
+      // sandbox: false — переход на true возможен после аудита preload-импортов.
       sandbox: false,
       webSecurity: true,
       spellcheck: false,
       // Весь network — через main process, единая точка контроля доступа.
       allowRunningInsecureContent: false,
+      webviewTag: false,
     },
   });
+
+  // Defence-in-depth: deny attach даже если webviewTag окажется включён.
+  mainWindow.webContents.on('will-attach-webview', (event) => {
+    event.preventDefault();
+    log.warn('main-window: blocked will-attach-webview');
+  });
+
+  // Permission requests (notifications/geolocation/media) — deny by default.
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (_wc, permission, callback) => {
+      log.warn(`main-window: denied permission request "${permission}"`);
+      callback(false);
+    },
+  );
 
   nativeTheme.themeSource = 'dark';
 
@@ -156,20 +176,29 @@ async function createWindow(): Promise<void> {
     mainWindow?.show();
   });
 
-  // External links — только в системный браузер.
+  // External links → системный браузер через scheme-allow-list.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    safeOpenExternal(url);
     return { action: 'deny' };
   });
 
-  // Renderer должен жить только внутри своего bundle / vite-dev-сервера.
+  // Renderer навигирует только внутри своего bundle / vite-dev-сервера.
+  // Origin-точное сравнение (не startsWith) — `http://localhost:5173.evil.com` не пройдёт.
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = VITE_DEV_SERVER_URL
-      ? url.startsWith(VITE_DEV_SERVER_URL)
-      : url.startsWith('file://');
+    let allowed = false;
+    try {
+      const target = new URL(url);
+      if (VITE_DEV_SERVER_URL) {
+        allowed = target.origin === new URL(VITE_DEV_SERVER_URL).origin;
+      } else {
+        allowed = target.protocol === 'file:';
+      }
+    } catch {
+      allowed = false;
+    }
     if (!allowed) {
       event.preventDefault();
-      void shell.openExternal(url);
+      safeOpenExternal(url);
     }
   });
 
