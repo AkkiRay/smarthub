@@ -1145,15 +1145,19 @@ export class YandexIotClient {
   }
 
   /**
-   * Color/CCT для Yandex-облачных ламп идут отдельным endpoint'ом — иначе 400.
+   * Color/CCT для Yandex-облачных ламп идут отдельным endpoint'ом — иначе 400/500.
    *
    *   POST /m/v3/user/custom/group/color/apply
-   *   Body: {"device_ids":[<id>], "rgb": <int> | "hsv": {h,s,v} | "temperature_k": <K>}
+   *   Body: {"device_ids":[<id>], "hsv": {h,s,v}}        — для цвета
+   *      OR {"device_ids":[<id>], "temperature_k": <K>}  — для CCT
    *
-   * URL называется "group" исторически (изначально для групп), но AlexxIT
-   * использует его и для одиночных устройств — `device_ids` принимает любой
-   * массив id. Группы передаём через тот же массив одним элементом — Yandex
-   * сам разрулит broadcast по членам группы.
+   * Ключ `rgb` endpoint НЕ ПРИНИМАЕТ (HTTP 500 INTERNAL_ERROR) — AlexxIT в
+   * light.py:140-147 шлёт исключительно `hsv` и `temperature_k`. Поэтому
+   * `instance:'rgb'` мы конвертируем в hsv и отправляем как hsv.
+   *
+   * URL называется "group" исторически (изначально для групп), но используется
+   * и для одиночных устройств — `device_ids` принимает массив любых id, Yandex
+   * сам разрулит broadcast.
    */
   private async applyColorAction(
     deviceId: string,
@@ -1161,32 +1165,62 @@ export class YandexIotClient {
     value: unknown,
   ): Promise<YandexIotActionResult> {
     const url = 'https://iot.quasar.yandex.ru/m/v3/user/custom/group/color/apply';
-    const payload: Record<string, unknown> = {
-      device_ids: [deviceId],
-      [instance]: value,
-    };
+
+    let body: Record<string, unknown>;
+    if (instance === 'temperature_k') {
+      body = { device_ids: [deviceId], temperature_k: value };
+    } else if (instance === 'rgb' && typeof value === 'number') {
+      body = { device_ids: [deviceId], hsv: rgbIntToHsv(value) };
+    } else if (instance === 'hsv' && value && typeof value === 'object') {
+      const v = value as { h?: number; s?: number; v?: number; hue?: number; saturation?: number; value?: number };
+      const h = v.h ?? v.hue ?? 0;
+      const s = v.s ?? v.saturation ?? 0;
+      const vv = v.v ?? v.value ?? 100;
+      body = { device_ids: [deviceId], hsv: { h, s, v: vv } };
+    } else {
+      return { ok: false, error: `applyColorAction: неподдерживаемый формат ${instance}=${JSON.stringify(value)}` };
+    }
 
     let raw: { status?: string; message?: string };
     try {
       raw = await this.withCsrfRetry((csrf) =>
-        postJsonWithCsrf<{ status?: string; message?: string }>(url, csrf, payload),
+        postJsonWithCsrf<{ status?: string; message?: string }>(url, csrf, body),
       );
     } catch (e) {
       log.warn(
-        `YandexIot.applyColorAction HTTP error: ${instance}=${JSON.stringify(value)} → ${(e as Error).message}`,
+        `YandexIot.applyColorAction HTTP error: body=${JSON.stringify(body)} → ${(e as Error).message}`,
       );
       throw e;
     }
 
     if (raw.status && raw.status !== 'ok') {
       log.warn(
-        `YandexIot.applyColorAction declined: ${instance}=${JSON.stringify(value)} → ` +
-          `${raw.status} ${raw.message ?? ''}`,
+        `YandexIot.applyColorAction declined: body=${JSON.stringify(body)} → ${raw.status} ${raw.message ?? ''}`,
       );
       return { ok: false, status: raw.status, error: raw.message ?? 'iot.quasar отклонил цвет' };
     }
     return { ok: true, status: 'DONE' };
   }
+}
+
+/** RGB-integer (0xRRGGBB) → {h:0..360, s:0..100, v:0..100}. */
+function rgbIntToHsv(rgb: number): { h: number; s: number; v: number } {
+  const r = ((rgb >> 16) & 0xff) / 255;
+  const g = ((rgb >> 8) & 0xff) / 255;
+  const b = (rgb & 0xff) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  h = Math.round((h * 60 + 360) % 360);
+  const s = max === 0 ? 0 : Math.round((d / max) * 100);
+  const v = Math.round(max * 100);
+  return { h, s, v };
 }
 
 /** Ключ для дедупа capability — type + instance (или 'default' если instance нет). */

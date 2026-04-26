@@ -647,16 +647,17 @@ async function onBulkColor(roomId: string, preset: ColorPreset): Promise<void> {
     candidates.map(({ cmd }) => devices.executeSilent(cmd)),
   );
 
-  // Помечаем фейлнувшиеся устройства в session-cache — на следующий клик
-  // bulk-color их скипнем без HTTP-вызова.
+  // Помечаем фейлнувшиеся устройства в session-cache — но ТОЛЬКО для логических
+  // отказов лампы (driver вернул конкретный errorCode её отклонения). HTTP-сбои
+  // Yandex (`YANDEX_HTTP_ERROR`, 5xx) — transient и не должны навсегда выкидывать
+  // лампу из bulk-цели: иначе разовый сбой облака блокирует все следующие клики.
+  const TRANSIENT_CODES = new Set(['YANDEX_HTTP_ERROR']);
   for (let i = 0; i < results.length; i++) {
     const r = results[i]!;
     const deviceId = candidates[i]!.device.id;
-    if (
-      r.status === 'rejected' ||
-      (r.status === 'fulfilled' && r.value.status === 'ERROR')
-    ) {
-      colorRejectedDevices.add(deviceId);
+    if (r.status === 'fulfilled' && r.value.status === 'ERROR') {
+      const code = r.value.errorCode ?? '';
+      if (!TRANSIENT_CODES.has(code)) colorRejectedDevices.add(deviceId);
     }
   }
 
