@@ -1,4 +1,22 @@
-/** Encrypted key-value store (electron-store): hubId, theme, driver creds, Alice skill state. */
+/**
+ * @fileoverview Encrypted key-value store (electron-store) — хранит
+ * долгоживущие настройки и секреты:
+ *
+ *   - `hubId`            — UUID хаба, выдаётся при первом запуске.
+ *   - `theme`            — light/dark/system, синхронизируется с UI store.
+ *   - `driverCreds.<id>` — зашифрованные creds каждого driver'а
+ *                           (см. {@link DriverCredentials}).
+ *   - `alice.skillConfig`, `alice.exposures.*`, `alice.tokens.*` — всё про
+ *     Alice Smart Home Skill bridge.
+ *
+ * Хранилище использует Electron `safeStorage` под капотом — на Windows это
+ * DPAPI (per-user encryption), на macOS Keychain, на Linux libsecret.
+ * Если safeStorage недоступен — данные сохраняются в plain (пользователь
+ * получит warning при первом запуске).
+ *
+ * Расположение: `%APPDATA%/SmartHome Hub/config.json` (Windows),
+ * аналогично на других ОС.
+ */
 
 import Store from 'electron-store';
 import { randomUUID } from 'node:crypto';

@@ -1,8 +1,11 @@
-// IKEA DIRIGERA шлюз — локальный REST на 8443 (self-signed TLS).
-// Pairing PKCE-flow: POST /v1/oauth/authorize → user жмёт кнопку на шлюзе → POST /v1/oauth/token.
-// После получения access_token → GET /v1/devices, PATCH /v1/devices/<id> для управления.
-//
-// Старый шлюз TRÅDFRI (gateway gen1) использует CoAP/DTLS — отдельный протокол, тут не покрываем.
+/**
+ * @fileoverview
+ * IKEA DIRIGERA шлюз — локальный REST на 8443 (self-signed TLS).
+ * Pairing PKCE-flow: POST /v1/oauth/authorize → user жмёт кнопку на шлюзе → POST /v1/oauth/token.
+ * После получения access_token → GET /v1/devices, PATCH /v1/devices/<id> для управления.
+ *
+ * Старый шлюз TRÅDFRI (gateway gen1) использует CoAP/DTLS — отдельный протокол, тут не покрываем.
+ */
 
 import { Agent } from 'node:https';
 import { createHash, randomBytes } from 'node:crypto';

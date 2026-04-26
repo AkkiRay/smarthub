@@ -1,7 +1,10 @@
-// Z-Wave-JS WebSocket bridge — подключаемся к WS-server (zwave-js-ui), читаем nodes,
-// отправляем CC commands. Документация: https://zwave-js.github.io/zwave-js-server/.
-//
-// Минимальная реализация: ws://host:3000 → schema-cmd "start_listening" → events "node_added"/"value_updated".
+/**
+ * @fileoverview
+ * Z-Wave-JS WebSocket bridge — подключаемся к WS-server (zwave-js-ui), читаем nodes,
+ * отправляем CC commands. Документация: https://zwave-js.github.io/zwave-js-server/.
+ *
+ * Минимальная реализация: ws://host:3000 → schema-cmd "start_listening" → events "node_added"/"value_updated".
+ */
 
 import { WebSocket } from 'ws';
 import type {

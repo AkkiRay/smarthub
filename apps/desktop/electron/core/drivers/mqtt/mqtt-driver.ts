@@ -1,5 +1,8 @@
-// MQTT driver под Zigbee2MQTT-style retained topics + опциональный extraTopicPrefix
-// для tasmota/ESPHome/HA. Тип устройства и capabilities выводятся из набора полей retained-payload.
+/**
+ * @fileoverview
+ * MQTT driver под Zigbee2MQTT-style retained topics + опциональный extraTopicPrefix
+ * для tasmota/ESPHome/HA. Тип устройства и capabilities выводятся из набора полей retained-payload.
+ */
 
 import mqtt, { type MqttClient } from 'mqtt';
 import log from 'electron-log/main.js';

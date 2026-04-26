@@ -1,4 +1,7 @@
-// usePressable — тактильный feedback: scale-down на pointerdown, elastic snap-back на up.
+/**
+ * @fileoverview
+ * usePressable — тактильный feedback: scale-down на pointerdown, elastic snap-back на up.
+ */
 
 import { onBeforeUnmount } from 'vue';
 import { gsap } from 'gsap';

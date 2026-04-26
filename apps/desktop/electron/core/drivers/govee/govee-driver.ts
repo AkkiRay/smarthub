@@ -1,6 +1,9 @@
-// Govee Public REST API (developer.govee.com): API key через мобильное приложение.
-// GET /v1/devices, PUT /v1/devices/control, GET /v1/devices/state.
-// Token-based — refresh не нужен, только rate-limit (60 req/min).
+/**
+ * @fileoverview
+ * Govee Public REST API (developer.govee.com): API key через мобильное приложение.
+ * GET /v1/devices, PUT /v1/devices/control, GET /v1/devices/state.
+ * Token-based — refresh не нужен, только rate-limit (60 req/min).
+ */
 
 import type { AxiosRequestConfig } from 'axios';
 import type {

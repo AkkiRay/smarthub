@@ -1,4 +1,7 @@
-// Pure-renderer UI prefs: theme/reduceMotion живут только тут (без IPC), persisted в localStorage.
+/**
+ * @fileoverview
+ * Pure-renderer UI prefs: theme/reduceMotion живут только тут (без IPC), persisted в localStorage.
+ */
 
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';

@@ -1,6 +1,18 @@
-// Alice Smart Home Skill bridge: контракты, общие для main и renderer.
-// Локальная Станция — отдельный домен (yandex-station.ts), здесь — облачная связка
-// «хаб ↔ навык в Я.Диалогах ↔ устройства в приложении Дом с Алисой».
+/**
+ * @fileoverview Контракты Alice Smart Home Skill bridge — связка
+ * «хаб ↔ навык в Я.Диалогах ↔ устройства в приложении Дом с Алисой».
+ *
+ * Локальная колонка Я.Станция — отдельный домен (см. `yandex-station.ts`).
+ * Тут — про cloud-навык: туннель, OAuth-pairing, exposure устройств/сценариев.
+ *
+ * Сценарий использования:
+ *   1. Юзер регистрирует skill в `dialogs.yandex.ru` (получает skillId).
+ *   2. Сохраняет {@link AliceSkillConfig} в хабе (id + secret + опционально dialogs token).
+ *   3. Поднимает cloudflared-туннель — хаб получает публичный HTTPS-URL.
+ *   4. Юзер привязывает аккаунт в Я.Доме → Алиса делает `/v1.0/user/devices`
+ *      и видит экспонированные устройства/сценарии.
+ *   5. Алиса присылает действия → webhook-server маршрутизирует в drivers.
+ */
 
 import type { Device } from './device.js';
 import type { YandexStationStatus } from './yandex-station.js';

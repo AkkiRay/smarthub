@@ -1,6 +1,9 @@
-// WiZ (Philips/Signify): UDP 38899, JSON-RPC.
-// Discovery: broadcast getPilot → каждая лампа отвечает unicast'ом своим state.
-// Каждая команда — отдельная UDP-пара request/response, нет TCP/keepalive — лампа stateless.
+/**
+ * @fileoverview
+ * WiZ (Philips/Signify): UDP 38899, JSON-RPC.
+ * Discovery: broadcast getPilot → каждая лампа отвечает unicast'ом своим state.
+ * Каждая команда — отдельная UDP-пара request/response, нет TCP/keepalive — лампа stateless.
+ */
 
 import { createSocket, type Socket as DgramSocket } from 'node:dgram';
 import type {

@@ -1,5 +1,8 @@
-// Tuya Cloud driver. Подпись v1.0 BUSINESS: sign = HMAC-SHA256(clientId + accessToken + t + nonce + stringToSign).
-// Bug fix: body sha256 нужно считать честно даже для пустого body (sha256("")), иначе POST-команды падают с `sign invalid`.
+/**
+ * @fileoverview
+ * Tuya Cloud driver. Подпись v1.0 BUSINESS: sign = HMAC-SHA256(clientId + accessToken + t + nonce + stringToSign).
+ * Bug fix: body sha256 нужно считать честно даже для пустого body (sha256("")), иначе POST-команды падают с `sign invalid`.
+ */
 
 import axios, { type AxiosInstance } from 'axios';
 import { createHash, createHmac } from 'node:crypto';

@@ -1,9 +1,24 @@
 /**
- * База для cloud-драйверов: shared axios instance + single-flight refresh-on-401.
+ * @fileoverview Базовый класс для cloud-драйверов (Tuya, eWeLink, Govee,
+ * Sber, Aqara, …). Расширяет {@link BaseDriver} двумя возможностями:
  *
- * Subclass реализует `refreshToken()` (обновляет внутренний state) и `applyAuth()`
- * (ставит Authorization header перед запросом). `request()` авто-ретраит один раз
- * при 401, параллельные 401 ждут общий refresh.
+ *   1. **Shared axios instance** — единый `AxiosInstance` с заданным baseURL
+ *      и timeout'ом, не плодим инстансы на каждый запрос.
+ *   2. **Single-flight refresh-on-401** — если параллельно стартовали 5
+ *      запросов и все получили 401, refresh-токена вызовется ОДИН раз,
+ *      остальные дождутся его и retry'нут с новым токеном.
+ *
+ * Subclass обязан реализовать:
+ *   - `refreshToken()` — обновляет внутренний state (сохраняет новый
+ *      access/refresh-токен в `SettingsStore`).
+ *   - `applyAuth(config)` — ставит `Authorization` header перед запросом
+ *      (вызывается ДО каждого `request()`, в том числе при retry).
+ *
+ * `request<T>(config)` автоматически:
+ *   1. Применяет `applyAuth()`.
+ *   2. Шлёт запрос.
+ *   3. При HTTP 401 — single-flight refresh + retry один раз.
+ *   4. При retry-попадании 401 — бросает (юзер увидит auth-required toast).
  */
 
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';

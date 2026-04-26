@@ -1,8 +1,11 @@
-// Matter-over-IP: discovery через mDNS-SD `_matter._tcp` / `_matterc._udp` (commissionable).
-// Полный controller stack (commissioning, PASE, CASE, attribute read/subscribe) требует
-// `@project-chip/matter.js` + native crypto — это ~10 MB зависимостей. Здесь реализован только
-// pass-through discovery: пользователь видит свои Matter-устройства, а UI показывает «для управления
-// требуется установить Matter Controller». Полная реализация — отдельная фича после поставки.
+/**
+ * @fileoverview
+ * Matter-over-IP: discovery через mDNS-SD `_matter._tcp` / `_matterc._udp` (commissionable).
+ * Полный controller stack (commissioning, PASE, CASE, attribute read/subscribe) требует
+ * `@project-chip/matter.js` + native crypto — это ~10 MB зависимостей. Здесь реализован только
+ * pass-through discovery: пользователь видит свои Matter-устройства, а UI показывает «для управления
+ * требуется установить Matter Controller». Полная реализация — отдельная фича после поставки.
+ */
 
 import { Bonjour } from 'bonjour-service';
 import log from 'electron-log/main.js';

@@ -1,5 +1,23 @@
-// Composition root для всей skill-интеграции: webhook + tunnel + state-pusher + activity log.
-// Один публичный фасад — IPC-handlers и smart-home-hub дёргают только его.
+/**
+ * @fileoverview Composition-root для Alice Smart Home Skill интеграции.
+ *
+ * Склеивает четыре подсистемы:
+ *   - {@link WebhookServer}   — HTTP-listener, принимает запросы от Я.Алисы.
+ *   - {@link TunnelManager}   — cloudflared subprocess, выдаёт публичный URL.
+ *   - {@link StatePusher}     — push state-updates в Я.Диалоги callback API.
+ *   - Activity log            — circular buffer событий для UI status-панели.
+ *
+ * Один публичный фасад — IPC-handler'ы и {@link SmartHomeHub} дёргают только
+ * `AliceBridge`. Подсистемы между собой напрямую не общаются.
+ *
+ * Lifecycle:
+ *   1. `init()` — поднимает webhook на random-порту, не открывает tunnel.
+ *   2. `setSkillConfig(config)` — сохраняет creds, разрешает запуск туннеля.
+ *   3. `startTunnel()` — запускает cloudflared, ждёт публичный URL.
+ *   4. `setExposures(...)` — юзер выбирает что показывать Алисе.
+ *   5. (Алиса сама дёргает webhook → действия идут в driver registry).
+ *   6. `shutdown()` — graceful: закрывает tunnel, останавливает webhook.
+ */
 
 import { EventEmitter } from 'node:events';
 import { randomBytes, randomUUID } from 'node:crypto';

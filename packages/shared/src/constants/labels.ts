@@ -1,6 +1,12 @@
-// Single source of truth для UI-лейблов: DriverId → human-readable, DeviceType → русское название.
-// Используется одновременно в DeviceCard, DeviceDetailView, ManualDeviceFlow, Tray и т.д. —
-// при добавлении нового драйвера/типа обновляется только этот файл.
+/**
+ * @fileoverview Single source of truth для UI-лейблов:
+ *   - {@link DRIVER_SHORT_LABEL} — `DriverId` → имя для chip'а в карточке;
+ *   - {@link DEVICE_TYPE_LABEL_RU} — `DeviceType` → русское название.
+ *
+ * Импортируется из DeviceCard, DeviceDetailView, ManualDeviceFlow, Tray,
+ * Discovery view и т.д. При добавлении нового driver'а / device-type
+ * обновляется ТОЛЬКО этот файл — все consumer'ы подхватят автоматически.
+ */
 
 import type { DriverId } from '../types/device.js';
 import { DEVICE_TYPE } from './capabilities.js';

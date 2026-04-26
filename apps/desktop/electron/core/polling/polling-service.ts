@@ -1,5 +1,25 @@
-// Periodic state-refresh: устройства могут менять состояние снаружи (физический выключатель, голос).
-// Backoff: подряд failed устройства опрашиваем реже, чтобы не топить LAN.
+/**
+ * @fileoverview Periodic state-refresh — раз в `HUB_POLL_INTERVAL_MS` (default
+ * 30s) опрашивает все online-устройства через `driver.readState(device)`.
+ *
+ * Зачем нужен polling:
+ *   - Устройства часто меняют state снаружи (физический выключатель,
+ *     голос Алисе, mobile app другого вендора).
+ *   - Не у всех драйверов есть push-канал (Yeelight notify, MQTT subscribe,
+ *     Yandex updates_url) — без polling state в UI протухает.
+ *
+ * Adaptive backoff:
+ *   - `unreachable`-устройства опрашиваются в 4× реже (`FAIL_BACKOFF_MULTIPLIER`).
+ *     Иначе при отвалившемся LAN-сегменте polling спамит timeout'ы и забивает
+ *     event-loop.
+ *
+ * Concurrency:
+ *   - Не больше {@link MAX_PARALLEL_REFRESH} одновременных readState'ов —
+ *     иначе UDP-сокеты драйверов конкурируют и теряют пакеты.
+ *
+ * Polling можно полностью отключить через `HUB_POLL_INTERVAL_MS=0`
+ * (если все драйверы поддерживают push).
+ */
 
 import log from 'electron-log/main.js';
 import type { DeviceRegistry } from '../registry/device-registry.js';

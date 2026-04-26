@@ -1,5 +1,16 @@
-// Brand-палитра. Единственный источник для int- (Three.js/Canvas) и hex-API (inline-styles).
-// CSS-переменные в styles/abstracts/_tokens.scss зеркалят эти значения.
+/**
+ * @fileoverview Brand-палитра — single source of truth для цветов:
+ *   - integer (`0x7c5bff`) — для Three.js, Canvas, GSAP color tweens;
+ *   - hex (`#7c5bff`)      — для inline-styles, SCSS interpolation,
+ *                            Vue computed-цветов.
+ *
+ * SCSS-переменные в `styles/abstracts/_tokens.scss` зеркалят эти значения.
+ * При изменении палитры — синхронизировать оба файла.
+ *
+ * NOTE: brand-палитра — публичный design token; статусные цвета (success/warn/
+ * error) — отдельный slot, чтобы UI можно было ребрендить, не трогая
+ * семантику feedback-состояний.
+ */
 
 export const BRAND = {
   violet: 0x7c5bff,

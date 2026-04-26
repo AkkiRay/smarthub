@@ -1,4 +1,7 @@
-// useBreakpoint — реактивные media-query хуки. Single source of truth для adaptive UI.
+/**
+ * @fileoverview
+ * useBreakpoint — реактивные media-query хуки. Single source of truth для adaptive UI.
+ */
 
 import { computed, onBeforeUnmount, ref, type ComputedRef, type Ref } from 'vue';
 

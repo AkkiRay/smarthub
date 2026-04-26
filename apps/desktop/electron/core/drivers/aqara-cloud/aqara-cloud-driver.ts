@@ -1,6 +1,9 @@
-// Aqara Cloud (open API) — региональный endpoint, OAuth code+secret.
-// /v3.0/open/auth.refresh — refresh token; /v3.0/open/resource/query — list devices;
-// /v3.0/open/resource/value/update — write attribute.
+/**
+ * @fileoverview
+ * Aqara Cloud (open API) — региональный endpoint, OAuth code+secret.
+ * /v3.0/open/auth.refresh — refresh token; /v3.0/open/resource/query — list devices;
+ * /v3.0/open/resource/value/update — write attribute.
+ */
 
 import type { AxiosRequestConfig } from 'axios';
 import type {

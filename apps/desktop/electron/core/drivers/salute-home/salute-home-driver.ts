@@ -1,10 +1,13 @@
-// SaluteHome: облако SberDevices. Авторизация Sber ID OAuth, REST API на
-// https://gateway.iot.sberdevices.ru/v1 (унифицированный шлюз с sber-home).
-// Отличие от sber-home: SaluteHome объединяет ассистента «Салют» (умные колонки)
-// с устройствами smart-home и поддерживает quasar.server_action — сценарии и фразы.
-//
-// API в большой степени идентичен sber-home, но endpoint для quasar-команд:
-//   POST /quasar/v1/devices/<id>/server_action  { params: { type: ..., ... } }
+/**
+ * @fileoverview
+ * SaluteHome: облако SberDevices. Авторизация Sber ID OAuth, REST API на
+ * https://gateway.iot.sberdevices.ru/v1 (унифицированный шлюз с sber-home).
+ * Отличие от sber-home: SaluteHome объединяет ассистента «Салют» (умные колонки)
+ * с устройствами smart-home и поддерживает quasar.server_action — сценарии и фразы.
+ *
+ * API в большой степени идентичен sber-home, но endpoint для quasar-команд:
+ *   POST /quasar/v1/devices/<id>/server_action  { params: { type: ..., ... } }
+ */
 
 import axios, { type AxiosRequestConfig } from 'axios';
 import type {

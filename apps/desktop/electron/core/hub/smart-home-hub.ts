@@ -1,6 +1,21 @@
 /**
- * Фасад приложения: точка входа для IPC-handlers; делегирует подсистемам и
- * форвардит их события в общий bus. Renderer не знает про внутреннюю топологию.
+ * @fileoverview SmartHomeHub — фасад core-приложения. Точка входа для всех
+ * IPC-handler'ов, делегирует работу подсистемам:
+ *
+ *   - {@link DeviceRegistry}        — CRUD устройств, room-membership, exec-routing.
+ *   - {@link DriverRegistry}        — driver lifecycle, descriptors, credentials.
+ *   - {@link DiscoveryService}      — параллельный scan по всем активным драйверам.
+ *   - {@link PollingService}        — periodic state refresh для online-устройств.
+ *   - {@link SceneService}          — scene CRUD + execution.
+ *   - {@link YandexStationClient}   — локальная Я.Станция (WS на :1961).
+ *   - {@link AliceBridge}           — Alice Smart Home Skill (cloud webhook).
+ *
+ * Hub не содержит бизнес-логики сам по себе — он только склеивает подсистемы
+ * и форвардит их события в общий {@link EventEmitter}-bus. IPC handler'ы
+ * читают этот bus и пушат события в renderer.
+ *
+ * Renderer не знает про внутреннюю топологию: для него существует только
+ * `window.smarthome.*` API.
  */
 
 import { EventEmitter } from 'node:events';

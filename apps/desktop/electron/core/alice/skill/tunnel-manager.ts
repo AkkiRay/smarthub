@@ -1,13 +1,34 @@
-// Cloudflared subprocess manager: поднимает quick-tunnel (`cloudflared tunnel --url`),
-// или named-tunnel (`cloudflared tunnel run <name>`), парсит публичный URL из stderr,
-// перезапускает на падении с экспоненциальным backoff.
-//
-// Зачем cloudflared: бесплатно без регистрации (quick-tunnel), скорость подходит
-// под 3-секундный SLA Алисы, нативные бинарники под Win/Mac/Linux. Альтернативы
-// (ngrok, frp) — пользователь может явно выбрать через customDomain или manual mode.
-//
-// Бинарник cloudflared НЕ бандлится в дистрибутив — слишком тяжёлый (~30МБ × 3 платформы).
-// При отсутствии show «скачать cloudflared» в UI с прямой ссылкой на release.
+/**
+ * @fileoverview Cloudflared subprocess-manager — поднимает HTTPS-туннель к
+ * локальному {@link WebhookServer}, чтобы Алиса могла достучаться до хаба
+ * через публичный URL.
+ *
+ * Режимы работы:
+ *   - **Quick-tunnel** (`cloudflared tunnel --url http://127.0.0.1:<port>`) —
+ *     бесплатно без регистрации, выдаётся `*.trycloudflare.com` URL,
+ *     меняется при каждом перезапуске.
+ *   - **Named tunnel** (`cloudflared tunnel run <name>`) — стабильный URL на
+ *     своём домене; требует cloudflared login + `customDomain` в config.
+ *
+ * URL парсится из `stderr` cloudflared (структурированных ID/URL stdout у него
+ * нет). Парсинг делает regex по строке `Your tunnel URL is https://...`.
+ *
+ * Resilience:
+ *   - При падении subprocess — exponential backoff (1s, 2s, 4s, 8s, max 60s).
+ *   - URL change → broadcast event'а наверх (UI обновит endpoint в config'е).
+ *
+ * Почему cloudflared:
+ *   - Бесплатно без регистрации (quick-tunnel).
+ *   - Latency хорошо ложится в 3-секундный SLA Алисы.
+ *   - Нативные binary под Win/Mac/Linux.
+ *
+ * Альтернативы (ngrok, frp, localtunnel) — юзер может выбрать через
+ * `customDomain` или manual-mode, см. {@link AliceSkillConfig}.
+ *
+ * NOTE: бинарник cloudflared НЕ бандлится в installer — ~30 МБ × 3 платформы.
+ * При отсутствии в PATH — UI показывает диалог «Скачать cloudflared» с
+ * прямой ссылкой на release page.
+ */
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';

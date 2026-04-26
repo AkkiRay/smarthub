@@ -1,4 +1,7 @@
-// Пресеты RGB и CCT для color_setting capability. value (0xRRGGBB) и bg должны быть синхронны.
+/**
+ * @fileoverview
+ * Пресеты RGB и CCT для color_setting capability. value (0xRRGGBB) и bg должны быть синхронны.
+ */
 
 export interface ColorPreset {
   label: string;

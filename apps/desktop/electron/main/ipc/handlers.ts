@@ -1,5 +1,23 @@
-// IPC handlers: тонкий transport над SmartHomeHub. Только typing, error logging и broadcast.
-// Маршрутизация описана декларативно — добавление API-метода = одна строка в HANDLERS/EVENTS.
+/**
+ * @fileoverview IPC-handlers — тонкий transport-слой над {@link SmartHomeHub}.
+ *
+ * Ответственность handler'а:
+ *   - Привязать `ipcMain.handle('<channel>', ...)` к hub-методу.
+ *   - Логировать failure'ы в main.log с префиксом канала.
+ *   - Форвардить hub-events обратно в renderer как `event:<channel>`.
+ *
+ * Никакой бизнес-логики — она целиком живёт в hub'е и сервисах. Это позволяет
+ * заменить транспорт (например, на WebSocket для headless-режима) без
+ * переписывания core'а.
+ *
+ * Регистрация нового API-метода:
+ *   1. Добавить тип в `IpcApi` (`packages/shared/src/types/ipc.ts`).
+ *   2. Добавить вызов `hub.<method>` в этом файле.
+ *   3. Добавить вызов `invoke(...)` в `preload/index.ts`.
+ *
+ * Push-events форвардятся декларативно: добавление события — одна строка
+ * в {@link HUB_EVENTS}.
+ */
 
 import { app, shell } from 'electron';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';

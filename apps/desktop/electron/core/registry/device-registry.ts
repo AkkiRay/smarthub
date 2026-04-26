@@ -1,5 +1,24 @@
-// In-memory кэш сопряжённых устройств + write-through в DeviceStore. Все mutations
-// проходят через registry, чтобы каждое изменение синхронно летело и в SQLite, и в event bus.
+/**
+ * @fileoverview Device registry — in-memory cache всех сопряжённых устройств
+ * с write-through в {@link DeviceStore} (better-sqlite3).
+ *
+ * Архитектура:
+ *   - Все mutation'ы проходят через registry — это гарантирует, что каждое
+ *     изменение синхронно летит и в SQLite, и в {@link EventEmitter}-bus
+ *     (для пуша в renderer).
+ *   - Registry владеет device-объектами; никто другой их не клонирует и
+ *     не возвращает stale-snapshot.
+ *   - События: `device:updated`, `device:removed`, `room:upserted`, `room:removed`.
+ *
+ * Routing команд:
+ *   `execute(command)` находит device, его driver, делегирует в `driver.execute(...)`,
+ *   обновляет cached state result'ом, эмитит `device:updated`. Renderer
+ *   получает обновлённое значение через push, без отдельного refresh-вызова.
+ *
+ * Push-subscriptions:
+ *   Если driver реализует `subscribePush()`, registry подписывается при init'е
+ *   и мержит partial-Device patch'и в полный device-объект.
+ */
 
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';

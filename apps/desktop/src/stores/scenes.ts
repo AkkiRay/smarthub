@@ -1,3 +1,12 @@
+/**
+ * @fileoverview Pinia-store сценариев. CRUD-обёртки над IPC-каналом
+ * `window.smarthome.scenes.*`, плюс `run(id)` для запуска сценария.
+ *
+ * Используется ScenesView (список + редактор) и HomeView (быстрые сценарии
+ * на главной странице). Engine выполнения живёт в main process'е
+ * ({@link SceneService}).
+ */
+
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { Scene } from '@smarthome/shared';

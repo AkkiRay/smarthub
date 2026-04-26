@@ -1,18 +1,21 @@
-// LIFX LAN: UDP 56700, бинарный header (36 байт) + payload.
-// Discovery: broadcast GetService (msg=2) → LIFX отвечает StateService (msg=3) с MAC и портом.
-// Для чтения цвета используется Light::Get (101) → State (107).
-//
-// Frame layout (всё little-endian):
-//   [0..2)  size (uint16)
-//   [2..4)  protocol(12) | addressable(1) | tagged(1) | origin(2)  → 0x3400 для unicast
-//   [4..8)  source (uint32, эхо в ответе)
-//   [8..16) target MAC (6 bytes + 2 padding)
-//   [16..22) reserved
-//   [22..23) res_required(1) | ack_required(1) | reserved(6)
-//   [23..24) sequence
-//   [24..32) reserved
-//   [32..34) message type
-//   [34..36) reserved
+/**
+ * @fileoverview
+ * LIFX LAN: UDP 56700, бинарный header (36 байт) + payload.
+ * Discovery: broadcast GetService (msg=2) → LIFX отвечает StateService (msg=3) с MAC и портом.
+ * Для чтения цвета используется Light::Get (101) → State (107).
+ *
+ * Frame layout (всё little-endian):
+ *   [0..2)  size (uint16)
+ *   [2..4)  protocol(12) | addressable(1) | tagged(1) | origin(2)  → 0x3400 для unicast
+ *   [4..8)  source (uint32, эхо в ответе)
+ *   [8..16) target MAC (6 bytes + 2 padding)
+ *   [16..22) reserved
+ *   [22..23) res_required(1) | ack_required(1) | reserved(6)
+ *   [23..24) sequence
+ *   [24..32) reserved
+ *   [32..34) message type
+ *   [34..36) reserved
+ */
 
 import { createSocket } from 'node:dgram';
 import type {

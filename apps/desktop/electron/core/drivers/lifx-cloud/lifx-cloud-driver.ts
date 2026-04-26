@@ -1,4 +1,7 @@
-// LIFX HTTP API: api.lifx.com/v1, Bearer token (генерится в cloud.lifx.com).
+/**
+ * @fileoverview
+ * LIFX HTTP API: api.lifx.com/v1, Bearer token (генерится в cloud.lifx.com).
+ */
 
 import type { AxiosRequestConfig } from 'axios';
 import type {

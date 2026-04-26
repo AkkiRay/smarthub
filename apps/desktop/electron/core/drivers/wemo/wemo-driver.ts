@@ -1,5 +1,8 @@
-// Belkin WeMo: SSDP M-SEARCH `urn:Belkin:device:*` → SOAP /upnp/control/basicevent1.
-// XML минимальный — без xml2js: достаточно regex'ов под BinaryState и friendlyName.
+/**
+ * @fileoverview
+ * Belkin WeMo: SSDP M-SEARCH `urn:Belkin:device:*` → SOAP /upnp/control/basicevent1.
+ * XML минимальный — без xml2js: достаточно regex'ов под BinaryState и friendlyName.
+ */
 
 import axios from 'axios';
 import { createSocket } from 'node:dgram';

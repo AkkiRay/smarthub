@@ -1,5 +1,14 @@
-// Канонические capability/property/instance токены — единая точка истины и для драйверов, и для UI.
-// Совместимы со схемой Yandex Smart Home (devices.capabilities.*).
+/**
+ * @fileoverview Канонические capability/property/instance/unit/range/timeout
+ * токены — единая точка истины для драйверов и UI.
+ *
+ * Все строковые литералы совместимы со схемой Yandex Smart Home
+ * (`devices.capabilities.*`, `devices.properties.*`, `devices.types.*`),
+ * чтобы payload'ы можно было форвардить через Alice Smart Home Skill без
+ * преобразований.
+ *
+ * @see {@link https://yandex.ru/dev/dialogs/smart-home/doc/concepts/}
+ */
 
 export const CAPABILITY = {
   ON_OFF: 'devices.capabilities.on_off',

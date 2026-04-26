@@ -1,7 +1,16 @@
-// Yandex Station: локальный JSONRPC по WebSocket на порту 1961, без облака.
-// mDNS: `_yandexio._tcp.local`; WS: wss://<ip>:1961/?token=<glagol-token>;
-// команды: { id, sentTime, command: 'sendText'|'serverAction'|'ping', text, ... }
-// Reference: community reverse-engineering.
+/**
+ * @fileoverview Контракты для двух доменов «Яндекс»-интеграции:
+ *
+ * 1. **Локальная Я.Станция** — JSONRPC по WSS на порту 1961, без облака.
+ *    - mDNS:    `_yandexio._tcp.local`
+ *    - URL:     `wss://<ip>:1961/?token=<glagol-token>`
+ *    - Команда: `{ id, sentTime, command: 'sendText'|'serverAction'|'ping', text, ... }`
+ *    - Reference: community reverse-engineering.
+ *
+ * 2. **«Дом с Алисой»** (cloud) — `iot.quasar.yandex.ru/m/v3/user/devices`.
+ *    Тут только domain-типы; HTTP-клиент живёт в
+ *    `electron/core/alice/yandex-iot-api.ts`.
+ */
 
 export interface YandexStationCandidate {
   /** Уникальный device_id (он же hostname-сегмент). */

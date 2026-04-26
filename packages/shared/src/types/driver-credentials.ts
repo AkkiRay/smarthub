@@ -1,11 +1,21 @@
-// Per-driver credentials schema. Единая точка истины — typed shape для каждого
-// драйвера, который требует ввода credentials.
-//
-// Использование:
-//   - DriverModule.create({ settings }) → settings.getDriverCredentials<'tuya'>('tuya') возвращает TuyaCredentials.
-//   - IpcApi.drivers.setCredentials/getCredentials параметризованы DriverId для compile-time-safety.
-//
-// Драйверы без credentials (mock, yeelight, lifx, wiz, shelly, generic-http, wemo) — отсутствуют в этой карте.
+/**
+ * @fileoverview Per-driver credentials schema — единая точка истины для всех
+ * driver'ов, требующих ввода учётных данных.
+ *
+ * Архитектурные инварианты:
+ *   1. {@link DriverModule.create} принимает `settings` и вызывает
+ *      `settings.getDriverCredentials<'tuya'>('tuya')` — получает строго
+ *      типизированный {@link TuyaCredentials}.
+ *   2. {@link IpcApi.drivers.setCredentials}/`getCredentials` параметризованы
+ *      `DriverId` — compile-time проверка соответствия creds-типа драйверу.
+ *   3. Driver'ы без формы credentials (mock, yeelight, lifx, wiz, shelly,
+ *      generic-http, wemo, yandex-station) маппятся на `Record<string, never>` —
+ *      это пустой объект, типы не позволяют передать туда поля.
+ *
+ * Хранение: `electron-store` с шифрованием через `safeStorage` (DPAPI на
+ * Windows, Keychain на macOS, libsecret на Linux). См.
+ * `electron/core/storage/settings-store.ts`.
+ */
 
 import type { DriverId } from './device.js';
 

@@ -1,16 +1,19 @@
-// Sber Дом (приложение «Сбер Дом», экосистема Sber Smart Home).
-// API: https://gateway.iot.sberdevices.ru/gateway/v1
-//   - аутентификация через OAuth-токен Sber ID;
-//   - GET /house_info → дом, комнаты, devices;
-//   - POST /devices/<id>/state — отправка управляющих action'ов.
-// Из-за того, что у Sber нет публичного «третьесторонних разработчиков» SDK, маршруты могут
-// меняться — здесь fallback на refresh-token и явный лог при HTTP 401/403.
-//
-// Тип action'ов в Sber:
-//   { commands: [{ action: { type: "QUASAR_SERVER_ACTION", params: {...} } }] }  — для квазара
-//   { commands: [{ action: { type: "ON", value: true } }] }                        — для on_off
-//   { commands: [{ action: { type: "BRIGHTNESS", value: 75 } }] }                  — для range
-//   { commands: [{ action: { type: "COLOUR_RGB", value: 0xFFAA00 } }] }            — для rgb
+/**
+ * @fileoverview
+ * Sber Дом (приложение «Сбер Дом», экосистема Sber Smart Home).
+ * API: https://gateway.iot.sberdevices.ru/gateway/v1
+ *   - аутентификация через OAuth-токен Sber ID;
+ *   - GET /house_info → дом, комнаты, devices;
+ *   - POST /devices/<id>/state — отправка управляющих action'ов.
+ * Из-за того, что у Sber нет публичного «третьесторонних разработчиков» SDK, маршруты могут
+ * меняться — здесь fallback на refresh-token и явный лог при HTTP 401/403.
+ *
+ * Тип action'ов в Sber:
+ *   { commands: [{ action: { type: "QUASAR_SERVER_ACTION", params: {...} } }] }  — для квазара
+ *   { commands: [{ action: { type: "ON", value: true } }] }                        — для on_off
+ *   { commands: [{ action: { type: "BRIGHTNESS", value: 75 } }] }                  — для range
+ *   { commands: [{ action: { type: "COLOUR_RGB", value: 0xFFAA00 } }] }            — для rgb
+ */
 
 import axios, { type AxiosRequestConfig } from 'axios';
 import type {

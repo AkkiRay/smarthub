@@ -1,5 +1,8 @@
-// Coachmark-тур. Шаги привязаны к DOM через `data-tour="<id>"`. Запускается
-// `?tour=1` из WelcomeView или ручкой из Settings. Шаги сгруппированы в главы.
+/**
+ * @fileoverview
+ * Coachmark-тур. Шаги привязаны к DOM через `data-tour="<id>"`. Запускается
+ * `?tour=1` из WelcomeView или ручкой из Settings. Шаги сгруппированы в главы.
+ */
 
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';

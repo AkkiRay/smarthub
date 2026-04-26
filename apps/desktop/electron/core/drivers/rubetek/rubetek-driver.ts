@@ -1,6 +1,9 @@
-// Rubetek (Россия): cloud REST API на api.rubetek.com.
-// Auth: POST /login → bearer token + refresh; список устройств: GET /api/houses/<id>/devices.
-// Документация публичного третьесторонним API нет, эндпоинты основаны на reverse-engineering приложения.
+/**
+ * @fileoverview
+ * Rubetek (Россия): cloud REST API на api.rubetek.com.
+ * Auth: POST /login → bearer token + refresh; список устройств: GET /api/houses/<id>/devices.
+ * Документация публичного третьесторонним API нет, эндпоинты основаны на reverse-engineering приложения.
+ */
 
 import type { AxiosRequestConfig } from 'axios';
 import type {

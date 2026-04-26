@@ -1,5 +1,17 @@
-// Типизированные factory'и для конструирования Capability/Property.
-// Используются и драйверами (mock, hue, ...) и mock-генератором сценариев в UI.
+/**
+ * @fileoverview Типизированные factory-функции для конструирования
+ * {@link Capability} и {@link DeviceProperty}.
+ *
+ * Используются:
+ *   - Драйверами (mock, hue, lifx, …) при сборке Device-объекта в `probe()`/`readState()`.
+ *   - Mock-генератором сценариев в UI (для preview).
+ *
+ * Преимущество перед ручным построением: factory ставит `retrievable`,
+ * `reportable`, `parameters.unit`, валидирует диапазон через `clamp()` —
+ * meets-Yandex-schema по умолчанию.
+ *
+ * Convention: имена `cap*` — capability-builders, `prop*` — property-builders.
+ */
 
 import type { Capability, DeviceProperty } from '../types/device.js';
 import { CAPABILITY, INSTANCE, PROPERTY, RANGE, UNIT } from '../constants/capabilities.js';

@@ -1,6 +1,10 @@
-// Public-константы Алисы — доступны и main-процессу, и renderer'у.
-// Внутренние таймауты HTTP/WS-клиента живут отдельно в `apps/desktop/electron/core/alice/constants.ts`,
-// потому что renderer о них знать не должен (он не открывает ни WS, ни axios).
+/**
+ * @fileoverview Public-константы Я.Алисы — доступны и main process'у, и renderer'у.
+ *
+ * Внутренние таймауты HTTP/WS-клиента живут отдельно в
+ * `apps/desktop/electron/core/alice/constants.ts` (renderer о них знать не
+ * должен, т.к. не открывает ни WS, ни axios напрямую).
+ */
 
 /** WS-порт колонки Алисы. Зашит в прошивке колонки, mDNS обычно даёт его же. */
 export const YANDEX_STATION_PORT = 1961;

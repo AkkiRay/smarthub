@@ -1,4 +1,17 @@
-// Public API: всё, что видят renderer и main process.
+/**
+ * @fileoverview Public barrel-export пакета `@smarthome/shared`.
+ *
+ * Всё что экспортится отсюда — видно одновременно renderer'у (Vue) и main
+ * процессу Electron, плюс packages внутри monorepo. Импорты из глубины
+ * (`@smarthome/shared/types/...`) запрещены — используйте только этот корень.
+ *
+ * Содержимое:
+ *   - `constants/`  — Yandex Smart Home enum'ы, цветовые presets, default'ы.
+ *   - `types/`      — domain-схема (Device, Driver, IPC, Scene, Alice payloads).
+ *   - `utils/`      — pure helpers (color, capability-builders, type-guards,
+ *                     Result-wrapper).
+ */
+
 export * from './constants/alice.js';
 export * from './constants/capabilities.js';
 export * from './constants/colors.js';

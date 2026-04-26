@@ -1,15 +1,32 @@
-// HTTP-сервер навыка: один process-local listener на random-порту,
-// внешний доступ — через cloudflared (tunnel-manager). Реализует:
-//
-//   1. OAuth (для привязки Алисы к хабу): GET /oauth/authorize, POST /oauth/token
-//   2. Yandex Smart Home v1.0 webhook: HEAD /v1.0, POST /v1.0/user/unlink,
-//      GET /v1.0/user/devices, POST /v1.0/user/devices/query, POST /v1.0/user/devices/action
-//
-// Безопасность:
-//   - Все /v1.0/* (кроме HEAD) требуют валидный Bearer (issuedTokens в settings).
-//   - /oauth/token проверяет client_id+client_secret из AliceSkillConfig.
-//   - /oauth/authorize — single-user hub: требует подтверждения пользователем (HTML-form),
-//     потом редирект обратно на Я. с code+state. Без пароля — хаб локальный, юзер сам кликает.
+/**
+ * @fileoverview HTTP-сервер навыка — process-local listener на random-порту,
+ * внешний доступ обеспечивает {@link TunnelManager} (cloudflared).
+ *
+ * Endpoints
+ * ---------
+ * **OAuth (для привязки Алисы к хабу):**
+ *   - `GET  /oauth/authorize` — HTML-form, юзер нажимает «Разрешить».
+ *   - `POST /oauth/token`     — обмен code на access+refresh-токены.
+ *
+ * **Yandex Smart Home v1.0 webhook:**
+ *   - `HEAD /v1.0`                          — health-check от Алисы.
+ *   - `POST /v1.0/user/unlink`              — юзер отвязал аккаунт.
+ *   - `GET  /v1.0/user/devices`             — список экспонированных устройств.
+ *   - `POST /v1.0/user/devices/query`       — запрос текущего state'а.
+ *   - `POST /v1.0/user/devices/action`      — выполнить команду.
+ *
+ * Безопасность
+ * ------------
+ *   - Все `/v1.0/*` (кроме HEAD) требуют валидный Bearer (issuedTokens в
+ *     settings, выдаются {@link TokenIssuer}).
+ *   - `/oauth/token` проверяет client_id + client_secret из {@link AliceSkillConfig}.
+ *   - `/oauth/authorize` — single-user hub: требует HTML-confirm от пользователя,
+ *     потом redirect обратно на Я. с `code + state`. Пароль не нужен — хаб
+ *     локальный, юзер сам кликает на свой машине.
+ *
+ * SLA Алисы — 3 секунды на ответ. Action-flow вызывает driver registry синхронно
+ * (всё равно бы лучше через очередь — но Алиса не любит async-deferred).
+ */
 //
 // Soft-fail философия: на любом throw — 500 + лог; Алиса покажет «временная ошибка», но
 // не уйдёт в /unlink. 3-секундный SLA — все обработчики синхронные либо асинхронные с

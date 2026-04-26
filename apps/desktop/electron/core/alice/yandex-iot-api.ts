@@ -1,22 +1,42 @@
 /**
- * Клиент `iot.quasar.yandex.ru` — «Дом с Алисой».
+ * @fileoverview HTTP/WebSocket-клиент cloud-сервиса «Дом с Алисой» (iot.quasar) —
+ * fetch'ит устройства, запускает actions, подписывается на real-time updates.
  *
- * Auth: session cookies из партиции `persist:yandex-oauth` + CSRF-токен `csrfToken2`
- * из HTML `https://yandex.ru/quasar`. Music-token (Bearer) этим endpoint'ом
- * не принимается.
+ * Authentication
+ * --------------
+ * - Session cookies из Electron-партиции `persist:yandex-oauth` (юзер
+ *   логинится через web-flow Яндекса, рендерящийся в `BrowserView`).
+ * - CSRF-токен `csrfToken2`, парсится из HTML страницы `https://yandex.ru/quasar`.
+ *   Кэшируется на 5 минут; auto-refresh при 401/403.
+ * - Bearer-токен Я.Музыки этими endpoint'ами НЕ принимается, хотя и живёт в
+ *   той же партиции. Cookies + CSRF обязательны.
  *
- * URL-схема (сверена с AlexxIT/YandexStation `yandex_quasar.py`, master, апрель 2026):
- *   GET  /m/v3/user/devices                          — snapshot всех households
- *   GET  /m/user/{itemType}s/{id}                    — состояние одного устройства/группы
- *   POST /m/user/{itemType}s/{id}/actions            — экшен на одно устройство/группу
- *   GET  /m/user/scenarios                           — список сценариев
- *   POST /m/user/scenarios/{id}/actions              — запустить сценарий
+ * Endpoint map (сверено с AlexxIT/YandexStation `yandex_quasar.py`,
+ * master branch, апрель 2026)
+ * ---------------------------------------------------------------------------
+ * | Method | Path                                                 | Назначение     |
+ * |--------|------------------------------------------------------|----------------|
+ * | GET    | `/m/v3/user/devices`                                 | Полный snapshot|
+ * | GET    | `/m/user/{itemType}s/{id}`                           | Одно устройство|
+ * | POST   | `/m/user/{itemType}s/{id}/actions`                   | Run action     |
+ * | POST   | `/m/v3/user/custom/group/color/apply`                | Color/CCT      |
+ * | GET    | `/m/user/scenarios`                                  | Список сценариев|
+ * | POST   | `/m/user/scenarios/{id}/actions`                     | Запустить сцен.|
+ * | GET    | `/m/v4/user/scenarios/{id}/edit`                     | Edit-snapshot  |
+ * | PUT    | `/m/v4/user/scenarios/{id}`                          | Обновить       |
+ * | DELETE | `/m/v4/user/scenarios/{id}`                          | Удалить        |
  *
- * `itemType` приходит в snapshot'е как `device.item_type` (`"device"` либо `"group"`).
- * Старая схема `/m/v3/user/devices/{id}` и bulk `/m/v3/user/devices/actions`
- * НЕ СУЩЕСТВУЕТ — Yandex отдаёт 404 «404 page not found». До этой ревизии
- * каждое управление лампой приходило как 404, а pair падал из-за того же 404
- * на CSRF-странице `/quasar/iot` (которой тоже нет — есть только `/quasar`).
+ * `itemType` — `'device'` либо `'group'`, читается литерально из
+ * `device.item_type` в snapshot'е. Плюральная форма приклеивается к URL.
+ *
+ * NOTE: некоторые «очевидные» endpoint'ы НЕ существуют и отдают 404:
+ *   - `/m/v3/user/devices/{id}`       (single-device на v3-префиксе)
+ *   - `/m/v3/user/devices/actions`    (bulk action)
+ *   - `/quasar/iot`                   (CSRF page — работает только `/quasar`)
+ *
+ * NOTE: Color/CCT (`devices.capabilities.color_setting`) идёт через выделенный
+ * endpoint `/color/apply` — регулярный `/actions` для color на cloud-сопряжённых
+ * Yandex-лампах отдаёт HTTP 400 BAD_REQUEST. См. {@link YandexIotClient.applyColorAction}.
  */
 
 import { net, session } from 'electron';

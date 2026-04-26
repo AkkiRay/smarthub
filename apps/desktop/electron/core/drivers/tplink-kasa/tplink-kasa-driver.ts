@@ -1,9 +1,12 @@
-// TP-Link Kasa (старая линейка HS100/HS103/HS105/HS110/HS200/HS220/KL-серия)
-// — local TCP/UDP порт 9999 + autoencrypt (XOR со starting key 0xAB).
-// UDP discovery: broadcast 9999 с зашифрованным `system.get_sysinfo` → каждое устройство отвечает.
-// Команды: TCP 9999, 4-byte big-endian length prefix перед encrypted payload.
-//
-// Tapo (новая линейка P100/P110/L530/L630) использует другой KLAP-протокол — отдельный драйвер.
+/**
+ * @fileoverview
+ * TP-Link Kasa (старая линейка HS100/HS103/HS105/HS110/HS200/HS220/KL-серия)
+ * — local TCP/UDP порт 9999 + autoencrypt (XOR со starting key 0xAB).
+ * UDP discovery: broadcast 9999 с зашифрованным `system.get_sysinfo` → каждое устройство отвечает.
+ * Команды: TCP 9999, 4-byte big-endian length prefix перед encrypted payload.
+ *
+ * Tapo (новая линейка P100/P110/L530/L630) использует другой KLAP-протокол — отдельный драйвер.
+ */
 
 import { createSocket } from 'node:dgram';
 import { Socket } from 'node:net';

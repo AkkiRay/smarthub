@@ -1,5 +1,22 @@
-// Оркестратор LAN-discovery: параллельно дёргает driver.discover() с AbortSignal,
-// эмитит progress на каждой смене фазы — UI рисует live-индикатор сканирования.
+/**
+ * @fileoverview Оркестратор discovery — параллельно вызывает
+ * `driver.discover(signal)` для всех активных драйверов и собирает
+ * кандидатов в единый stream.
+ *
+ * Lifecycle одного цикла:
+ *   1. `start({ mode: 'once' | 'continuous' })` — создаёт `AbortController`,
+ *      запускает все driver'ы в параллель.
+ *   2. На каждой смене phase (`scanning` → `done` / `error`) эмитит
+ *      `discovery:progress` — UI рисует live-индикатор сканирования.
+ *   3. Найденные кандидаты эмитятся как `discovery:candidate`.
+ *   4. После завершения всех драйверов цикл закрывается; в `continuous`-режиме
+ *      ставится timer на следующий цикл (по умолчанию через 15s).
+ *   5. `stop()` — abort'ит signal, все драйверы должны корректно выйти.
+ *
+ * Concurrency: все driver'ы стартуют одновременно (LAN-discovery — это в
+ * основном UDP-broadcast, можно безопасно параллелить). Cloud-driver'ы
+ * сами решают throttling внутри.
+ */
 
 import { EventEmitter } from 'node:events';
 import log from 'electron-log/main.js';
