@@ -1,6 +1,9 @@
-// eWeLink (Sonoff cloud): REST API на eu-apia.coolkit.cc / cn-apia.coolkit.cn.
-// Auth: HMAC-SHA256(payload, appSecret) → /v2/user/login → bearerToken + refreshToken.
-// Список устройств: GET /v2/device/thing.
+/**
+ * @fileoverview
+ * eWeLink (Sonoff cloud): REST API на eu-apia.coolkit.cc / cn-apia.coolkit.cn.
+ * Auth: HMAC-SHA256(payload, appSecret) → /v2/user/login → bearerToken + refreshToken.
+ * Список устройств: GET /v2/device/thing.
+ */
 
 import { createHmac } from 'node:crypto';
 import type { AxiosRequestConfig } from 'axios';

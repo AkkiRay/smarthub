@@ -1,5 +1,8 @@
-// useViewMount — единая mount-анимация views: header → blocks (stagger 0.05) → items (stagger 0.04).
-// View помечает элементы `data-anim="block"` / `data-anim="item"` для входа в общую волну.
+/**
+ * @fileoverview
+ * useViewMount — единая mount-анимация views: header → blocks (stagger 0.05) → items (stagger 0.04).
+ * View помечает элементы `data-anim="block"` / `data-anim="item"` для входа в общую волну.
+ */
 
 import { onMounted } from 'vue';
 import { useGsap } from './useGsap';

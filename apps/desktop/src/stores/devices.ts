@@ -1,3 +1,22 @@
+/**
+ * @fileoverview Pinia-store сопряжённых устройств — single source of truth для
+ * renderer'а.
+ *
+ * Что внутри:
+ *   - `devices: ref<Device[]>` — список из main process'а (получен через
+ *     `window.smarthome.devices.list()` на mount + IPC `device:updated` events).
+ *   - `byId(id)` — индекс для быстрого lookup'а в компонентах.
+ *   - `byRoom(roomId)` — фильтр для RoomsView.
+ *   - `execute(cmd)` — оборачивает IPC `devices.execute`, на ERROR кидает toast.
+ *   - `executeSilent(cmd)` — тот же execute, но без авто-toast'а (для bulk-операций
+ *     где caller сам аггрегирует результаты в один summary-toast).
+ *   - `rename(id, name)`, `setRoom(...)`, `remove(...)`, `refresh(...)` — IPC
+ *     wrappers с локальным cache patching.
+ *
+ * HMR: `acceptHMRUpdate` сохраняет state при vite hot-reload — devices не
+ * пере-fetch'атся на каждое сохранение файла.
+ */
+
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import type {

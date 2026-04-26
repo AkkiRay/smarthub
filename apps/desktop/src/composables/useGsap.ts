@@ -1,4 +1,7 @@
-// useGsap — обёртка над gsap.context(): auto-cleanup и respect prefers-reduced-motion.
+/**
+ * @fileoverview
+ * useGsap — обёртка над gsap.context(): auto-cleanup и respect prefers-reduced-motion.
+ */
 
 import { onBeforeUnmount } from 'vue';
 import { gsap } from 'gsap';

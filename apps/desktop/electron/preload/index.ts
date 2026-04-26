@@ -1,4 +1,20 @@
-// Preload: типизированный мост renderer↔main через contextBridge. Всё, что нужно renderer'у, — здесь и в IpcApi.
+/**
+ * @fileoverview Preload-script — типизированный мост между renderer'ом и main
+ * process'ом, выставляется через `contextBridge.exposeInMainWorld`.
+ *
+ * Architecture:
+ *   - Все методы IPC API возвращают Promise (через `ipcRenderer.invoke`).
+ *   - Push-события из main приходят через `ipcRenderer.on(...)` и
+ *     раздаются подписчикам в renderer'е.
+ *   - Контракт типов — {@link IpcApi} в `packages/shared/src/types/ipc.ts`;
+ *     любое изменение методов требует синхронной правки и тут, и там.
+ *
+ * Security:
+ *   - `contextIsolation: true` — renderer не может дотянуться до Node.js.
+ *   - `sandbox`-friendly — preload не использует Node API кроме electron.
+ *   - Этот файл — единственный, кому contextBridge разрешает выставить
+ *     API в `window`.
+ */
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcApi, IpcEvents, Platform } from '@smarthome/shared';

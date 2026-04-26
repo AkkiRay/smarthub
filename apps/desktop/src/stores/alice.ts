@@ -1,5 +1,8 @@
-// Alice Smart Home Skill bridge: store для UI разделов «Связка с Алисой» и «Что видит Алиса».
-// Локальная колонка живёт в useYandexStationStore — пересечение состояний только в AliceStatus.station.
+/**
+ * @fileoverview
+ * Alice Smart Home Skill bridge: store для UI разделов «Связка с Алисой» и «Что видит Алиса».
+ * Локальная колонка живёт в useYandexStationStore — пересечение состояний только в AliceStatus.station.
+ */
 
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';

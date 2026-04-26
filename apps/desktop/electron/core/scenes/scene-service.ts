@@ -1,5 +1,18 @@
-// Сценарий = набор capability-команд с per-action delayMs. run() стартует все параллельно,
-// собственный delay у каждого даёт sequential-like поведение без блокировки event loop.
+/**
+ * @fileoverview Scene service — CRUD сценариев + execution.
+ *
+ * Сценарий — это массив {@link SceneAction} с per-action `delayMs`. Все шаги
+ * стартуют параллельно через `setTimeout(action.delayMs)` — это даёт
+ * sequential-like поведение (за счёт сортировки по delay) без блокировки
+ * event loop'а.
+ *
+ * Persistence: scenes хранятся в SQLite вместе с devices/rooms (через
+ * {@link DeviceStore}), чтобы один транзакционный backup покрывал всё.
+ *
+ * Exposure to Alice: при `scene.exposeToStation === true` сценарий
+ * регистрируется в {@link AliceBridge} как virtual `devices.types.other`
+ * с capability `on_off` — юзер вызывает голосом «Алиса, включи романтику».
+ */
 
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';

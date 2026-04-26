@@ -1,4 +1,20 @@
-// IPC API: compile-time контракт renderer↔main. Каждый канал из window.smarthome.* ОБЯЗАН быть описан здесь.
+/**
+ * @fileoverview Compile-time контракт IPC между renderer'ом и main process'ом.
+ *
+ * Каждый канал, доступный в renderer'е через `window.smarthome.*`, ОБЯЗАН
+ * быть описан в {@link IpcApi} — иначе TypeScript отвергнет вызов на этапе
+ * сборки. Push-события (main → renderer) перечислены в {@link IpcEvents}.
+ *
+ * Архитектурный invariant:
+ *   1. Renderer НИКОГДА не импортирует код main process'а напрямую.
+ *   2. Все payload'ы — простые JSON-сериализуемые объекты (без функций,
+ *      classes, Date — только plain objects, arrays, primitives).
+ *   3. preload-script (`apps/desktop/electron/preload/index.ts`) пробрасывает
+ *      сюда `contextBridge.exposeInMainWorld('smarthome', api)`.
+ *
+ * NOTE: namespace `window.chrome` НЕ используется — он зарезервирован
+ * Chromium'ом под DevTools / extension API, contextBridge туда не пробивается.
+ */
 
 import type {
   Device,

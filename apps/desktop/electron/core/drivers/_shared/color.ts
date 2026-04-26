@@ -1,5 +1,14 @@
-// Общие color-преобразования для драйверов: HSV/RGB/Mired/XY.
-// Драйверы шлют цвет в разных представлениях, canonical state хаба — RGB int (0xRRGGBB).
+/**
+ * @fileoverview Общие color-преобразования для драйверов: HSV ↔ RGB,
+ * Mired ↔ Kelvin, XY (Hue/Philips) ↔ RGB.
+ *
+ * Canonical state в SmartHome — `rgb` integer формата `0xRRGGBB`. Все
+ * driver'ы при `readState()` приводят native-формат лампы к этому виду,
+ * а при `execute(command)` обратно — из `rgb` int в свой формат.
+ *
+ * @see packages/shared/src/utils/capability-builders.ts — `capColor()`,
+ *      каноничный builder color-capability.
+ */
 
 export function rgbIntToTuple(rgb: number): [number, number, number] {
   return [(rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff];

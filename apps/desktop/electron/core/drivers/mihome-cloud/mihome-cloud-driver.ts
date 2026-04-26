@@ -1,13 +1,16 @@
-// Mi Home Cloud / Xiaomi Cloud: REST API через api.io.mi.com/app.
-// Login flow: serviceLogin → captcha → SHA1(password) → location → ssecurity + serviceToken.
-// Reverse-engineered протокол, нет публичного SDK; здесь упрощённый flow без 2FA-handler'а.
-//
-// Server-region URL префикс: 'cn'/'de'/'i2' (India)/'ru'/'sg'/'us'.
-//   ru.api.io.mi.com — для российских аккаунтов (если устройства куплены в РФ).
-//
-// После login API:
-//   POST /home/device_list           → список устройств
-//   POST /home/rpc/<device_id>       → JSON-RPC method calls (как miIO local)
+/**
+ * @fileoverview
+ * Mi Home Cloud / Xiaomi Cloud: REST API через api.io.mi.com/app.
+ * Login flow: serviceLogin → captcha → SHA1(password) → location → ssecurity + serviceToken.
+ * Reverse-engineered протокол, нет публичного SDK; здесь упрощённый flow без 2FA-handler'а.
+ *
+ * Server-region URL префикс: 'cn'/'de'/'i2' (India)/'ru'/'sg'/'us'.
+ *   ru.api.io.mi.com — для российских аккаунтов (если устройства куплены в РФ).
+ *
+ * После login API:
+ *   POST /home/device_list           → список устройств
+ *   POST /home/rpc/<device_id>       → JSON-RPC method calls (как miIO local)
+ */
 
 import axios, { type AxiosRequestConfig } from 'axios';
 import { createHash, createHmac, randomBytes } from 'node:crypto';

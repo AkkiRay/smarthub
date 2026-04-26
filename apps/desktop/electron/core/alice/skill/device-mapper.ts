@@ -1,12 +1,24 @@
-// Преобразование внутреннего Device → payload для Yandex Smart Home schema (/v1.0/user/devices, /query, /action).
-// Внутренние capabilities/properties уже используют yandex-токены (devices.capabilities.*),
-// поэтому мапер по сути identity, но: фильтрует enabled-устройства, применяет user-overrides
-// (имя/комната), отрезает internal-only поля и приводит state к виду, который ждёт Алиса.
-//
-// Что НЕ выдаём Алисе:
-//  - status='pairing' / 'unreachable' (Алиса всё равно пометит как DEVICE_UNREACHABLE)
-//  - capability с retrievable=false и без state — Алиса хочет либо state, либо явный retrievable=false
-//  - внутренние capability вне Yandex-схемы (например quasar.server_action — он только для нашей колонки)
+/**
+ * @fileoverview Преобразование внутреннего {@link Device} → payload для
+ * Yandex Smart Home schema (`/v1.0/user/devices`, `/query`, `/action`).
+ *
+ * Внутренние capabilities/properties уже используют Yandex-токены
+ * (`devices.capabilities.*`), поэтому mapper по сути identity, но он:
+ *   - Фильтрует только `enabled` устройства (по {@link AliceDeviceExposure}).
+ *   - Применяет user-overrides (`aliasName`, `aliasRoom` — Алиса любит
+ *     короткие имена типа «лампа», а не «Yeelight Color Bulb 1S»).
+ *   - Отрезает internal-only поля (driver-meta, externalId, …).
+ *   - Приводит state к виду, который ждёт Алиса.
+ *
+ * Что НЕ выдаём Алисе:
+ *   - `status='pairing'` / `'unreachable'` (Алиса всё равно пометит как
+ *     `DEVICE_UNREACHABLE`).
+ *   - Capability с `retrievable: false` И без `state` — Алиса хочет либо
+ *     state, либо явный `retrievable: false`.
+ *   - Internal capability вне Yandex-схемы — например
+ *     `devices.capabilities.quasar.server_action` относится только к нашей
+ *     колонке, для общего навыка он бессмысленен.
+ */
 
 import type {
   AliceDeviceExposure,

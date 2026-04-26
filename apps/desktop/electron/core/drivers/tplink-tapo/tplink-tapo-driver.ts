@@ -1,9 +1,12 @@
-// TP-Link Tapo (P100/P110/L510/L530/L630): локальный KLAP/passthrough HTTP.
-// На firmware <1.1.0 работает «secure-passthrough» (RSA-1024 handshake → AES-128-CBC).
-// На новых прошивках (>=1.1.0) — KLAP v2: SHA256-handshake без RSA.
-// Здесь реализован legacy secure-passthrough; KLAP помечен TODO — для полной поддержки
-// нужно тестировать на конкретных моделях. Если local не работает — UI должен предложить
-// TP-Link Cloud (`tplink-cloud`), который покрывает обе линейки одним API.
+/**
+ * @fileoverview
+ * TP-Link Tapo (P100/P110/L510/L530/L630): локальный KLAP/passthrough HTTP.
+ * На firmware <1.1.0 работает «secure-passthrough» (RSA-1024 handshake → AES-128-CBC).
+ * На новых прошивках (>=1.1.0) — KLAP v2: SHA256-handshake без RSA.
+ * Здесь реализован legacy secure-passthrough; KLAP помечен TODO — для полной поддержки
+ * нужно тестировать на конкретных моделях. Если local не работает — UI должен предложить
+ * TP-Link Cloud (`tplink-cloud`), который покрывает обе линейки одним API.
+ */
 
 import axios, { type AxiosInstance } from 'axios';
 import {

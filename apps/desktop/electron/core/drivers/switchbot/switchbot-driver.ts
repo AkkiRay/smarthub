@@ -1,6 +1,9 @@
-// SwitchBot Cloud API v1.1: token + secret HMAC-SHA256.
-// GET /v1.1/devices, POST /v1.1/devices/<id>/commands.
-// SwitchBot Mini Bot, Plug Mini, Curtain, Bulbs, Hub Mini.
+/**
+ * @fileoverview
+ * SwitchBot Cloud API v1.1: token + secret HMAC-SHA256.
+ * GET /v1.1/devices, POST /v1.1/devices/<id>/commands.
+ * SwitchBot Mini Bot, Plug Mini, Curtain, Bulbs, Hub Mini.
+ */
 
 import { createHmac, randomUUID } from 'node:crypto';
 import type { AxiosRequestConfig } from 'axios';

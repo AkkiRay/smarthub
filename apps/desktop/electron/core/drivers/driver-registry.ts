@@ -1,8 +1,23 @@
 /**
- * Реестр драйверов: lifecycle (init / reload / shutdown) и UI-descriptors.
+ * @fileoverview Реестр драйверов — отвечает за lifecycle (init / reload /
+ * shutdown), хранит UI-descriptors и instance'ы активных драйверов.
  *
- * Lazy-init: драйверы с обязательными credentials попадают в map только после
- * `setCredentials → reloadDriver`. Регистрация нового драйвера — строка в `DRIVER_MODULES`.
+ * Lazy-init pattern:
+ *   - Driver'ы у которых `requiresCredentials: true` попадают в active-map
+ *     ТОЛЬКО после того, как юзер сохранил creds через `setCredentials` →
+ *     `reloadDriver` создаст instance.
+ *   - Driver'ы без обязательных creds (mock, yeelight, lifx, wiz, shelly,
+ *     wemo, generic-http, yandex-station, yandex-iot) активируются сразу.
+ *   - Дисабленные через ENV (`HUB_DISABLE_<id>=true`) пропускаются.
+ *
+ * Регистрация нового driver'а:
+ *   1. Реализовать `DriverModule` в `electron/core/drivers/<id>/module.ts`.
+ *   2. Импортировать его сюда.
+ *   3. Добавить в массив {@link DRIVER_MODULES}.
+ *
+ * Hot-reload (`reloadDriver(id)`):
+ *   Используется при смене creds — корректно `shutdown()`'ит старый instance,
+ *   создаёт новый с обновлёнными creds, эмитит событие в event bus.
  */
 
 import log from 'electron-log/main.js';

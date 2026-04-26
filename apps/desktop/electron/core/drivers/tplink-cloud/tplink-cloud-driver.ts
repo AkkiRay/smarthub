@@ -1,6 +1,9 @@
-// TP-Link Kasa Cloud (wap.tplinkcloud.com): закрывает обе линейки Kasa+Tapo через единый passthrough.
-// Auth: POST /?method=login → token; затем POST passthrough на конкретное устройство:
-//   /?token=<token> — { method: "passthrough", params: { deviceId, requestData: encrypt(json) } }
+/**
+ * @fileoverview
+ * TP-Link Kasa Cloud (wap.tplinkcloud.com): закрывает обе линейки Kasa+Tapo через единый passthrough.
+ * Auth: POST /?method=login → token; затем POST passthrough на конкретное устройство:
+ *   /?token=<token> — { method: "passthrough", params: { deviceId, requestData: encrypt(json) } }
+ */
 
 import type { AxiosRequestConfig } from 'axios';
 import { randomUUID } from 'node:crypto';

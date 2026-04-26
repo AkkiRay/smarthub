@@ -1,16 +1,19 @@
-// Mi Home / miIO local: UDP 54321, бинарный header (32 байта) + AES-128-CBC encrypted JSON.
-// Token (32 hex) — секрет устройства, добывается из Mi Home App / Mi Home мобильного бэкапа /
-// XiaomiCloud-Tokens-Extractor. Без token шифрование сделать нельзя — поэтому драйвер требует
-// явный список устройств с указанием token.
-//
-// Header layout:
-//   [0..2)   magic 0x2131
-//   [2..4)   length (uint16 BE) = total packet
-//   [4..8)   reserved (zeros у регулярных пакетов)
-//   [8..12)  device id (uint32 BE)
-//   [12..16) stamp (sec since "epoch" device)
-//   [16..32) MD5 checksum (с token-substituted block)
-//   [32..]   AES-CBC encrypted JSON (key=MD5(token), iv=MD5(MD5(token)+token))
+/**
+ * @fileoverview
+ * Mi Home / miIO local: UDP 54321, бинарный header (32 байта) + AES-128-CBC encrypted JSON.
+ * Token (32 hex) — секрет устройства, добывается из Mi Home App / Mi Home мобильного бэкапа /
+ * XiaomiCloud-Tokens-Extractor. Без token шифрование сделать нельзя — поэтому драйвер требует
+ * явный список устройств с указанием token.
+ *
+ * Header layout:
+ *   [0..2)   magic 0x2131
+ *   [2..4)   length (uint16 BE) = total packet
+ *   [4..8)   reserved (zeros у регулярных пакетов)
+ *   [8..12)  device id (uint32 BE)
+ *   [12..16) stamp (sec since "epoch" device)
+ *   [16..32) MD5 checksum (с token-substituted block)
+ *   [32..]   AES-CBC encrypted JSON (key=MD5(token), iv=MD5(MD5(token)+token))
+ */
 
 import { createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 import { createSocket } from 'node:dgram';

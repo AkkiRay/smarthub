@@ -1,4 +1,27 @@
-// Main process entrypoint: core-сервисы → SmartHomeHub → BrowserWindow → IPC. Offline-first.
+/**
+ * @fileoverview Main process entrypoint Electron-приложения.
+ *
+ * Bootstrap-последовательность:
+ *   1. Single-instance lock — повторный запуск фокусирует уже открытое окно.
+ *   2. `loadRuntimeEnv()` — читает `.env.<mode>` из пользовательского
+ *      профиля и process-флагов.
+ *   3. Storage-слой: {@link createSettingsStore} (encrypted electron-store)
+ *      + {@link createDeviceStore} (better-sqlite3 в `userData/data/hub.sqlite`).
+ *   4. Driver registry — лениво инициализирует драйверы у которых есть creds.
+ *   5. Device registry — in-memory cache + write-through в SQLite.
+ *   6. Service layer — discovery, polling, scenes, Alice integration.
+ *   7. {@link SmartHomeHub} — фасад над всем core'ом для IPC.
+ *   8. BrowserWindow + CSP + tray.
+ *   9. IPC handlers + push-broadcast обратно в renderer.
+ *
+ * Архитектурный invariant: renderer НИКОГДА не импортирует main process
+ * напрямую. Все взаимодействия — через `window.smarthome.*` IPC channels.
+ *
+ * Graceful shutdown: 5-секундный grace-period для drivers/storage; на
+ * `before-quit` дёргает `hub.shutdown()` с timeout-протекцией.
+ *
+ * @see packages/shared/src/types/ipc.ts — IPC contract.
+ */
 
 import { app, BrowserWindow, ipcMain, nativeTheme, shell, dialog } from 'electron';
 import { join } from 'node:path';

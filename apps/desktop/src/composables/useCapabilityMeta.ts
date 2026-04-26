@@ -1,5 +1,8 @@
-// Single source of truth для UI-метаданных capabilities (label/icon/единицы).
-// Используется DeviceCard / CapabilityControl / SceneEditor / DeviceDetailView.
+/**
+ * @fileoverview
+ * Single source of truth для UI-метаданных capabilities (label/icon/единицы).
+ * Используется DeviceCard / CapabilityControl / SceneEditor / DeviceDetailView.
+ */
 
 import type { Capability, CapabilityType, DeviceProperty } from '@smarthome/shared';
 import { CAPABILITY, INSTANCE } from '@smarthome/shared';

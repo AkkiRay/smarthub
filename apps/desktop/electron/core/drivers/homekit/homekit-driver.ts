@@ -1,7 +1,10 @@
-// HomeKit Accessory Protocol (HAP) controller: discovery `_hap._tcp` через mDNS.
-// Полный controller flow (PIN-pairing → SRP-3072 → Ed25519 long-term keys → HAP characteristics)
-// требует hap-controller или hap-nodejs — большая зависимость. Здесь discovery + распознавание
-// типа аксессуара по category-id, control возвращает CONTROLLER_MISSING (как Matter).
+/**
+ * @fileoverview
+ * HomeKit Accessory Protocol (HAP) controller: discovery `_hap._tcp` через mDNS.
+ * Полный controller flow (PIN-pairing → SRP-3072 → Ed25519 long-term keys → HAP characteristics)
+ * требует hap-controller или hap-nodejs — большая зависимость. Здесь discovery + распознавание
+ * типа аксессуара по category-id, control возвращает CONTROLLER_MISSING (как Matter).
+ */
 
 import { Bonjour } from 'bonjour-service';
 import log from 'electron-log/main.js';

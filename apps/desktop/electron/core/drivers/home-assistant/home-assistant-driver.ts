@@ -1,7 +1,10 @@
-// Home Assistant Bridge: REST API /api/states + /api/services/<domain>/<service>.
-// Long-lived access token из HA Profile → создаётся в UI → даёт полный доступ к entities.
-// HA умеет всё что у пользователя в HA — десятки интеграций сразу. Для real-time можно подключить
-// WebSocket /api/websocket, но REST polling-достаточно для большинства случаев.
+/**
+ * @fileoverview
+ * Home Assistant Bridge: REST API /api/states + /api/services/<domain>/<service>.
+ * Long-lived access token из HA Profile → создаётся в UI → даёт полный доступ к entities.
+ * HA умеет всё что у пользователя в HA — десятки интеграций сразу. Для real-time можно подключить
+ * WebSocket /api/websocket, но REST polling-достаточно для большинства случаев.
+ */
 
 import type { AxiosRequestConfig } from 'axios';
 import type {

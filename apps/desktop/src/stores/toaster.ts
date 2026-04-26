@@ -1,3 +1,17 @@
+/**
+ * @fileoverview Pinia-store toast-уведомлений. Single source of truth для
+ * top-right notification stack'а.
+ *
+ * API:
+ *   - `push({ kind, message, duration? })` — поставить toast в очередь.
+ *     `kind`: `'info' | 'success' | 'error'`. Default `duration` зависит
+ *     от kind (error дольше — юзер должен прочитать).
+ *   - `dismiss(id)` — снять toast руками (по клику на крестик).
+ *
+ * Используется везде где есть IPC-операции: `useDevicesStore.execute`,
+ * `useScenesStore.run`, RoomsView bulk-color, etc.
+ */
+
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 

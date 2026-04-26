@@ -1,3 +1,13 @@
+/**
+ * @fileoverview Pinia-store комнат. Локальные комнаты (`origin: 'local'`)
+ * редактируются юзером, импортированные из «Дома с Алисой» (`origin: 'yandex'`)
+ * read-only — UI блокирует rename/delete, т.к. на следующем sync'е изменения
+ * будут затёрты.
+ *
+ * Подписан на IPC events `room:upserted` / `room:removed`. Используется
+ * RoomsView для bulk-операций и DeviceCard для chip'а с именем комнаты.
+ */
+
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { Room } from '@smarthome/shared';

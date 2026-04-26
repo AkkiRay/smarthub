@@ -1,15 +1,27 @@
-// State callback в Я.Диалоги: когда внутреннее устройство меняется (driver push или scene run),
-// мы оповещаем Алису, чтобы кнопка/значок в её приложении мгновенно обновлялись.
-//
-// Эндпоинты (note .net, не .ru):
-//   POST https://dialogs.yandex.net/api/v1/skills/{skill_id}/callback/state    — изменение state
-//   POST https://dialogs.yandex.net/api/v1/skills/{skill_id}/callback/discovery — list изменился
-//
-// Авторизация: `Authorization: OAuth <dialogs_oauth_token>` — токен пользователя
-// с client_id `c473ca268cd749d3a8371351a8f2bcbd` (выдаётся через oauth.yandex.com).
-//
-// Дебаунс 1с: коллапсим взрывы апдейтов от polling в одну запись на устройство.
-// Только reportable=true capability/property пушим — остальные Алиса не подписывается.
+/**
+ * @fileoverview State callback в Я.Диалоги — когда внутреннее устройство
+ * меняется (driver push, scene run, polling), хаб оповещает Алису, чтобы
+ * кнопки/значки в её приложении обновлялись мгновенно (без 30-секундного
+ * polling-loop'а на стороне Алисы).
+ *
+ * Endpoints (NOTE: домен `.net`, не `.ru`):
+ *   - `POST https://dialogs.yandex.net/api/v1/skills/{skill_id}/callback/state`
+ *      — изменение state одного или нескольких devices.
+ *   - `POST https://dialogs.yandex.net/api/v1/skills/{skill_id}/callback/discovery`
+ *      — список устройств изменился (добавили/убрали).
+ *
+ * Авторизация: `Authorization: OAuth <dialogs_oauth_token>` — токен с
+ * client_id `c473ca268cd749d3a8371351a8f2bcbd` (выдаётся через
+ * oauth.yandex.com по специальному embedded-flow в `AliceBridge`).
+ *
+ * Filtering / batching:
+ *   - Дебаунс 1с — коллапсим взрывы апдейтов от polling в один POST на device.
+ *   - Только `reportable: true` capability/property пушатся (на остальные
+ *     Алиса не подписана; push'ить их — flood).
+ *
+ * При отсутствии `dialogs_oauth_token` skill всё равно работает — просто без
+ * push (Алиса дёргает `/devices/query` сама раз в 30s).
+ */
 
 import axios, { type AxiosInstance } from 'axios';
 import log from 'electron-log/main.js';

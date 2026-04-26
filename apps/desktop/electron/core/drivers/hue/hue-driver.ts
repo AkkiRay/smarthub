@@ -1,12 +1,15 @@
-// Philips Hue Bridge — локальный REST API.
-// Discovery: discovery.meethue.com (cloud) → IP моста + N-UPnP. У нас два слоя:
-//   1) cloud-discovery (быстро, без user-action) — пишет в {creds.bridges} список IP.
-//   2) опционально SSDP (если интернет недоступен).
-// Для управления: pre-Hue-v2 /api/<username>/lights/<id>, Hue v2 (CLIP-v2) — /clip/v2/resource/light/<uuid>.
-// Используем v1, потому что username-based auth работает на всех мостах (gen1+).
-//
-// Pairing: пользователь жмёт кнопку на bridge → POST /api → возвращается username (40 hex).
-// Без нажатия кнопки получаем `link button not pressed` — UI должен попросить нажать и retry.
+/**
+ * @fileoverview
+ * Philips Hue Bridge — локальный REST API.
+ * Discovery: discovery.meethue.com (cloud) → IP моста + N-UPnP. У нас два слоя:
+ *   1) cloud-discovery (быстро, без user-action) — пишет в {creds.bridges} список IP.
+ *   2) опционально SSDP (если интернет недоступен).
+ * Для управления: pre-Hue-v2 /api/<username>/lights/<id>, Hue v2 (CLIP-v2) — /clip/v2/resource/light/<uuid>.
+ * Используем v1, потому что username-based auth работает на всех мостах (gen1+).
+ *
+ * Pairing: пользователь жмёт кнопку на bridge → POST /api → возвращается username (40 hex).
+ * Без нажатия кнопки получаем `link button not pressed` — UI должен попросить нажать и retry.
+ */
 
 import axios, { type AxiosInstance } from 'axios';
 import type {

@@ -1,4 +1,7 @@
-// Renderer entrypoint: Pinia + Router + global error-handler'ы → toast + main-process.
+/**
+ * @fileoverview
+ * Renderer entrypoint: Pinia + Router + global error-handler'ы → toast + main-process.
+ */
 
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';

@@ -1,5 +1,8 @@
-// Single source of truth для driver-визуала. Hex-зеркало brand-токенов для inline-styles
-// (где CSS var() нельзя). При смене палитры синхронизировать с _tokens.scss и shared/constants/colors.ts.
+/**
+ * @fileoverview
+ * Single source of truth для driver-визуала. Hex-зеркало brand-токенов для inline-styles
+ * (где CSS var() нельзя). При смене палитры синхронизировать с _tokens.scss и shared/constants/colors.ts.
+ */
 
 import type { DriverId } from '@smarthome/shared';
 import { BRAND_HEX } from '@smarthome/shared';

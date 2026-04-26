@@ -1,3 +1,16 @@
+/**
+ * @fileoverview Vue Router config — hash-based history (Electron file://
+ * не работает с HTML5 history, нужен hash).
+ *
+ * Маршруты: Welcome (онбординг) → Home → Devices / DeviceDetail / Discovery /
+ * Rooms / Scenes / Alice / Settings.
+ *
+ * Beforeach guard:
+ *   - Перенаправляет на `/welcome` если онбординг не пройден (UI store).
+ *   - Перенаправляет на `/discovery` если в хабе нет ни одного сопряжённого
+ *     устройства (kick-start UX flow).
+ */
+
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { useUiStore } from '@/stores/ui';
 import { useDevicesStore } from '@/stores/devices';

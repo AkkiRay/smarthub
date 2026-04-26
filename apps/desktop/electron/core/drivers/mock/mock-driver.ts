@@ -1,5 +1,8 @@
-// Симулятор устройств для UI-отладки без железа (HUB_ENABLE_MOCK=true).
-// State держится in-memory — теряется после reload by design.
+/**
+ * @fileoverview
+ * Симулятор устройств для UI-отладки без железа (HUB_ENABLE_MOCK=true).
+ * State держится in-memory — теряется после reload by design.
+ */
 
 import type {
   Capability,

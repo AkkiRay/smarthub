@@ -1,4 +1,19 @@
-// SQLite-персистентность (devices/rooms/scenes). WAL + foreign_keys, одно соединение на весь app lifetime.
+/**
+ * @fileoverview SQLite-персистентность для domain-данных хаба:
+ * `devices`, `rooms`, `scenes`.
+ *
+ * Конфигурация:
+ *   - **WAL-режим** (`journal_mode = WAL`) — read-light, не блокирует
+ *     readers writer'ом. Нужно потому что polling-сервис читает каждые 30s,
+ *     а IPC-handler'ы пишут на каждом execute.
+ *   - **foreign_keys = ON** — каскадный delete для room.deviceIds и
+ *     scene.actions[].deviceId.
+ *   - **Одно соединение на весь app-lifetime** — better-sqlite3 синхронный,
+ *     pool здесь не нужен; concurrency защищает sqlite через WAL.
+ *
+ * Schema migrations: lazy через `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE`.
+ * Версионирование пока не нужно — одна машина, schema монотонно расширяется.
+ */
 
 import { app } from 'electron';
 import { join } from 'node:path';

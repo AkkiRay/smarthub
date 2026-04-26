@@ -1,4 +1,7 @@
-// Конфиг плиток быстрого доступа на HomeView.
+/**
+ * @fileoverview
+ * Конфиг плиток быстрого доступа на HomeView.
+ */
 
 import type { IconName } from '@/components/base/BaseIcon.vue';
 

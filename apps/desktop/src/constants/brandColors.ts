@@ -1,5 +1,8 @@
-// Алиас для legacy-импортов: BRAND_HEX (числовые 0xRRGGBB для Three.js/Canvas/gl) и
-// BRAND_HEX_STR (строковые '#RRGGBB' для inline-styles). Источник истины — @smarthome/shared.
+/**
+ * @fileoverview
+ * Алиас для legacy-импортов: BRAND_HEX (числовые 0xRRGGBB для Three.js/Canvas/gl) и
+ * BRAND_HEX_STR (строковые '#RRGGBB' для inline-styles). Источник истины — @smarthome/shared.
+ */
 
 import { BRAND, BRAND_HEX as BRAND_HEX_STRING } from '@smarthome/shared';
 

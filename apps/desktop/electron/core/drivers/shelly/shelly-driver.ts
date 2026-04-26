@@ -1,5 +1,8 @@
-// Shelly Gen2+: HTTP RPC (`/rpc/<Method>`) + mDNS `_shelly._tcp`.
-// Bug fix: для Bulb/RGBW/Duo нужен Light.* RPC — Switch.* отдаёт 404; компонент выбирается по type.
+/**
+ * @fileoverview
+ * Shelly Gen2+: HTTP RPC (`/rpc/<Method>`) + mDNS `_shelly._tcp`.
+ * Bug fix: для Bulb/RGBW/Duo нужен Light.* RPC — Switch.* отдаёт 404; компонент выбирается по type.
+ */
 
 import axios, { type AxiosInstance } from 'axios';
 import { Bonjour } from 'bonjour-service';

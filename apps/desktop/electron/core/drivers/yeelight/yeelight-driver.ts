@@ -1,5 +1,8 @@
-// Yeelight LAN: SSDP M-SEARCH в multicast 239.255.255.250:1982 + JSONRPC по TCP/55443.
-// Лампа держит max 1 connection одновременно — pool бессмысленен, открываем/закрываем сокет на каждую команду.
+/**
+ * @fileoverview
+ * Yeelight LAN: SSDP M-SEARCH в multicast 239.255.255.250:1982 + JSONRPC по TCP/55443.
+ * Лампа держит max 1 connection одновременно — pool бессмысленен, открываем/закрываем сокет на каждую команду.
+ */
 
 import { createSocket, type Socket as DgramSocket } from 'node:dgram';
 import { Socket } from 'node:net';

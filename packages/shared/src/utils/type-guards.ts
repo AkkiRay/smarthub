@@ -1,7 +1,31 @@
-// Type-guards для безопасного извлечения значений из `unknown`-payload'ов.
-// Используются в драйверах вместо `value as number` без валидации.
+/**
+ * @fileoverview Type-guards и safe-coercion helper'ы для извлечения значений
+ * из `unknown`-payload'ов (HTTP-ответы, IPC-payload'ы, capability state'ы).
+ *
+ * Используются драйверами вместо `value as number` без валидации — последнее
+ * приводит к runtime-ошибкам когда внешний API меняет формат.
+ *
+ * Группы функций:
+ *   - JSON / HTTP — {@link safeJsonParse}, {@link getHttpStatus}, {@link getErrorMessage}
+ *   - Coercion    — {@link asBool}, {@link asNumber}, {@link asString}, {@link asInt},
+ *                   {@link asClampedInt}
+ *   - Object guards — {@link isPlainObject}
+ */
 
-/** Безопасный JSON.parse — возвращает `null` при ошибке вместо throw. */
+/**
+ * Безопасный {@link JSON.parse} — возвращает `null` при `SyntaxError` вместо
+ * throw. Удобно для парсинга responses от внешних API, которые иногда
+ * присылают пустую строку или HTML-error page вместо JSON.
+ *
+ * @template T - Ожидаемый тип после парсинга.
+ * @returns Распарсенный объект или `null` при ошибке.
+ *
+ * @example
+ * ```ts
+ * const payload = safeJsonParse<{ status: string }>(rawBody);
+ * if (!payload || payload.status !== 'ok') return null;
+ * ```
+ */
 export function safeJsonParse<T = unknown>(raw: string): T | null {
   try {
     return JSON.parse(raw) as T;
@@ -10,7 +34,10 @@ export function safeJsonParse<T = unknown>(raw: string): T | null {
   }
 }
 
-/** HTTP status из axios/fetch error без unsafe-cast'а. */
+/**
+ * Извлечь HTTP-статус из axios/fetch error без unsafe-cast'а. Возвращает
+ * `null` если в ошибке нет `.response.status` (например, network error).
+ */
 export function getHttpStatus(err: unknown): number | null {
   if (typeof err !== 'object' || err === null) return null;
   const response = (err as { response?: unknown }).response;
@@ -19,7 +46,12 @@ export function getHttpStatus(err: unknown): number | null {
   return typeof status === 'number' ? status : null;
 }
 
-/** Сообщение из произвольной ошибки (Error, string, unknown). */
+/**
+ * Универсальное извлечение message из произвольной ошибки.
+ *
+ * Поддерживает: {@link Error} (`.message`), `string`, объекты с `.message`,
+ * fallback — `String(err)`.
+ */
 export function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
@@ -30,11 +62,20 @@ export function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-// ---- Capability value coercion ----------------------------------------------
+// ──────────────────────────────────────────────────────────────────────────────
+// Capability value coercion
 //
-// Capability.state.value — `unknown`, потому что зависит от capability.type.
-// Эти helpers безопасно приводят к ожидаемому типу с fallback'ом.
+// `Capability.state.value` имеет тип `unknown`, потому что зависит от
+// `capability.type`. Эти helper'ы безопасно приводят к ожидаемому типу с
+// fallback'ом — driver не падает, если API внезапно прислал строку вместо
+// числа (типичная картина у Tuya / SwitchBot OEM-прошивок).
+// ──────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Привести unknown к boolean. Понимает строки `'true'`/`'on'`/`'1'` (cloud
+ * API часто шлют именно их вместо настоящего bool) и числа (`0` → false,
+ * иначе → true).
+ */
 export function asBool(value: unknown, fallback = false): boolean {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') return value === 'true' || value === 'on' || value === '1';
@@ -42,6 +83,10 @@ export function asBool(value: unknown, fallback = false): boolean {
   return fallback;
 }
 
+/**
+ * Привести unknown к number. Защита от `NaN` / `Infinity`: если результат
+ * не finite, возвращает fallback.
+ */
 export function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -51,23 +96,45 @@ export function asNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
+/**
+ * Привести unknown к string. Number/boolean становятся строкой через
+ * `String()`; объекты и null — fallback.
+ */
 export function asString(value: unknown, fallback = ''): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return fallback;
 }
 
+/**
+ * Привести unknown к integer (округление к нулю — `Math.trunc`).
+ *
+ * @example `asInt('42.7')` → `42`
+ */
 export function asInt(value: unknown, fallback = 0): number {
   return Math.trunc(asNumber(value, fallback));
 }
 
-/** Числовой диапазон с clamp'ом — для brightness/volume/temperature commands. */
+/**
+ * Integer с clamp'ом в диапазон `[min, max]`. Используется для
+ * brightness/volume/temperature commands — защита от драйверов, которые
+ * присылают значения вне декларированного range.
+ *
+ * @param fallback - Если задан, используется при non-numeric value.
+ *                   По умолчанию = `min`.
+ */
 export function asClampedInt(value: unknown, min: number, max: number, fallback = min): number {
   const n = asInt(value, fallback);
   return Math.max(min, Math.min(max, n));
 }
 
-/** Безопасная проверка plain-object без instanceof Object (cross-realm). */
+/**
+ * Безопасная проверка plain-object (без `instanceof Object`, который ломается
+ * через iframe / Worker / vm.context — другой realm имеет свой `Object`).
+ *
+ * Принимает: `{}`, `Object.create(null)`, литералы.
+ * Отклоняет: `null`, массивы, функции, `Date`, `Map`, инстансы классов.
+ */
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null) return false;
   const proto = Object.getPrototypeOf(value);

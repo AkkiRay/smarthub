@@ -1,8 +1,21 @@
-// OAuth bearer-токены, которые ХАБ выдаёт Алисе после привязки аккаунта.
-// Не путать с music_token (oauth.yandex.ru, для quasar API) и x-token (passport, для glagol).
-//
-// Single-user hub: «внутренний user_id» = hubId. Токен ничего не идентифицирует кроме
-// «эта Алиса привязана к этому хабу». Криптографически — random 256-bit, base64url.
+/**
+ * @fileoverview OAuth bearer-токены, которые ХАБ выдаёт Алисе после привязки
+ * аккаунта (см. {@link WebhookServer} `/oauth/*`).
+ *
+ * НЕ путать с другими «токенами Я.»:
+ *   - `music_token` (oauth.yandex.ru, для Quasar API) — см. `yandex-oauth.ts`.
+ *   - `x-token` (passport, для glagol-pairing) — см. `yandex-station-client.ts`.
+ *   - `dialogs_oauth_token` — токен на client_id `c473ca268cd...`, нужен для
+ *     `state-pusher.ts` (push в callback API).
+ *
+ * Single-user hub: «внутренний user_id» = `hubId`. Bearer-токен ничего не
+ * идентифицирует, кроме «эта Алиса привязана к этому хабу». Криптографически —
+ * random 256-bit, base64url.
+ *
+ * TTL:
+ *   - Access:  30 дней (Алиса дёрнет refresh за неделю до истечения).
+ *   - Refresh: 1 год.
+ */
 
 import { randomBytes } from 'node:crypto';
 import type { SettingsStore } from '../../storage/settings-store.js';
