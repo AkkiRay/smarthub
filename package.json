@@ -1,0 +1,36 @@
+{
+  "name": "smarthome-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Локальный desktop hub для управления Wi-Fi устройствами умного дома и колонкой Алисы (offline-first, no external backend)",
+  "author": "SmartHome Hub",
+  "license": "MIT",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.10.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @smarthome/desktop dev",
+    "build": "pnpm --filter @smarthome/desktop dist",
+    "build:dev": "pnpm --filter @smarthome/desktop build",
+    "build:win": "pnpm --filter @smarthome/desktop dist:win",
+    "build:win:portable": "pnpm --filter @smarthome/desktop dist:win:portable",
+    "build:win:installer": "pnpm --filter @smarthome/desktop dist:win:installer",
+    "build:mac": "pnpm --filter @smarthome/desktop dist:mac",
+    "build:linux": "pnpm --filter @smarthome/desktop dist:linux",
+    "package": "pnpm --filter @smarthome/desktop package",
+    "package:dir": "pnpm --filter @smarthome/desktop package:dir",
+    "icons": "pnpm --filter @smarthome/desktop icons",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,vue,scss,css,json,md,yml,yaml}\" --log-level warn",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,vue,scss,css,json,md,yml,yaml}\" --log-level warn",
+    "clean": "pnpm -r exec rm -rf node_modules dist dist-electron release && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.5.0"
+  }
+}
