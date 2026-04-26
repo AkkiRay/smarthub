@@ -7,24 +7,19 @@
       <span class="welcome__halo-ring welcome__halo-ring--3" />
     </div>
 
-    <!-- Top: только skip (брендинг живёт в AppTitleBar — не дублируем). -->
-    <header class="welcome__top">
-      <span class="welcome__top-spacer" />
-      <button v-if="step < totalSteps - 1" type="button" class="welcome__skip" @click="skip">
-        Пропустить онбординг
-        <BaseIcon name="arrow-right" :size="14" />
-      </button>
-    </header>
-
-    <!-- Прогресс шагов -->
-    <div class="welcome__progress">
-      <div class="steps">
+    <!-- Bar: skip + progress объединены в один компактный row. -->
+    <header class="welcome__bar">
+      <div class="steps welcome__bar-progress">
         <div class="steps__rail">
           <div class="steps__fill" :style="{ width: `${railProgress}%` }" />
         </div>
         <span class="steps__label">{{ stepLabel }}</span>
       </div>
-    </div>
+      <button v-if="step < totalSteps - 1" type="button" class="welcome__skip" @click="skip">
+        Пропустить онбординг
+        <BaseIcon name="arrow-right" :size="14" />
+      </button>
+    </header>
 
     <!-- Сцена -->
     <div class="welcome__layout">
@@ -192,23 +187,10 @@
         </div>
       </Transition>
 
-      <!-- Орб-сцена справа: остаётся между шагами, не перерендеривается.
-           Декорации: концентрические pulse-кольца + орбитальные частицы +
-           floating-теги интеграций. Mouse-tracking сохраняется (это знакомство
-           с продуктом, voice-mode тут не нужен). -->
+      <!-- Orb + 3D-chip ring живут в одной сцене; не перерендериваются между шагами. -->
       <aside class="welcome__visual" aria-hidden="true">
         <div class="welcome__visual-stage">
-          <span class="welcome__pulse welcome__pulse--1" />
-          <span class="welcome__pulse welcome__pulse--2" />
-          <span class="welcome__pulse welcome__pulse--3" />
-          <span class="welcome__orbit welcome__orbit--a">
-            <span class="welcome__particle" />
-          </span>
-          <span class="welcome__orbit welcome__orbit--b">
-            <span class="welcome__particle" />
-          </span>
           <JarvisOrb size="xl" :state="orbState" class="welcome__orb" />
-          <!-- True 3D-chips через CSS3DRenderer: orbiting around orb, GSAP-driven. -->
           <OrbitalChips :chips="orbitalChips" />
         </div>
       </aside>
@@ -443,17 +425,18 @@ onMounted(() => {
   position: relative;
   flex: 1;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  gap: clamp(12px, 1.6vw, 20px);
+  // Bar (top + progress объединены) → scene (1fr fills) → bottom dots.
+  grid-template-rows: auto 1fr auto;
+  gap: clamp(10px, 1.4vw, 18px);
   height: 100dvh;
-  padding: clamp(14px, 1.8vw, 28px) clamp(20px, 3.4vw, 48px);
+  padding: clamp(12px, 1.6vw, 24px) clamp(20px, 3.2vw, 44px);
   color: var(--color-text-primary);
   outline: none;
   overflow: hidden;
 
   @media (max-height: 720px) {
-    gap: 10px;
-    padding-block: 14px;
+    gap: 8px;
+    padding-block: 12px;
   }
 
   // Декоративный halo
@@ -499,15 +482,15 @@ onMounted(() => {
     z-index: 1;
   }
 
-  &__top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  &__bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 16px;
+    align-items: center;
   }
 
-  &__top-spacer {
-    flex: 1;
+  &__bar-progress {
+    min-width: 0;
   }
 
   &__skip {
@@ -540,51 +523,56 @@ onMounted(() => {
 
   &__layout {
     width: 100%;
-    max-width: 1320px;
+    max-width: 1440px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(380px, 0.9fr);
-    align-items: center;
-    gap: clamp(32px, 4vw, 64px);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(24px, 3vw, 56px);
     min-height: 0;
+    align-items: stretch;
 
     @media (max-width: 1024px) {
       grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(180px, 30vh) minmax(0, 1fr);
     }
   }
 
   &__scene {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     width: 100%;
     min-width: 0;
+    min-height: 0;
   }
 
   &__visual {
     position: relative;
-    min-height: clamp(360px, 50vh, 520px);
     display: grid;
     place-items: center;
     isolation: isolate;
+    min-width: 0;
+    min-height: 0;
+    // Container query basis: stage читает 100cqi/100cqb относительно этой колонки.
+    container-type: size;
 
     @media (max-width: 1024px) {
-      // На узких экранах — компактный visual над контентом, но не скрыт.
-      min-height: clamp(220px, 32vh, 320px);
       order: -1;
     }
   }
 
-  // Стейдж адаптивный по min(vh, vw) — orb скейлится с экраном вниз.
+  // Stage = max квадрат, влезающий в колонку. cqi = inline size, cqb = block size.
   &__visual-stage {
-    --stage-size: clamp(280px, min(38vw, 50vh), 480px);
+    --stage-size: min(100cqi, 100cqb, 640px);
     position: relative;
+    aspect-ratio: 1;
     width: var(--stage-size);
     height: var(--stage-size);
     display: grid;
     place-items: center;
 
     @media (max-width: 1024px) {
-      --stage-size: clamp(200px, min(60vw, 30vh), 320px);
+      --stage-size: min(100cqi, 100cqb, 320px);
     }
 
     :deep(.orb) {
@@ -594,59 +582,6 @@ onMounted(() => {
     }
   }
 
-  // Концентрические pulse-кольца: расходящиеся круги от центра орба.
-  &__pulse {
-    position: absolute;
-    inset: 0;
-    margin: auto;
-    width: calc(var(--stage-size) * 0.62);
-    height: calc(var(--stage-size) * 0.62);
-    border-radius: 50%;
-    border: 1px solid rgba(var(--color-brand-violet-rgb), 0.32);
-    pointer-events: none;
-    opacity: 0;
-    animation: welcomePulse 4s var(--ease-out) infinite;
-    z-index: 1;
-
-    &--1 { animation-delay: 0s; }
-    &--2 { animation-delay: 1.3s; border-color: rgba(var(--color-brand-pink-rgb), 0.28); }
-    &--3 { animation-delay: 2.6s; border-color: rgba(var(--color-brand-amber-rgb), 0.24); }
-  }
-
-  // Орбитальные частицы: dot + маленький trail вращаются вокруг орба.
-  &__orbit {
-    position: absolute;
-    inset: 0;
-    margin: auto;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 3;
-
-    &--a {
-      width: calc(var(--stage-size) * 0.78);
-      height: calc(var(--stage-size) * 0.78);
-      animation: welcomeOrbit 12s linear infinite;
-    }
-    &--b {
-      width: calc(var(--stage-size) * 0.92);
-      height: calc(var(--stage-size) * 0.92);
-      animation: welcomeOrbit 18s linear infinite reverse;
-    }
-  }
-
-  &__particle {
-    position: absolute;
-    top: -4px;
-    left: 50%;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--gradient-brand);
-    box-shadow:
-      0 0 16px rgba(var(--color-brand-violet-rgb), 0.85),
-      0 0 32px rgba(var(--color-brand-pink-rgb), 0.45);
-    transform: translateX(-50%);
-  }
 
 
   &__pill-list {
@@ -974,29 +909,6 @@ onMounted(() => {
   }
 }
 
-
-// Концентрические pulse-кольца расходятся от орба: opacity всплеск + scale рост.
-// Three rings со staggered delay создают эффект непрерывной волны.
-@keyframes welcomePulse {
-  0% {
-    opacity: 0.55;
-    transform: scale(0.85);
-  }
-  60% {
-    opacity: 0.18;
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.6);
-  }
-}
-
-// Орбитальное вращение частицы — кольцо крутится, частица «летит» вокруг орба.
-@keyframes welcomeOrbit {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 .welcome-step-enter-active,
 .welcome-step-leave-active {
