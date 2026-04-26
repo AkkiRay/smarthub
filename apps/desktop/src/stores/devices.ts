@@ -215,7 +215,12 @@ export const useDevicesStore = defineStore('devices', () => {
     rooms: number;
     householdId: string | null;
     availableHouseholds: Array<{ id: string; name: string }>;
-    currentNetwork: { ssid: string | null; subnet: string | null; detectedAt: string } | null;
+    currentNetwork: {
+      gatewayMac: string | null;
+      ssid: string | null;
+      subnet: string | null;
+      detectedAt: string;
+    } | null;
     lastError?: string;
   }> {
     const toaster = useToasterStore();

@@ -213,6 +213,7 @@ const selectedHouseholdId = computed({
 });
 const switchingHousehold = ref(false);
 const currentNetwork = ref<{
+  gatewayMac: string | null;
   ssid: string | null;
   subnet: string | null;
   detectedAt: string;

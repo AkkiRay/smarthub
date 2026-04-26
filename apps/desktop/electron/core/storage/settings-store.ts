@@ -89,10 +89,15 @@ export interface HubSettings {
   quasarAuth: QuasarAuthCreds | null;
   /** Активный household; null — UI обязан спросить если households.length > 1. */
   selectedHouseholdId: string | null;
-  /** householdId → list of network signatures (SSID/subnet) для авто-выбора по сети. */
+  /** householdId → network signatures (gatewayMac primary, SSID/subnet fallback). */
   householdNetworks: Record<
     string,
-    Array<{ ssid: string | null; subnet: string | null; detectedAt: string }>
+    Array<{
+      gatewayMac?: string | null;
+      ssid: string | null;
+      subnet: string | null;
+      detectedAt: string;
+    }>
   >;
   /** Если true — yandex-iot execute разрешается с любой сети (remote control). */
   allowCloudControlOffNetwork: boolean;

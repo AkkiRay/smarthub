@@ -131,7 +131,10 @@ export class YandexImportService {
     log.info(`YandexImport: allowCloudControlOffNetwork = ${allow}`);
   }
 
-  /** Сохраняет выбор + сразу purge yandex-устройств из остальных домов. */
+  /**
+   * Сохраняет выбор + purge yandex-устройств других домов + асинхронно отвязывает
+   * текущую сеть от прежних bindings (anti-stale при перепривязке).
+   */
   setSelectedHousehold(id: string | null): void {
     const prev = this.deps.settings.get('selectedHouseholdId');
     this.deps.settings.set('selectedHouseholdId', id);
@@ -148,7 +151,42 @@ export class YandexImportService {
         }
       }
       if (pruned > 0) log.info(`YandexImport: pruned ${pruned} devices from other households`);
+      void this.unbindCurrentNetworkFromOtherHouseholds(id).catch((e) =>
+        log.warn(`YandexImport: stale-binding cleanup failed: ${(e as Error).message}`),
+      );
     }
+  }
+
+  /** Удаляет current network signature из bindings всех households кроме `keepId`. */
+  private async unbindCurrentNetworkFromOtherHouseholds(keepId: string): Promise<void> {
+    const current = await detectCurrentNetwork();
+    if (!current.gatewayMac && !current.ssid && !current.subnet) return;
+    const bindings = { ...this.deps.settings.get('householdNetworks') };
+    let changed = false;
+    for (const [hid, sigs] of Object.entries(bindings)) {
+      if (hid === keepId) continue;
+      const filtered = sigs.filter((s) => !this.signaturesMatch(s, current));
+      if (filtered.length !== sigs.length) {
+        bindings[hid] = filtered;
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.deps.settings.set('householdNetworks', bindings);
+      log.info('YandexImport: cleaned stale network bindings from other households');
+    }
+  }
+
+  private signaturesMatch(
+    a: { gatewayMac?: string | null; ssid: string | null; subnet: string | null },
+    b: NetworkSignature,
+  ): boolean {
+    if (a.gatewayMac && b.gatewayMac) return a.gatewayMac === b.gatewayMac;
+    if (a.ssid && b.ssid) return a.ssid === b.ssid;
+    if (!a.ssid && !b.ssid && !a.gatewayMac && !b.gatewayMac && a.subnet && b.subnet) {
+      return a.subnet === b.subnet;
+    }
+    return false;
   }
 
   // ---- private --------------------------------------------------------------
@@ -218,10 +256,7 @@ export class YandexImportService {
       const storedBindings = bindings[stored] ?? [];
       const onBoundNet =
         storedBindings.length === 0 ||
-        storedBindings.some((b) =>
-          (b.ssid && b.ssid === currentNetwork.ssid) ||
-          (!b.ssid && b.subnet === currentNetwork.subnet && !currentNetwork.ssid),
-        );
+        storedBindings.some((b) => this.signaturesMatch(b, currentNetwork));
       if (!onBoundNet) {
         throw Object.assign(
           new Error(
@@ -247,20 +282,15 @@ export class YandexImportService {
 
   /** Запоминает текущую сеть как одну из привязанных к household. */
   private rememberNetworkForHousehold(householdId: string, sig: NetworkSignature): void {
-    if (!sig.ssid && !sig.subnet) return;
+    if (!sig.gatewayMac && !sig.ssid && !sig.subnet) return;
     const all = { ...this.deps.settings.get('householdNetworks') };
     const list = all[householdId] ? [...all[householdId]] : [];
-    const exists = list.some(
-      (existing) =>
-        (sig.ssid && existing.ssid === sig.ssid) ||
-        (!sig.ssid && existing.subnet === sig.subnet && !existing.ssid),
-    );
-    if (exists) return;
+    if (list.some((existing) => this.signaturesMatch(existing, sig))) return;
     list.push(sig);
     all[householdId] = list;
     this.deps.settings.set('householdNetworks', all);
     log.info(
-      `YandexImport: bound network ssid=${sig.ssid ?? '-'} subnet=${sig.subnet ?? '-'} → ${householdId}`,
+      `YandexImport: bound network mac=${sig.gatewayMac ?? '-'} ssid=${sig.ssid ?? '-'} subnet=${sig.subnet ?? '-'} → ${householdId}`,
     );
   }
 

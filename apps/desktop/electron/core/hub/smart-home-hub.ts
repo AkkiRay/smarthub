@@ -322,7 +322,9 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     const bindings = deps.settings.get('householdNetworks')[householdId] ?? [];
     if (bindings.length === 0) return { allowed: true };
     const current = await getCachedNetwork();
-    const ok = bindings.some((b) => networkMatches(b, current));
+    const ok = bindings.some((b) =>
+      networkMatches({ ...b, gatewayMac: b.gatewayMac ?? null }, current),
+    );
     if (ok) return { allowed: true };
     return {
       allowed: false,
