@@ -357,7 +357,16 @@ const finishTips = [
   { title: 'Настройки', text: 'пройти онбординг заново' },
 ];
 
-const orbitalChips = ['Yeelight', 'Hue', 'Tuya', 'Сбер', 'WiZ', 'Shelly', 'miIO', 'Matter'];
+const orbitalChips = [
+  { id: 'yeelight', label: 'Yeelight' },
+  { id: 'hue', label: 'Hue' },
+  { id: 'tuya', label: 'Tuya' },
+  { id: 'sber-home', label: 'Сбер' },
+  { id: 'wiz', label: 'WiZ' },
+  { id: 'shelly', label: 'Shelly' },
+  { id: 'miio', label: 'Mi Home' },
+  { id: 'matter', label: 'Matter' },
+];
 
 function next(): void {
   if (step.value < totalSteps - 1) {
@@ -546,18 +555,8 @@ onMounted(() => {
     width: 100%;
     min-width: 0;
     min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-right: 4px;
-
-    // Hide scrollbar тонко: контент cards/buttons не должен «обкусываться».
-    &::-webkit-scrollbar {
-      width: 6px;
-    }
-    &::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 6px;
-    }
+    // Перенесли overflow на step-card — у него внутренний контент с разной
+    // высотой; scene остаётся чистым flex-контейнером без scrollbar-edge'ов.
   }
 
   &__visual {
