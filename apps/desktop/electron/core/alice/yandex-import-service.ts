@@ -183,9 +183,7 @@ export class YandexImportService {
   ): boolean {
     if (a.gatewayMac && b.gatewayMac) return a.gatewayMac === b.gatewayMac;
     if (a.ssid && b.ssid) return a.ssid === b.ssid;
-    if (!a.ssid && !b.ssid && !a.gatewayMac && !b.gatewayMac && a.subnet && b.subnet) {
-      return a.subnet === b.subnet;
-    }
+    if (a.subnet && b.subnet) return a.subnet === b.subnet;
     return false;
   }
 
@@ -280,12 +278,23 @@ export class YandexImportService {
     );
   }
 
-  /** Запоминает текущую сеть как одну из привязанных к household. */
+  /** Запоминает текущую сеть; если match-via-subnet найден и legacy без MAC — upgrade. */
   private rememberNetworkForHousehold(householdId: string, sig: NetworkSignature): void {
     if (!sig.gatewayMac && !sig.ssid && !sig.subnet) return;
     const all = { ...this.deps.settings.get('householdNetworks') };
     const list = all[householdId] ? [...all[householdId]] : [];
-    if (list.some((existing) => this.signaturesMatch(existing, sig))) return;
+    const idx = list.findIndex((existing) => this.signaturesMatch(existing, sig));
+    if (idx >= 0) {
+      const existing = list[idx]!;
+      const canUpgrade =
+        (sig.gatewayMac && !existing.gatewayMac) || (sig.ssid && !existing.ssid);
+      if (!canUpgrade) return;
+      list[idx] = sig;
+      all[householdId] = list;
+      this.deps.settings.set('householdNetworks', all);
+      log.info(`YandexImport: upgraded legacy binding for ${householdId}`);
+      return;
+    }
     list.push(sig);
     all[householdId] = list;
     this.deps.settings.set('householdNetworks', all);

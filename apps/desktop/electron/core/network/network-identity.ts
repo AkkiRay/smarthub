@@ -142,15 +142,14 @@ export async function detectCurrentNetwork(): Promise<NetworkSignature> {
 }
 
 /**
- * Priority: gatewayMac → SSID → subnet (только если у обоих SSID нет, чтобы
- * не считать домашний и friendly Wi-Fi одной сетью только из-за общего 192.168.1.x).
+ * Identifier ladder: если самый сильный известен у обоих — он решает match/no-match
+ * и никакой fallback не активируется. Иначе спускаемся ниже. Это позволяет legacy
+ * binding'у без MAC сматчиться с current (имеющим MAC) через SSID/subnet.
  */
 export function networkMatches(a: NetworkSignature, b: NetworkSignature): boolean {
   if (a.gatewayMac && b.gatewayMac) return a.gatewayMac === b.gatewayMac;
   if (a.ssid && b.ssid) return a.ssid === b.ssid;
-  if (!a.ssid && !b.ssid && !a.gatewayMac && !b.gatewayMac && a.subnet && b.subnet) {
-    return a.subnet === b.subnet;
-  }
+  if (a.subnet && b.subnet) return a.subnet === b.subnet;
   return false;
 }
 
