@@ -1,0 +1,62 @@
+# =============================================================================
+# Prettier ignore — что НЕ трогать форматтеру.
+# Логика: автогенерёжка, бинари, lockfile, кэши, релизы. Прочее форматируется.
+# =============================================================================
+
+# ---- Dependencies / lockfiles ----
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# ---- Build output ----
+dist/
+dist-electron/
+build/icons/
+release/
+out/
+.cache/
+.parcel-cache/
+.vite/
+.turbo/
+coverage/
+
+# ---- Generated assets ----
+**/*.min.js
+**/*.min.css
+**/*.bundle.js
+**/*.bundle.css
+**/*.map
+
+# ---- Binary / non-text ----
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.ico
+**/*.icns
+**/*.woff
+**/*.woff2
+**/*.ttf
+**/*.otf
+**/*.eot
+**/*.pdf
+**/*.zip
+**/*.exe
+**/*.dll
+**/*.node
+**/*.wasm
+
+# ---- VCS / IDE meta ----
+.git/
+.idea/
+.DS_Store
+
+# ---- Env / secrets — формат должен быть строго ручной ----
+.env
+.env.local
+.env.*.local
+
+# ---- SVG: оставляем форматтер не трогать — иконки минифицированы вручную ----
+**/*.svg
