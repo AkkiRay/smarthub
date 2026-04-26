@@ -207,28 +207,9 @@
           <span class="welcome__orbit welcome__orbit--b">
             <span class="welcome__particle" />
           </span>
-          <JarvisOrb size="xl" :state="orbState" track-window class="welcome__orb" />
-          <!-- 3D-orbit chips: три кольца с perspective; каждое крутится по
-               rotateY с разным наклоном rotateX/rotateZ. -->
-          <div class="welcome__orbits">
-            <div
-              v-for="(ring, ri) in orbitRings"
-              :key="ri"
-              class="welcome__orbit-ring"
-              :class="`welcome__orbit-ring--${ri}`"
-            >
-              <span
-                v-for="(tag, ti) in ring.tags"
-                :key="tag"
-                class="welcome__orbit-chip"
-                :style="{
-                  transform: `rotateY(${(360 / ring.tags.length) * ti}deg) translateZ(${ring.radius}px)`,
-                }"
-              >
-                <span class="welcome__orbit-chip-face">{{ tag }}</span>
-              </span>
-            </div>
-          </div>
+          <JarvisOrb size="xl" :state="orbState" class="welcome__orb" />
+          <!-- True 3D-chips через CSS3DRenderer: orbiting around orb, GSAP-driven. -->
+          <OrbitalChips :chips="orbitalChips" />
         </div>
       </aside>
     </div>
@@ -262,6 +243,7 @@ import { useUiStore } from '@/stores/ui';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseIcon from '@/components/base/BaseIcon.vue';
 import JarvisOrb from '@/components/visuals/JarvisOrb.vue';
+import OrbitalChips from '@/components/visuals/OrbitalChips.vue';
 
 const ui = useUiStore();
 const router = useRouter();
@@ -393,12 +375,7 @@ const finishTips = [
   { title: 'Настройки', text: 'пройти онбординг заново' },
 ];
 
-// Чипы интеграций распределены по 3 наклонённым 3D-кольцам — orbital ring layout.
-const orbitRings: Array<{ radius: number; tags: string[] }> = [
-  { radius: 220, tags: ['Yeelight', 'Hue', 'Tuya'] },
-  { radius: 250, tags: ['Сбер', 'WiZ', 'Shelly'] },
-  { radius: 200, tags: ['miIO', 'Matter'] },
-];
+const orbitalChips = ['Yeelight', 'Hue', 'Tuya', 'Сбер', 'WiZ', 'Shelly', 'miIO', 'Matter'];
 
 function next(): void {
   if (step.value < totalSteps - 1) {
@@ -467,12 +444,17 @@ onMounted(() => {
   flex: 1;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
-  gap: clamp(16px, 2vw, 24px);
-  height: 100%;
-  padding: clamp(20px, 2.4vw, 36px) clamp(24px, 4vw, 56px);
+  gap: clamp(12px, 1.6vw, 20px);
+  height: 100dvh;
+  padding: clamp(14px, 1.8vw, 28px) clamp(20px, 3.4vw, 48px);
   color: var(--color-text-primary);
   outline: none;
-  overflow-y: auto;
+  overflow: hidden;
+
+  @media (max-height: 720px) {
+    gap: 10px;
+    padding-block: 14px;
+  }
 
   // Декоративный halo
   &__halo {
@@ -580,26 +562,30 @@ onMounted(() => {
 
   &__visual {
     position: relative;
-    min-height: clamp(420px, 56vh, 560px);
+    min-height: clamp(360px, 50vh, 520px);
     display: grid;
     place-items: center;
     isolation: isolate;
 
     @media (max-width: 1024px) {
-      display: none;
+      // На узких экранах — компактный visual над контентом, но не скрыт.
+      min-height: clamp(220px, 32vh, 320px);
+      order: -1;
     }
   }
 
-  // Стейдж жёстко 480×480 — orbital-кольца и частицы крутятся вокруг
-  // фиксированной точки, иначе при resize «прыгают». Орб занимает ~280px
-  // в центре, оставшееся пространство — для pulse-колец и тегов.
+  // Стейдж адаптивный по min(vh, vw) — orb скейлится с экраном вниз.
   &__visual-stage {
-    --stage-size: clamp(360px, 38vw, 480px);
+    --stage-size: clamp(280px, min(38vw, 50vh), 480px);
     position: relative;
     width: var(--stage-size);
     height: var(--stage-size);
     display: grid;
     place-items: center;
+
+    @media (max-width: 1024px) {
+      --stage-size: clamp(200px, min(60vw, 30vh), 320px);
+    }
 
     :deep(.orb) {
       --orb-size: calc(var(--stage-size) * 0.62);
@@ -662,71 +648,6 @@ onMounted(() => {
     transform: translateX(-50%);
   }
 
-  // 3D-orbit-чипы вокруг орба: три rotateY-кольца с разным наклоном.
-  // Контейнер задаёт perspective, кольца содержат preserve-3d и анимируют
-  // rotateY бесконечно; chip'ы расставлены через rotateY+translateZ.
-  &__orbits {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 4;
-    perspective: 1400px;
-    transform-style: preserve-3d;
-    display: grid;
-    place-items: center;
-  }
-
-  &__orbit-ring {
-    position: absolute;
-    width: 0;
-    height: 0;
-    transform-style: preserve-3d;
-
-    // Tilts разные → визуально три плоскости планет, не один экватор.
-    // Анимация для каждого кольца своя, потому что keyframes сохраняют tilt.
-    &--0 {
-      transform: rotateX(18deg);
-      animation: orbitSpin0 32s linear infinite;
-    }
-    &--1 {
-      transform: rotateX(-22deg) rotateZ(28deg);
-      animation: orbitSpin1 38s linear infinite;
-    }
-    &--2 {
-      transform: rotateX(48deg) rotateZ(-14deg);
-      animation: orbitSpin2 26s linear infinite;
-    }
-  }
-
-  &__orbit-chip {
-    position: absolute;
-    top: 0;
-    left: 0;
-    transform-origin: 0 0;
-    backface-visibility: hidden;
-    will-change: transform;
-  }
-
-  &__orbit-chip-face {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transform: translate(-50%, -50%);
-    font-family: var(--font-family-mono);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-micro);
-    padding: 7px 14px;
-    border-radius: var(--radius-pill);
-    background: rgba(var(--color-brand-violet-rgb), 0.14);
-    border: 1px solid rgba(var(--color-brand-violet-rgb), 0.32);
-    color: var(--color-text-primary);
-    backdrop-filter: blur(14px);
-    box-shadow:
-      0 4px 18px rgba(0, 0, 0, 0.32),
-      0 0 12px rgba(var(--color-brand-purple-rgb), 0.18);
-    white-space: nowrap;
-  }
 
   &__pill-list {
     list-style: none;
@@ -784,8 +705,12 @@ onMounted(() => {
 
   &__path-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
+
+    @media (max-width: 1280px) {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    }
   }
 
   &__path {
@@ -1049,21 +974,6 @@ onMounted(() => {
   }
 }
 
-// 3D orbital spin — каждое кольцо вращает свой rotateY поверх собственного tilt'а.
-// Сохраняем tilt через `from { transform: ... rotateY(0) }`, иначе анимация
-// перезатирает rotateX/rotateZ родителя.
-@keyframes orbitSpin0 {
-  from { transform: rotateX(18deg) rotateY(0deg); }
-  to   { transform: rotateX(18deg) rotateY(360deg); }
-}
-@keyframes orbitSpin1 {
-  from { transform: rotateX(-22deg) rotateZ(28deg) rotateY(0deg); }
-  to   { transform: rotateX(-22deg) rotateZ(28deg) rotateY(-360deg); }
-}
-@keyframes orbitSpin2 {
-  from { transform: rotateX(48deg) rotateZ(-14deg) rotateY(0deg); }
-  to   { transform: rotateX(48deg) rotateZ(-14deg) rotateY(360deg); }
-}
 
 // Концентрические pulse-кольца расходятся от орба: opacity всплеск + scale рост.
 // Three rings со staggered delay создают эффект непрерывной волны.
