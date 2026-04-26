@@ -215,6 +215,7 @@ export const useDevicesStore = defineStore('devices', () => {
     rooms: number;
     householdId: string | null;
     availableHouseholds: Array<{ id: string; name: string }>;
+    currentNetwork: { ssid: string | null; subnet: string | null; detectedAt: string } | null;
     lastError?: string;
   }> {
     const toaster = useToasterStore();
@@ -275,10 +276,14 @@ export const useDevicesStore = defineStore('devices', () => {
       return summary;
     } catch (e) {
       const msg = (e as Error).message ?? 'Неизвестная ошибка';
+      // IPC сериализует Error без custom props — детектим по тексту message.
+      // HOUSEHOLD_AMBIGUOUS / NETWORK_MISMATCH — user-actionable, не unexpected.
+      const isUserAction =
+        msg.startsWith('В аккаунте Яндекса') || msg.startsWith('Текущая сеть');
       if (pendingId !== null) {
         toaster.update(pendingId, {
-          kind: 'error',
-          message: `Не удалось синхронизировать: ${msg}`,
+          kind: isUserAction ? 'pending' : 'error',
+          message: isUserAction ? msg : `Не удалось синхронизировать: ${msg}`,
         });
       }
       throw e;
