@@ -10,10 +10,8 @@
  *   - **secure-passthrough** (firmware < 1.1.0): RSA-1024 handshake → AES-128-CBC.
  *     На новых прошивках больше не работает (handshake возвращает 1003).
  *
- * Драйвер сначала пробует KLAP, при отказе (HTTP 404 на /handshake1) деградирует
- * на legacy secure-passthrough. Token и session-cookie передаются ИСКЛЮЧИТЕЛЬНО
- * в Cookie/X-headers — раньше token шёл в URL query, что светилось в access-логах
- * и hop-by-hop кэшах.
+ * Драйвер сначала пробует KLAP, при 404 на /handshake1 деградирует на legacy
+ * secure-passthrough. Token и session-cookie — только в Cookie/X-headers.
  */
 
 import axios, { type AxiosInstance } from 'axios';
@@ -284,7 +282,9 @@ export class TPLinkTapoDriver extends BaseDriver {
     } catch (e) {
       const msg = (e as Error).message;
       if (/HTTP 404|HTTP 400|-1003|-1010|handshake1/.test(msg)) {
-        this.logWarn(`KLAP handshake unavailable on ${host} (${msg}), falling back to legacy passthrough`);
+        this.logWarn(
+          `KLAP handshake unavailable on ${host} (${msg}), falling back to legacy passthrough`,
+        );
         return this.handshakePassthrough(host);
       }
       throw e;
@@ -483,11 +483,13 @@ export class TPLinkTapoDriver extends BaseDriver {
     return dec.result as T;
   }
 
-  private async invokePassthrough<T>(host: string, session: TapoSession, payload: string): Promise<T> {
+  private async invokePassthrough<T>(
+    host: string,
+    session: TapoSession,
+    payload: string,
+  ): Promise<T> {
     const encrypted = encryptAes(payload, session.cipher);
     if (!session.token) throw new Error('Tapo passthrough: missing token');
-    // Token и cookie передаём ТОЛЬКО в заголовках — раньше token был в URL ?token=,
-    // что светилось в access-логах прокси и hop-by-hop кешах.
     const r = await this.http.post(
       `http://${host}:80/app`,
       { method: 'securePassthrough', params: { request: encrypted } },

@@ -5,8 +5,8 @@
         <h3 class="home-dash__title">Дом с Алисой</h3>
         <p class="home-dash__desc">
           Сводка по аккаунту Яндекса. Управление устройствами — на вкладке
-          <RouterLink class="home-dash__inline-link" to="/devices">«Устройства»</RouterLink>:
-          они импортируются автоматически после входа.
+          <RouterLink class="home-dash__inline-link" to="/devices">«Устройства»</RouterLink>: они
+          импортируются автоматически после входа.
         </p>
       </div>
       <div class="home-dash__actions">
@@ -153,8 +153,8 @@
         </button>
       </div>
       <p class="home-dash__scenarios-hint">
-        Клик — запуск через iot.quasar. Свои сценарии (с устройствами хаба + голосом Алисы) —
-        на вкладке <RouterLink class="home-dash__inline-link" to="/scenes">«Сценарии»</RouterLink>.
+        Клик — запуск через iot.quasar. Свои сценарии (с устройствами хаба + голосом Алисы) — на
+        вкладке <RouterLink class="home-dash__inline-link" to="/scenes">«Сценарии»</RouterLink>.
       </p>
     </section>
 
@@ -162,8 +162,8 @@
     <div v-if="!hasSnapshot && !station.isLoadingHome" class="home-dash__empty">
       <BaseIcon name="alice" :size="28" />
       <p>
-        Нажмите <strong>«Синхронизировать»</strong> — хаб подтянет устройства, комнаты и сценарии
-        из вашего аккаунта Яндекса. Устройства появятся на вкладке
+        Нажмите <strong>«Синхронизировать»</strong> — хаб подтянет устройства, комнаты и сценарии из
+        вашего аккаунта Яндекса. Устройства появятся на вкладке
         <RouterLink class="home-dash__inline-link" to="/devices">«Устройства»</RouterLink>
         с полноценным управлением.
       </p>

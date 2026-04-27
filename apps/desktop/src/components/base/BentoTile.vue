@@ -75,8 +75,14 @@ const root = useTemplateRef<HTMLElement>('root');
 
 const TONE_COLORS: Record<Tone, { glow: string; edge: string }> = {
   neutral: { glow: 'rgba(255, 255, 255, 0.10)', edge: 'rgba(255, 255, 255, 0.08)' },
-  violet: { glow: 'rgba(var(--color-brand-violet-rgb), 0.55)', edge: 'rgba(var(--color-brand-violet-rgb), 0.32)' },
-  pink: { glow: 'rgba(var(--color-brand-pink-rgb), 0.50)', edge: 'rgba(var(--color-brand-pink-rgb), 0.30)' },
+  violet: {
+    glow: 'rgba(var(--color-brand-violet-rgb), 0.55)',
+    edge: 'rgba(var(--color-brand-violet-rgb), 0.32)',
+  },
+  pink: {
+    glow: 'rgba(var(--color-brand-pink-rgb), 0.50)',
+    edge: 'rgba(var(--color-brand-pink-rgb), 0.30)',
+  },
   blue: { glow: 'rgba(77, 127, 255, 0.50)', edge: 'rgba(77, 127, 255, 0.30)' },
   cyan: { glow: 'rgba(91, 216, 255, 0.50)', edge: 'rgba(91, 216, 255, 0.30)' },
   green: { glow: 'rgba(45, 216, 154, 0.50)', edge: 'rgba(45, 216, 154, 0.30)' },

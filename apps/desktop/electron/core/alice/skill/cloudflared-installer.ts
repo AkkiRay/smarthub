@@ -1,8 +1,6 @@
 /**
- * @fileoverview Авто-инсталлер `cloudflared` — закрывает single biggest UX-боль
- * Alice-skill setup'а. Раньше юзер видел «не найден в PATH → скачайте → положите
- * туда → нажмите Проверить»; теперь — один клик «Запустить туннель», хаб сам
- * качает релиз в `userData/bin/`, проверяет версию, использует.
+ * @fileoverview Авто-инсталлер `cloudflared`: качает релиз в `userData/bin/`,
+ * проверяет версию, использует.
  *
  * Source: github.com/cloudflare/cloudflared/releases/latest/download/<asset>.
  *
@@ -33,17 +31,13 @@ function assetName(): string {
   switch (process.platform) {
     case 'win32':
       // Windows — всегда .exe, ARM64 не публикуется → всё равно amd64 (через WoW64).
-      return arch === 'ia32'
-        ? 'cloudflared-windows-386.exe'
-        : 'cloudflared-windows-amd64.exe';
+      return arch === 'ia32' ? 'cloudflared-windows-386.exe' : 'cloudflared-windows-amd64.exe';
     case 'linux':
       if (arch === 'arm64') return 'cloudflared-linux-arm64';
       if (arch === 'arm') return 'cloudflared-linux-arm';
       return 'cloudflared-linux-amd64';
     case 'darwin':
-      return arch === 'arm64'
-        ? 'cloudflared-darwin-arm64.tgz'
-        : 'cloudflared-darwin-amd64.tgz';
+      return arch === 'arm64' ? 'cloudflared-darwin-arm64.tgz' : 'cloudflared-darwin-amd64.tgz';
     default:
       return 'cloudflared-linux-amd64';
   }

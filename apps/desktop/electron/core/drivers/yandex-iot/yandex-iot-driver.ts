@@ -78,7 +78,10 @@ function mapProperty(p: YandexHomeProperty): DeviceProperty {
   };
   if (p.state && typeof p.state === 'object') {
     const s = p.state as { instance?: string; value?: unknown };
-    if (typeof s.instance === 'string' && (typeof s.value === 'number' || typeof s.value === 'string' || typeof s.value === 'boolean')) {
+    if (
+      typeof s.instance === 'string' &&
+      (typeof s.value === 'number' || typeof s.value === 'string' || typeof s.value === 'boolean')
+    ) {
       out.state = { instance: s.instance, value: s.value };
     }
   }
@@ -180,7 +183,9 @@ export class YandexIotDriver extends BaseDriver {
   private updatesUrlActive: string | null = null;
 
   /** Listeners на push-state-changes — registry подписывается через subscribePush(). */
-  private readonly pushListeners = new Set<(externalId: string, partial: Partial<Device>) => void>();
+  private readonly pushListeners = new Set<
+    (externalId: string, partial: Partial<Device>) => void
+  >();
 
   private async getSnapshot(forceRefresh = false): Promise<YandexHomeSnapshot> {
     const now = Date.now();
@@ -274,9 +279,7 @@ export class YandexIotDriver extends BaseDriver {
    * Подписка на real-time push'и. Возвращает unsubscribe. Driver открывает WS
    * на первом snapshot'е; listener'ы получают partial-Device на каждый push.
    */
-  subscribePush(
-    listener: (externalId: string, partial: Partial<Device>) => void,
-  ): () => void {
+  subscribePush(listener: (externalId: string, partial: Partial<Device>) => void): () => void {
     this.pushListeners.add(listener);
     // Если snapshot ещё не запрашивался — fire-and-forget для открытия стрима.
     if (!this.snapshotCache && !this.snapshotInFlight) {

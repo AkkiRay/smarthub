@@ -27,21 +27,30 @@ export function useDeferredMount(opts: DeferredMountOptions = {}): Ref<boolean> 
 
   onMounted(() => {
     if (mode === 'idle' && HAS_IDLE) {
-      const id = window.requestIdleCallback(() => { mounted.value = true; }, {
-        timeout: opts.delayMs ?? 250,
-      });
+      const id = window.requestIdleCallback(
+        () => {
+          mounted.value = true;
+        },
+        {
+          timeout: opts.delayMs ?? 250,
+        },
+      );
       cancel = () => window.cancelIdleCallback(id);
     } else if (mode === 'raf') {
       let raf2 = 0;
       const raf1 = requestAnimationFrame(() => {
-        raf2 = requestAnimationFrame(() => { mounted.value = true; });
+        raf2 = requestAnimationFrame(() => {
+          mounted.value = true;
+        });
       });
       cancel = () => {
         cancelAnimationFrame(raf1);
         cancelAnimationFrame(raf2);
       };
     } else {
-      const id = window.setTimeout(() => { mounted.value = true; }, opts.delayMs ?? 0);
+      const id = window.setTimeout(() => {
+        mounted.value = true;
+      }, opts.delayMs ?? 0);
       cancel = () => window.clearTimeout(id);
     }
   });

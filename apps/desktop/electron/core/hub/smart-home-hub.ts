@@ -136,7 +136,9 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
   // Alice skill bridge: статус → renderer; device-change → push в Алису.
   deps.aliceBridge.on('status', (status) => emitter.emit('alice:status', status));
   deps.aliceBridge.on('webhook-activity', (event) => emitter.emit('alice:webhook-activity', event));
-  deps.aliceBridge.on('cloudflared-install', (state) => emitter.emit('alice:cloudflared-install', state));
+  deps.aliceBridge.on('cloudflared-install', (state) =>
+    emitter.emit('alice:cloudflared-install', state),
+  );
   deps.deviceRegistry.on('device:updated', (device) => {
     deps.aliceBridge.notifyDeviceUpdated(device);
   });
@@ -306,7 +308,8 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
 
   // Network gate: cloud execute (yandex-iot) допускается только если current
   // network привязана к household устройства, либо allowCloudControlOffNetwork=true.
-  let cachedNetwork: { sig: Awaited<ReturnType<typeof detectCurrentNetwork>>; at: number } | null = null;
+  let cachedNetwork: { sig: Awaited<ReturnType<typeof detectCurrentNetwork>>; at: number } | null =
+    null;
   const NETWORK_CACHE_TTL_MS = 5_000;
   const getCachedNetwork = async (): Promise<Awaited<ReturnType<typeof detectCurrentNetwork>>> => {
     const now = Date.now();
@@ -321,8 +324,7 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     // Legacy записи без meta.householdId — fallback на active household, иначе
     // unmetadat'ные устройства проходили gate, а размеченные — нет (асимметрия).
     const meta = device.meta?.['householdId'];
-    const householdId =
-      typeof meta === 'string' ? meta : deps.settings.get('selectedHouseholdId');
+    const householdId = typeof meta === 'string' ? meta : deps.settings.get('selectedHouseholdId');
     if (typeof householdId !== 'string') return { allowed: true };
     const bindings = deps.settings.get('householdNetworks')[householdId] ?? [];
     if (bindings.length === 0) return { allowed: true };
@@ -440,7 +442,9 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     > {
       const auth = deps.settings.get('quasarAuth');
       if (!auth?.musicToken) {
-        throw new Error('Сначала войдите через Яндекс — без авторизации окно покажет пустую страницу.');
+        throw new Error(
+          'Сначала войдите через Яндекс — без авторизации окно покажет пустую страницу.',
+        );
       }
       await openYandexHomeBindingWindow();
       return yandexImport.sync();
@@ -566,9 +570,7 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
       // Pinning из cloud-side server_certificate ДО первого WS-connect:
       // закрывает TOCTOU-окно TOFU pin'а. Если cloud-cert отсутствует —
       // деградируем на TOFU (yandex-station-client запинит на первой сессии).
-      const cloudFingerprint = fingerprintFromPem(
-        cloudDevice.glagol?.security?.server_certificate,
-      );
+      const cloudFingerprint = fingerprintFromPem(cloudDevice.glagol?.security?.server_certificate);
 
       const creds: YandexStationCreds = {
         host,

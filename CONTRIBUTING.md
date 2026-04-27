@@ -28,7 +28,7 @@ pnpm format:check
 
 ## Архитектурные правила
 
-- **IPC-контракт.** Renderer не импортирует main process напрямую. Всё взаимодействие — через `window.smarthome.*` (см. `packages/shared/src/types/ipc.ts`). При добавлении канала правьте *одновременно* `IpcApi`, `preload/index.ts` и handler в `main/ipc/handlers.ts`.
+- **IPC-контракт.** Renderer не импортирует main process напрямую. Всё взаимодействие — через `window.smarthome.*` (см. `packages/shared/src/types/ipc.ts`). При добавлении канала правьте _одновременно_ `IpcApi`, `preload/index.ts` и handler в `main/ipc/handlers.ts`.
 - **Драйверы.** Новый интеграционный драйвер живёт в `apps/desktop/electron/core/drivers/<vendor>/`. Должен реализовывать общий `Driver` контракт и быть зарегистрирован в `driver-registry.ts`.
 - **Безопасность по умолчанию.** `contextIsolation`, `sandbox`, CSP, deny-all permission handler. Не отключайте без явного обсуждения в issue.
 - **Секреты.** Любые `password|token|secret|api[_-]?key|private[_-]?key|pin` НЕ должны пересекать IPC напрямую. См. `redactCredentials` в `main/ipc/handlers.ts`.
@@ -55,6 +55,7 @@ git push origin main --tags
 ```
 
 После пуша таги:
+
 - `release.yml` запускает сборку на win/mac/linux.
 - Артефакты загружаются в **draft**-релиз GitHub.
 - После успешной сборки на всех платформах draft автоматически промоутится в **published** — клиенты с включённым auto-update получают уведомление в течение 6 часов (или мгновенно при ручной проверке).

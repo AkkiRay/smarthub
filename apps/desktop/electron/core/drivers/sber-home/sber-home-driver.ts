@@ -82,12 +82,17 @@ export class SberHomeDriver extends BaseCloudDriver {
         error_description?: string;
       }>(
         'https://salute.online.sberbank.ru/api/v1/oauth/token',
-        new URLSearchParams({ grant_type: 'refresh_token', refresh_token: this.creds.refreshToken }),
+        new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: this.creds.refreshToken,
+        }),
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 5000 },
       );
     } catch (e) {
       // Normalize: без этого юзер видит generic «Request failed with status code 400».
-      const ax = e as { response?: { status?: number; data?: { error?: string; error_description?: string } } };
+      const ax = e as {
+        response?: { status?: number; data?: { error?: string; error_description?: string } };
+      };
       const code = ax.response?.status;
       const detail = ax.response?.data?.error_description ?? ax.response?.data?.error;
       throw new Error(

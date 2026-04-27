@@ -49,10 +49,10 @@ import { TokenIssuer } from './token-issuer.js';
 import type { SettingsStore } from '../../storage/settings-store.js';
 import { isYandexWebhookSource, noteWebhookRequestId } from './webhook-trust.js';
 
-const RESPONSE_BUDGET_MS = 2_500; // Алиса даёт 3с total → оставляем 500мс на сеть
-/** Cap на concurrent executeCommand'ы — защита от device-spam'а при action-batch на 50+ устройств. */
+const RESPONSE_BUDGET_MS = 2_500;
+/** Concurrent-cap на executeCommand при action-batch'ах. */
 const ACTION_CONCURRENCY_LIMIT = 8;
-/** Жёсткий таймаут на чтение тела запроса — защита от slow-loris. */
+/** Hard-timeout на чтение request body. */
 const BODY_READ_TIMEOUT_MS = 8_000;
 
 /** Pool-сериализация: max N concurrent. Возвращает результат в порядке входа. */
@@ -360,7 +360,9 @@ export class SkillWebhookServer {
     if (responseType !== 'code')
       errors.push(`response_type должен быть "code", получен "${responseType}".`);
     if (!isAllowedRedirectUri(redirectUri))
-      errors.push('redirect_uri не из allow-list (ожидается social.yandex.net/.ru или dialogs.yandex.ru).');
+      errors.push(
+        'redirect_uri не из allow-list (ожидается social.yandex.net/.ru или dialogs.yandex.ru).',
+      );
 
     res.statusCode = errors.length ? 400 : 200;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -744,7 +746,8 @@ export class SkillWebhookServer {
           // нерезаное (внутри уже Promise.all), но cap внешний пул на устройства.
           const capabilityResponses = await Promise.all(
             reqCaps.map(async (capReq) => {
-              const instance = typeof capReq?.state?.instance === 'string' ? capReq.state.instance : '';
+              const instance =
+                typeof capReq?.state?.instance === 'string' ? capReq.state.instance : '';
               if (!instance.trim()) {
                 return {
                   type: capReq.type,
@@ -851,7 +854,6 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
     req.on('data', (chunk: Buffer) => {
       if (settled) return;
       total += chunk.length;
-      // 256KiB — Алиса сама не шлёт больше; защита от случайного flood.
       if (total > 256 * 1024) {
         clearTimeout(timer);
         destroyAndFail(new Error('payload too large'));
@@ -899,9 +901,10 @@ function renderAuthorizePage(args: {
   const errorBlock = args.errors.length
     ? `<div class="errors">${args.errors.map((e) => `<p>⚠ ${escapeHtml(e)}</p>`).join('')}</div>`
     : '';
-  const formBlock = args.errors.length || !args.nonce
-    ? ''
-    : `<form method="POST" action="/oauth/authorize" autocomplete="off">
+  const formBlock =
+    args.errors.length || !args.nonce
+      ? ''
+      : `<form method="POST" action="/oauth/authorize" autocomplete="off">
          <input type="hidden" name="client_id" value="${escapeHtml(args.clientId)}" />
          <input type="hidden" name="redirect_uri" value="${escapeHtml(args.redirectUri)}" />
          <input type="hidden" name="state" value="${escapeHtml(args.state)}" />

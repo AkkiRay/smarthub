@@ -41,13 +41,7 @@
   --color-brand-orange-rgb: 255, 138, 77;
 
   // Brand-gradient: violet → purple → pink → amber.
-  --gradient-brand: linear-gradient(
-    135deg,
-    #7c5bff 0%,
-    #b85dff 32%,
-    #ff5b9e 64%,
-    #ffb866 100%
-  );
+  --gradient-brand: linear-gradient(135deg, #7c5bff 0%, #b85dff 32%, #ff5b9e 64%, #ffb866 100%);
   --gradient-brand-soft: linear-gradient(
     135deg,
     rgba(124, 91, 255, 0.18) 0%,
@@ -208,14 +202,14 @@
   //
   // Mobile (<720px) и 4K (≥2560px) — отдельные `@media`-секции ниже.
   // ============================================================================
-  --font-size-display:   clamp(28px, 13.9px + 1.96vw, 64px);   // hero pages
-  --font-size-display-2: clamp(22px, 11.83px + 1.41vw, 48px);  // section heroes
-  --font-size-h1:        clamp(18px, 12.52px + 0.76vw, 32px);  // page titles
-  --font-size-h2:        clamp(15px, 12.26px + 0.38vw, 22px);  // panel titles
-  --font-size-h3:        clamp(14px, 12.44px + 0.22vw, 18px);  // card titles
-  --font-size-body:      clamp(14px, 12.83px + 0.16vw, 17px);  // long-form
-  --font-size-small:     clamp(12px, 11.22px + 0.11vw, 14px);  // hints, captions
-  --font-size-micro:     clamp(11px, 10.22px + 0.11vw, 13px);  // eyebrow, badges
+  --font-size-display: clamp(28px, 13.9px + 1.96vw, 64px); // hero pages
+  --font-size-display-2: clamp(22px, 11.83px + 1.41vw, 48px); // section heroes
+  --font-size-h1: clamp(18px, 12.52px + 0.76vw, 32px); // page titles
+  --font-size-h2: clamp(15px, 12.26px + 0.38vw, 22px); // panel titles
+  --font-size-h3: clamp(14px, 12.44px + 0.22vw, 18px); // card titles
+  --font-size-body: clamp(14px, 12.83px + 0.16vw, 17px); // long-form
+  --font-size-small: clamp(12px, 11.22px + 0.11vw, 14px); // hints, captions
+  --font-size-micro: clamp(11px, 10.22px + 0.11vw, 13px); // eyebrow, badges
 
   --tracking-display: -0.025em;
   --tracking-h1: -0.018em;
@@ -295,11 +289,7 @@
   // темнее чем `--color-bg-base` — рейл «садится» под контент.
   --color-bg-sidebar: #07060d;
   --sidebar-surface:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.035) 0%,
-      rgba(255, 255, 255, 0) 38%
-    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 38%),
     radial-gradient(
       110% 50% at 0% 0%,
       rgba(var(--color-brand-violet-rgb), 0.1) 0%,
@@ -356,11 +346,7 @@
 
   --color-bg-sidebar: #03020a;
   --sidebar-surface:
-    linear-gradient(
-      180deg,
-      rgba(255, 220, 200, 0.06) 0%,
-      rgba(255, 220, 200, 0) 42%
-    ),
+    linear-gradient(180deg, rgba(255, 220, 200, 0.06) 0%, rgba(255, 220, 200, 0) 42%),
     radial-gradient(
       120% 55% at 0% 0%,
       rgba(var(--color-brand-violet-rgb), 0.2) 0%,

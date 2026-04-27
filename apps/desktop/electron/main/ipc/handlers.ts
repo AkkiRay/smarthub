@@ -50,7 +50,12 @@ class IpcValidationError extends Error {
   }
 }
 
-function assertString(channel: string, name: string, v: unknown, opts: { maxLen?: number } = {}): string {
+function assertString(
+  channel: string,
+  name: string,
+  v: unknown,
+  opts: { maxLen?: number } = {},
+): string {
   if (typeof v !== 'string') {
     throw new IpcValidationError(channel, `${name} ожидает string, получен ${typeof v}`);
   }
@@ -76,7 +81,9 @@ function assertObject(channel: string, name: string, v: unknown): Record<string,
  * Маскирует sensitive-поля creds: оставляет последние 4 символа, остальное — `***`.
  * UI показывает «●●●●1234» — юзер видит, что creds сохранены, но raw secret не утекает.
  */
-function redactCredentials(creds: Record<string, unknown> | null | undefined): Record<string, unknown> {
+function redactCredentials(
+  creds: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
   if (!creds || typeof creds !== 'object') return {};
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(creds)) {
@@ -236,8 +243,7 @@ function buildHandlers(hub: SmartHomeHub, updater: UpdaterController): Record<st
     'yandexStation:set-cloud-control-policy': (allow) =>
       hub.yandexStation.setCloudControlPolicy(Boolean(allow)),
     'yandexStation:open-home-binding-window': () => hub.yandexStation.openHomeBindingWindow(),
-    'yandexStation:run-home-scenario': (id) =>
-      hub.yandexStation.runHomeScenario(id as string),
+    'yandexStation:run-home-scenario': (id) => hub.yandexStation.runHomeScenario(id as string),
     'yandexStation:fetch-scenario-details': (id) =>
       hub.yandexStation.fetchScenarioDetails(id as string),
     'yandexStation:rename-home-scenario': (id, name) =>

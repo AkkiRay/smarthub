@@ -85,10 +85,18 @@ const svg = computed(() => {
   flex-shrink: 0;
   color: currentColor;
 
-  &--sm  { --mark-size: 16px; }
-  &--md  { --mark-size: 20px; }
-  &--lg  { --mark-size: 28px; }
-  &--xl  { --mark-size: 40px; }
+  &--sm {
+    --mark-size: 16px;
+  }
+  &--md {
+    --mark-size: 20px;
+  }
+  &--lg {
+    --mark-size: 28px;
+  }
+  &--xl {
+    --mark-size: 40px;
+  }
 
   // Filled: марка в скруглённом квадрате с brand-tone fill.
   // Используется в DriverIcon, DriversMarketplace, Discovery.
@@ -151,7 +159,11 @@ const svg = computed(() => {
 }
 
 @keyframes brand-mark-reveal-flat {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 </style>

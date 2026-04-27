@@ -80,7 +80,6 @@
 </template>
 
 <script setup lang="ts">
-
 import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
 
 export interface SelectOption {

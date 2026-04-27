@@ -76,9 +76,7 @@ export interface DeviceDriver {
    *
    * @returns Unsubscribe-функция; вызывается при `shutdown()` registry.
    */
-  subscribePush?(
-    listener: (externalId: string, partial: Partial<Device>) => void,
-  ): () => void;
+  subscribePush?(listener: (externalId: string, partial: Partial<Device>) => void): () => void;
 
   /**
    * Cleanup при shutdown'е приложения: закрыть sockets, снять timer'ы,
@@ -95,13 +93,13 @@ export interface DeviceDriver {
  * фильтрации в search-bar.
  */
 export type DriverCategory =
-  | 'lan-russian'    // российские бренды с локальным протоколом
-  | 'lan-global'     // зарубежные с локальным протоколом (Hue, LIFX, WiZ)
-  | 'cloud-russian'  // российские облачные API (Sber, Rubetek)
-  | 'cloud-global'   // зарубежные облачные (Tuya, eWeLink, Govee)
-  | 'protocol'       // универсальные протоколы (MQTT, Matter, HomeKit)
-  | 'bridge'         // мосты к чужим хабам (Home Assistant, Z-Wave-JS)
-  | 'misc';          // generic-http, mock, …
+  | 'lan-russian' // российские бренды с локальным протоколом
+  | 'lan-global' // зарубежные с локальным протоколом (Hue, LIFX, WiZ)
+  | 'cloud-russian' // российские облачные API (Sber, Rubetek)
+  | 'cloud-global' // зарубежные облачные (Tuya, eWeLink, Govee)
+  | 'protocol' // универсальные протоколы (MQTT, Matter, HomeKit)
+  | 'bridge' // мосты к чужим хабам (Home Assistant, Z-Wave-JS)
+  | 'misc'; // generic-http, mock, …
 
 /**
  * Тип поля credentials в форме marketplace'а.

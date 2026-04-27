@@ -58,9 +58,8 @@ export async function browseMdns(opts: BrowseOptions): Promise<MdnsServiceLite[]
     try {
       // `interface` пробрасывается через Bonjour-opts в `multicast-dns(opts)`.
       const ctorOpts = (target.ip ? { interface: target.ip } : {}) as Record<string, unknown>;
-      bonjour = new Bonjour(
-        ctorOpts as never,
-        (err: unknown) => log.debug(`[mdns:${target.name}] ${(err as Error).message ?? err}`),
+      bonjour = new Bonjour(ctorOpts as never, (err: unknown) =>
+        log.debug(`[mdns:${target.name}] ${(err as Error).message ?? err}`),
       );
     } catch (e) {
       log.warn(`[mdns:${target.name}] new Bonjour failed: ${(e as Error).message}`);

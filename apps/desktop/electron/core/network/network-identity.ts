@@ -21,7 +21,8 @@ export interface NetworkSignature {
   detectedAt: string;
 }
 
-const MAC_REGEX = /([0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2})/i;
+const MAC_REGEX =
+  /([0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2})/i;
 const normalizeMac = (raw: string): string => raw.replace(/-/g, ':').toLowerCase();
 
 async function detectGatewayIp(): Promise<string | null> {
@@ -53,7 +54,9 @@ async function detectGatewayMac(): Promise<string | null> {
   try {
     if (process.platform === 'win32') {
       // ARP-prime через ping (1 echo, 200ms timeout) — без него запись может отсутствовать.
-      await pexec(`ping -n 1 -w 200 ${gateway}`, { timeout: SHELL_TIMEOUT_MS }).catch(() => undefined);
+      await pexec(`ping -n 1 -w 200 ${gateway}`, { timeout: SHELL_TIMEOUT_MS }).catch(
+        () => undefined,
+      );
       const { stdout } = await pexec(`arp -a ${gateway}`, { timeout: SHELL_TIMEOUT_MS });
       const m = stdout.match(MAC_REGEX);
       return m ? normalizeMac(m[1]!) : null;
@@ -111,8 +114,7 @@ function scoreInterface(name: string, ip: string): number | null {
   if (a === 192 && b === 0 && Number(ip.split('.')[2]) === 2) return null;
   if (a === 198 && b === 51 && Number(ip.split('.')[2]) === 100) return null;
   if (a === 203 && b === 0 && Number(ip.split('.')[2]) === 113) return null;
-  const isPrivate =
-    a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  const isPrivate = a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
   const isVirtual = /vethernet|virtualbox|vmware|hyper-?v|tap|tun|wsl|docker|loopback/i.test(name);
   if (isPrivate) return isVirtual ? 1 : 0;
   return isVirtual ? 2 : 1;

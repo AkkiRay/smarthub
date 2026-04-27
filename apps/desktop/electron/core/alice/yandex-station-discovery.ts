@@ -34,7 +34,9 @@ async function scanOnInterface(
 ): Promise<void> {
   // `interface` пробрасывается в multicast-dns, но `Partial<ServiceConfig>` в типах
   // bonjour-service v1.3.0 его не объявляет — каст безопасен, runtime принимает.
-  const bonjour = new Bonjour({ interface: bindIp } as unknown as ConstructorParameters<typeof Bonjour>[0]);
+  const bonjour = new Bonjour({ interface: bindIp } as unknown as ConstructorParameters<
+    typeof Bonjour
+  >[0]);
   const browser = bonjour.find({ type: YANDEX_STATION_MDNS_TYPE });
   browser.on('up', (svc: Service) => {
     const candidate = parseService(svc);
@@ -58,7 +60,9 @@ export function createYandexStationDiscovery() {
     async scan(timeoutMs: number = ALICE_TIMEOUT.MDNS_SCAN_MS): Promise<YandexStationCandidate[]> {
       const found = new Map<string, YandexStationCandidate>();
       const interfaces = listScanInterfaces();
-      log.info(`YandexStationDiscovery: scanning ${interfaces.length} interface(s): ${interfaces.join(', ')}`);
+      log.info(
+        `YandexStationDiscovery: scanning ${interfaces.length} interface(s): ${interfaces.join(', ')}`,
+      );
       await Promise.all(interfaces.map((ip) => scanOnInterface(ip, timeoutMs, found)));
       return Array.from(found.values());
     },

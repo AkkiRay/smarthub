@@ -50,9 +50,7 @@ export function useSpeakerNavigation(): SpeakerNavigation {
     if (byExt) return byExt.id;
     // Fallback: единственная yandex-iot media-station без `quasarDeviceId`.
     const speakers = list.filter(
-      (d) =>
-        d.type.startsWith('devices.types.media_device') &&
-        !d.meta?.['quasarDeviceId'],
+      (d) => d.type.startsWith('devices.types.media_device') && !d.meta?.['quasarDeviceId'],
     );
     if (speakers.length === 1) return speakers[0]!.id;
     return null;

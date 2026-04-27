@@ -107,7 +107,9 @@ export async function broadcastDiscover(opts: BroadcastDiscoverOptions): Promise
         try {
           sock.setBroadcast(true);
         } catch (e) {
-          log.debug(`[${opts.driverId}:${target.name}] setBroadcast failed: ${(e as Error).message}`);
+          log.debug(
+            `[${opts.driverId}:${target.name}] setBroadcast failed: ${(e as Error).message}`,
+          );
         }
         sock.send(opts.payload, 0, opts.payload.length, opts.port, target.broadcast, (err) => {
           if (err) {

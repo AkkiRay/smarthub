@@ -89,9 +89,7 @@ export function createSceneService(deps: {
       );
       const failed = results.filter((r) => !r.ok);
       if (failed.length === scene.actions.length) {
-        throw new Error(
-          `Сцена «${scene.name}» не сработала: все ${failed.length} действий упали`,
-        );
+        throw new Error(`Сцена «${scene.name}» не сработала: все ${failed.length} действий упали`);
       }
       if (failed.length > 0) {
         log.warn(

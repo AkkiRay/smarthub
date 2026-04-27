@@ -9,49 +9,49 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: '/'
+    directory: "/"
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
-      timezone: 'Europe/Moscow'
+      time: "06:00"
+      timezone: "Europe/Moscow"
     open-pull-requests-limit: 5
     versioning-strategy: increase-if-necessary
     commit-message:
-      prefix: 'deps'
-      prefix-development: 'deps-dev'
+      prefix: "deps"
+      prefix-development: "deps-dev"
       include: scope
     groups:
       electron:
         patterns:
-          - 'electron'
-          - 'electron-*'
-          - '@electron/*'
+          - "electron"
+          - "electron-*"
+          - "@electron/*"
       production:
         dependency-type: production
         exclude-patterns:
-          - 'electron'
-          - 'electron-*'
-          - '@electron/*'
+          - "electron"
+          - "electron-*"
+          - "@electron/*"
       development:
         dependency-type: development
         exclude-patterns:
-          - 'electron'
-          - 'electron-*'
-          - '@electron/*'
+          - "electron"
+          - "electron-*"
+          - "@electron/*"
 
   - package-ecosystem: github-actions
-    directory: '/'
+    directory: "/"
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
-      timezone: 'Europe/Moscow'
+      time: "06:00"
+      timezone: "Europe/Moscow"
     open-pull-requests-limit: 3
     commit-message:
-      prefix: 'ci'
+      prefix: "ci"
       include: scope
     groups:
       actions:
         patterns:
-          - '*'
+          - "*"

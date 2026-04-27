@@ -11,11 +11,7 @@
 
 import { createHash } from 'node:crypto';
 import log from 'electron-log/main.js';
-import type {
-  DiscoveredDevice,
-  YandexHomeHousehold,
-  YandexHomeSnapshot,
-} from '@smarthome/shared';
+import type { DiscoveredDevice, YandexHomeHousehold, YandexHomeSnapshot } from '@smarthome/shared';
 
 /**
  * Лог SSID без раскрытия. SSID часто содержит privacy-данные (адрес, фамилия,
@@ -100,7 +96,8 @@ export class YandexImportService {
           preWiped++;
         }
       }
-      if (preWiped > 0) log.info(`YandexImport.sync: pre-wiped ${preWiped} foreign-household devices`);
+      if (preWiped > 0)
+        log.info(`YandexImport.sync: pre-wiped ${preWiped} foreign-household devices`);
     }
 
     const filteredCandidates = householdId
@@ -336,8 +333,7 @@ export class YandexImportService {
     const idx = list.findIndex((existing) => this.signaturesMatch(existing, sig));
     if (idx >= 0) {
       const existing = list[idx]!;
-      const canUpgrade =
-        (sig.gatewayMac && !existing.gatewayMac) || (sig.ssid && !existing.ssid);
+      const canUpgrade = (sig.gatewayMac && !existing.gatewayMac) || (sig.ssid && !existing.ssid);
       if (!canUpgrade) return;
       list[idx] = sig;
       all[householdId] = list;
@@ -377,9 +373,7 @@ export class YandexImportService {
         });
         imported++;
       } catch (e) {
-        log.warn(
-          `YandexImport.importRooms: ${r.id} (${r.name}) failed: ${(e as Error).message}`,
-        );
+        log.warn(`YandexImport.importRooms: ${r.id} (${r.name}) failed: ${(e as Error).message}`);
       }
     }
     // Cleanup yandex-rooms; origin='local' не трогаем. Skip если filteredRooms пуст.
@@ -400,7 +394,9 @@ export class YandexImportService {
   private async importDevices(
     candidates: DiscoveredDevice[],
     yandexDeviceIds: Set<string>,
-  ): Promise<Pick<YandexImportSummary, 'imported' | 'updated' | 'removed' | 'failed' | 'lastError'>> {
+  ): Promise<
+    Pick<YandexImportSummary, 'imported' | 'updated' | 'removed' | 'failed' | 'lastError'>
+  > {
     let imported = 0;
     let updated = 0;
     let failed = 0;
@@ -431,7 +427,9 @@ export class YandexImportService {
     let removed = 0;
     const orphanCandidates = this.deps.deviceRegistry
       .list()
-      .filter((d) => d.driver === YandexImportService.DRIVER_ID && !yandexDeviceIds.has(d.externalId));
+      .filter(
+        (d) => d.driver === YandexImportService.DRIVER_ID && !yandexDeviceIds.has(d.externalId),
+      );
     const pairedCount = this.deps.deviceRegistry
       .list()
       .filter((d) => d.driver === YandexImportService.DRIVER_ID).length;
@@ -439,7 +437,8 @@ export class YandexImportService {
     // Sanity-gates: skip sweep если candidates=0 при paired>0, или ratio≥50%.
     const willWipeAll = candidates.length === 0 && pairedCount > 0;
     const willWipeMost =
-      pairedCount > 0 && orphanCandidates.length / pairedCount >= YandexImportService.ORPHAN_SWEEP_MAX_RATIO;
+      pairedCount > 0 &&
+      orphanCandidates.length / pairedCount >= YandexImportService.ORPHAN_SWEEP_MAX_RATIO;
     if (willWipeAll || willWipeMost) {
       log.warn(
         `YandexImport: orphan sweep aborted — would remove ${orphanCandidates.length}/${pairedCount} ` +

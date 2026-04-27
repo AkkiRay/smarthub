@@ -43,7 +43,10 @@ interface DeviceRegistryEvents {
 export type DeviceRegistry = ReturnType<typeof createDeviceRegistry>;
 
 export interface CommandPrecheck {
-  (device: Device, command: DeviceCommand): Promise<{ allowed: true } | { allowed: false; errorCode: string; errorMessage: string }>;
+  (
+    device: Device,
+    command: DeviceCommand,
+  ): Promise<{ allowed: true } | { allowed: false; errorCode: string; errorMessage: string }>;
 }
 
 export function createDeviceRegistry(deps: {
@@ -128,9 +131,7 @@ export function createDeviceRegistry(deps: {
       }
       pushUnsubscribes.length = 0;
       for (const driver of deps.driverRegistry.list()) wirePushFromDriver(driver);
-      log.info(
-        `DeviceRegistry: ${pushUnsubscribes.length} push-subscriptions wired`,
-      );
+      log.info(`DeviceRegistry: ${pushUnsubscribes.length} push-subscriptions wired`);
     },
 
     on<E extends keyof DeviceRegistryEvents>(
@@ -271,9 +272,7 @@ export function createDeviceRegistry(deps: {
         const timer = setTimeout(() => {
           pendingTimers.delete(timer);
           void this.refresh(command.deviceId).catch((e) => {
-            log.debug(
-              `post-execute refresh ${command.deviceId} failed: ${(e as Error).message}`,
-            );
+            log.debug(`post-execute refresh ${command.deviceId} failed: ${(e as Error).message}`);
           });
         }, 1500);
         pendingTimers.add(timer);

@@ -3,9 +3,7 @@
     <header class="monitor__head">
       <div class="monitor__copy">
         <h3 class="monitor__title">Журнал glagol-сессии</h3>
-        <p class="monitor__desc">
-          Lifecycle, команды, ответы Алисы и state-push'и колонки.
-        </p>
+        <p class="monitor__desc">Lifecycle, команды, ответы Алисы и state-push'и колонки.</p>
       </div>
       <BaseButton
         variant="ghost"
@@ -59,7 +57,9 @@
             :size="11"
           />
         </button>
-        <pre v-if="expanded.has(evt.id) && evt.details" class="monitor__details">{{ evt.details }}</pre>
+        <pre v-if="expanded.has(evt.id) && evt.details" class="monitor__details">{{
+          evt.details
+        }}</pre>
       </li>
     </ol>
 

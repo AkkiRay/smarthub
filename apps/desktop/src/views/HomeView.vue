@@ -18,7 +18,12 @@
           <BaseButton variant="primary" size="lg" icon-left="search" @click="runDiscovery">
             Найти устройства
           </BaseButton>
-          <BaseButton variant="ghost" size="lg" icon-right="arrow-right" @click="$router.push('/devices')">
+          <BaseButton
+            variant="ghost"
+            size="lg"
+            icon-right="arrow-right"
+            @click="$router.push('/devices')"
+          >
             Все устройства
           </BaseButton>
         </div>
@@ -44,16 +49,16 @@
         >
           <span class="home__kpi-label">офлайн</span>
           <span class="home__kpi-value">{{ devices.offlineCount }}</span>
-          <span class="home__kpi-hint">{{ devices.offlineCount > 0 ? 'нужно проверить' : 'всё на связи' }}</span>
+          <span class="home__kpi-hint">{{
+            devices.offlineCount > 0 ? 'нужно проверить' : 'всё на связи'
+          }}</span>
         </button>
-        <button
-          type="button"
-          class="home__kpi"
-          @click="$router.push('/scenes')"
-        >
+        <button type="button" class="home__kpi" @click="$router.push('/scenes')">
           <span class="home__kpi-label">сценарии</span>
           <span class="home__kpi-value">{{ totalScenes }}</span>
-          <span class="home__kpi-hint">{{ aliceScenariosCount > 0 ? `${aliceScenariosCount} в Алисе` : 'локальные' }}</span>
+          <span class="home__kpi-hint">{{
+            aliceScenariosCount > 0 ? `${aliceScenariosCount} в Алисе` : 'локальные'
+          }}</span>
         </button>
         <button
           type="button"
@@ -315,7 +320,8 @@ const contextLead = computed(() => {
 
 const isAliceConnected = computed(() => yandex.status?.connection === 'connected');
 const isAliceConnecting = computed(
-  () => yandex.status?.connection === 'connecting' || yandex.status?.connection === 'authenticating',
+  () =>
+    yandex.status?.connection === 'connecting' || yandex.status?.connection === 'authenticating',
 );
 
 const aliceLabel = computed(() => {
@@ -341,20 +347,19 @@ const showOnboarding = computed(
 );
 
 const topDevices = computed(() => devices.devices.slice(0, 6));
-const totalScenes = computed(() => scenes.scenes.length + (yandex.homeFiltered?.scenarios.length ?? 0));
+const totalScenes = computed(
+  () => scenes.scenes.length + (yandex.homeFiltered?.scenarios.length ?? 0),
+);
 
 /** True если хотя бы одно online устройство имеет on_off capability. */
 const hasOnlineToggleable = computed(() =>
   devices.devices.some(
     (d) =>
-      d.status === 'online' &&
-      d.capabilities.some((c) => c.type === 'devices.capabilities.on_off'),
+      d.status === 'online' && d.capabilities.some((c) => c.type === 'devices.capabilities.on_off'),
   ),
 );
 
-const hasMetrics = computed(
-  () => devices.devices.length > 0 || scenes.scenes.length > 0,
-);
+const hasMetrics = computed(() => devices.devices.length > 0 || scenes.scenes.length > 0);
 
 const quickScenes = QUICK_SCENES;
 
@@ -417,7 +422,10 @@ async function runQuick(quick: QuickScene): Promise<void> {
     if (failed === 0) {
       toaster.push({ kind: 'success', message: `«${quick.name}» применено к ${ok} устройствам` });
     } else if (ok === 0) {
-      toaster.push({ kind: 'error', message: `«${quick.name}» не применилось ни к одному устройству` });
+      toaster.push({
+        kind: 'error',
+        message: `«${quick.name}» не применилось ни к одному устройству`,
+      });
     } else {
       toaster.push({
         kind: 'info',
@@ -434,10 +442,8 @@ async function runQuick(quick: QuickScene): Promise<void> {
 const { timeline } = useGsap(root);
 
 onMounted(() => {
-  // Async data — параллельно, не блокируем mount-анимацию IPC-задержкой.
-  // Раньше cascade ждал `await drivers.list()` (~50-200ms IPC) → видимый
-  // лаг на старте. Теперь bootstrap + IPC текут отдельно, store-обновления
-  // pop-in'ят элементы безболезненно через Vue reactivity.
+  // Async-bootstrap и IPC текут параллельно с mount-каскадом; результаты
+  // pop-in'ят элементы через Vue-reactivity.
   void (async () => {
     if (!scenes.scenes.length) await scenes.bootstrap();
     try {
@@ -505,14 +511,29 @@ onMounted(() => {
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(60% 80% at 0% 0%, rgba(var(--color-brand-violet-rgb), 0.32) 0%, transparent 60%),
-      radial-gradient(50% 60% at 100% 100%, rgba(var(--color-brand-pink-rgb), 0.22) 0%, transparent 60%),
-      radial-gradient(40% 50% at 80% 20%, rgba(var(--color-brand-amber-rgb), 0.16) 0%, transparent 60%);
+      radial-gradient(
+        60% 80% at 0% 0%,
+        rgba(var(--color-brand-violet-rgb), 0.32) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        50% 60% at 100% 100%,
+        rgba(var(--color-brand-pink-rgb), 0.22) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        40% 50% at 80% 20%,
+        rgba(var(--color-brand-amber-rgb), 0.16) 0%,
+        transparent 60%
+      );
     z-index: 0;
     pointer-events: none;
   }
 
-  > * { position: relative; z-index: 1; }
+  > * {
+    position: relative;
+    z-index: 1;
+  }
 
   @media (max-width: 1080px) {
     grid-template-columns: minmax(0, 1fr);
@@ -568,7 +589,9 @@ onMounted(() => {
   text-wrap: balance;
 
   @media (max-width: 720px) {
-    br { display: none; }
+    br {
+      display: none;
+    }
   }
 }
 
@@ -701,11 +724,15 @@ onMounted(() => {
 
   &--accent {
     background: rgba(var(--color-brand-violet-rgb), 0.1);
-    &:hover { background: rgba(var(--color-brand-violet-rgb), 0.16); }
+    &:hover {
+      background: rgba(var(--color-brand-violet-rgb), 0.16);
+    }
   }
 
   &--muted {
-    .home__kpi-value { color: var(--color-text-secondary); }
+    .home__kpi-value {
+      color: var(--color-text-secondary);
+    }
   }
 }
 
@@ -803,27 +830,47 @@ onMounted(() => {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(80% 60% at 0% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%);
+    background: radial-gradient(
+      80% 60% at 0% 0%,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      transparent 60%
+    );
     opacity: 0;
     transition: opacity var(--dur-medium) var(--ease-out);
   }
 
-  > * { position: relative; z-index: 1; }
+  > * {
+    position: relative;
+    z-index: 1;
+  }
 
   &:hover:not(:disabled) {
     border-color: color-mix(in srgb, var(--accent) 40%, var(--color-border-soft));
     transform: translateY(-2px);
     box-shadow: var(--shadow-hover);
-    &::before { opacity: 1; }
-    .quick-tile__arrow { transform: translateX(2px); color: var(--accent); }
+    &::before {
+      opacity: 1;
+    }
+    .quick-tile__arrow {
+      transform: translateX(2px);
+      color: var(--accent);
+    }
   }
 
-  &:active { transform: translateY(0); transition-duration: var(--dur-instant); }
-  &:disabled { opacity: 0.5; cursor: progress; }
+  &:active {
+    transform: translateY(0);
+    transition-duration: var(--dur-instant);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: progress;
+  }
 
   &--running {
     border-color: var(--accent);
-    box-shadow: 0 0 0 var(--border-thin) var(--accent), var(--shadow-hover);
+    box-shadow:
+      0 0 0 var(--border-thin) var(--accent),
+      var(--shadow-hover);
   }
 
   &__glyph {
@@ -895,16 +942,25 @@ onMounted(() => {
     pointer-events: none;
   }
 
-  > * { position: relative; z-index: 1; }
+  > * {
+    position: relative;
+    z-index: 1;
+  }
 
   &:hover:not(:disabled) {
     background: rgba(var(--alice-accent), 0.08);
     border-color: rgba(var(--alice-accent), 0.45);
     transform: translateY(-1px);
-    .alice-tile__action { transform: translateX(2px); color: #ffd75e; }
+    .alice-tile__action {
+      transform: translateX(2px);
+      color: #ffd75e;
+    }
   }
 
-  &:disabled { opacity: 0.55; cursor: progress; }
+  &:disabled {
+    opacity: 0.55;
+    cursor: progress;
+  }
 
   &--running {
     border-color: rgba(var(--alice-accent), 0.7);

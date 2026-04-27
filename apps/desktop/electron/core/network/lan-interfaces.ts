@@ -12,7 +12,8 @@ import log from 'electron-log/main.js';
 const pexec = promisify(exec);
 const SHELL_TIMEOUT_MS = 2_000;
 
-const VIRTUAL_NAME = /vethernet|vmware|hyper-?v|wsl|docker|virtualbox|vbox|tap|tun|loopback|nordlynx|tailscale|zerotier|wireguard/i;
+const VIRTUAL_NAME =
+  /vethernet|vmware|hyper-?v|wsl|docker|virtualbox|vbox|tap|tun|loopback|nordlynx|tailscale|zerotier|wireguard/i;
 const HYPER_V_OUI = /^00:15:5d/i;
 
 export interface LanInterface {
@@ -111,9 +112,7 @@ export async function getActiveLanInterfaces(): Promise<LanInterface[]> {
       if (iface.address.startsWith('169.254.')) continue;
       if (HYPER_V_OUI.test(iface.mac ?? '')) continue;
       const broadcast = computeBroadcast(iface.address, iface.netmask);
-      const hasDefaultGateway = gateways.some((g) =>
-        ipInSubnet(g, iface.address, iface.netmask),
-      );
+      const hasDefaultGateway = gateways.some((g) => ipInSubnet(g, iface.address, iface.netmask));
       result.push({
         name,
         address: iface.address,
