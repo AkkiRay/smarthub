@@ -84,9 +84,7 @@ export function useGsap(scope?: GsapScope) {
   }
 
   // Scope резолвим лениво: setup() запускается ДО mount'а, root.value === null,
-  // и `gsap.context(fn, null)` создаёт глобальный scope, который ловит селекторы
-  // других view'ов при route-overlap'е. Принимаем Ref/getter и резолвим на каждом
-  // tween-вызове.
+  // tween'ы вызываются обычно из onMounted — к этому моменту scope готов.
   const resolveScope = (): Element | undefined => {
     if (!scope) return undefined;
     if (scope instanceof Element) return scope;
@@ -95,56 +93,41 @@ export function useGsap(scope?: GsapScope) {
     return undefined;
   };
 
-  const ctx = gsap.context(() => {});
-  const ensureScope = (): void => {
+  // Lazy-init: ctx создаётся при первом tween-вызове, чтобы захватить mounted
+  // scope element. `gsap.context(fn, scope)` сам ставит правильный selector
+  // через `gsap.utils.selector(scope)` — строки → `scope.querySelectorAll`,
+  // Element/NodeList/Array — pass-through. Раньше самописный selector валился
+  // на staggered child-tween'ах: GSAP при создании per-element Tween вызывает
+  // selector(target), наш override не различал тип и слепо звал
+  // `el.querySelectorAll(target)`, который через `Element.toString()` получал
+  // либо `[object HTMLDivElement]`, либо href anchor'а — невалидный CSS.
+  let ctx: gsap.Context | null = null;
+  const ensureCtx = (): gsap.Context => {
+    if (ctx) return ctx;
     const el = resolveScope();
-    if (!el) return;
-    type CtxWithSelector = gsap.Context & { selector?: (sel: unknown) => Element[] | unknown };
-    const c = ctx as CtxWithSelector;
-    if (typeof c.selector === 'function') return;
-    (ctx as unknown as { _scope?: Element })._scope = el;
-    // GSAP routes ALL targets через context selector — Element / NodeList / Array
-    // отдаём как есть, scoped CSS-string резолвим через `el.querySelectorAll`.
-    // Defensive: невалидные строки (URL'ы, `[object HTMLDivElement]`) → пустой массив,
-    // иначе DOMException 'is not a valid selector' валит весь tween.
-    c.selector = ((target: unknown): unknown => {
-      if (target == null) return [];
-      if (typeof target !== 'string') return target;
-      const sel = target.trim();
-      if (!sel) return [];
-      // CSS selector должен начинаться с #, ., [, идентификатора или *. Любые
-      // префиксы вроде `http://`, `/`, `[object` — точно не selector.
-      if (!/^[#.\[*a-zA-Z_:>+~,&]/.test(sel)) return [];
-      try {
-        return Array.from(el.querySelectorAll(sel));
-      } catch {
-        return [];
-      }
-    }) as never;
+    ctx = el ? gsap.context(() => {}, el) : gsap.context(() => {});
+    return ctx;
   };
 
-  onBeforeUnmount(() => ctx.revert());
+  onBeforeUnmount(() => ctx?.revert());
 
   function animate(targets: gsap.TweenTarget, vars: gsap.TweenVars): gsap.core.Tween {
-    ensureScope();
     const level = getLevel();
     if (level === 'off') {
       return gsap.set(targets, { ...vars, duration: 0 }) as unknown as gsap.core.Tween;
     }
-    return ctx.add(() => gsap.to(targets, adapt(vars, level))) as gsap.core.Tween;
+    return ensureCtx().add(() => gsap.to(targets, adapt(vars, level))) as gsap.core.Tween;
   }
 
   function from(targets: gsap.TweenTarget, vars: gsap.TweenVars): gsap.core.Tween {
-    ensureScope();
     const level = getLevel();
     if (level === 'off') {
       return gsap.set(targets, { clearProps: 'all' }) as unknown as gsap.core.Tween;
     }
-    return ctx.add(() => gsap.from(targets, adapt(vars, level))) as gsap.core.Tween;
+    return ensureCtx().add(() => gsap.from(targets, adapt(vars, level))) as gsap.core.Tween;
   }
 
   function timeline(vars?: gsap.TimelineVars): gsap.core.Timeline {
-    ensureScope();
     const level = getLevel();
     if (level === 'off') {
       // Timeline в finished-state без проигрывания.
@@ -152,8 +135,15 @@ export function useGsap(scope?: GsapScope) {
       t.totalProgress(1);
       return t;
     }
-    return ctx.add(() => gsap.timeline(vars)) as gsap.core.Timeline;
+    return ensureCtx().add(() => gsap.timeline(vars)) as gsap.core.Timeline;
   }
 
-  return { animate, from, timeline, ctx };
+  return {
+    animate,
+    from,
+    timeline,
+    get ctx() {
+      return ensureCtx();
+    },
+  };
 }
