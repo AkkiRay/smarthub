@@ -125,71 +125,86 @@ export class CloudflaredInstaller {
     const targetDir = path.dirname(managedBinaryPath());
     mkdirSync(targetDir, { recursive: true });
 
-    // Промежуточный файл — пишем в .part, чтобы при крэше не остался usable
-    // путь с битым бинарём (TunnelManager бы потом spawn'ил его и падал).
+    // .part-файл — при любом крэше очищаем (try/catch ниже), иначе lingering
+    // partials съедают диск и на retry-е первый шаг упадёт с ENOSPC.
     const partPath = path.join(targetDir, `${binaryFileName()}.part`);
     const finalPath = managedBinaryPath();
+    const cleanupPart = async (): Promise<void> => {
+      try {
+        await rm(partPath, { force: true });
+      } catch {
+        /* swallow — best-effort */
+      }
+    };
 
     log.info(`[cloudflared-installer] downloading ${asset} from ${url}`);
     const startedAt = Date.now();
 
-    const response = await axios.get<NodeJS.ReadableStream>(url, {
-      responseType: 'stream',
-      timeout: 0,
-      maxRedirects: 5,
-      headers: { 'User-Agent': 'SmartHome-Hub/cloudflared-installer' },
-    });
-
-    const total = parseInt(String(response.headers['content-length'] ?? ''), 10);
-    const bytesTotal = Number.isFinite(total) && total > 0 ? total : null;
-    let bytesDone = 0;
-    let lastReport = 0;
-
-    await new Promise<void>((resolve, reject) => {
-      const fileStream = createWriteStream(partPath);
-      response.data.on('data', (chunk: Buffer) => {
-        bytesDone += chunk.length;
-        const now = Date.now();
-        if (opts.onProgress && now - lastReport >= 125) {
-          lastReport = now;
-          opts.onProgress({
-            ratio: bytesTotal ? bytesDone / bytesTotal : null,
-            bytesDone,
-            bytesTotal,
-            elapsedMs: now - startedAt,
-          });
-        }
+    try {
+      const response = await axios.get<NodeJS.ReadableStream>(url, {
+        responseType: 'stream',
+        timeout: 0,
+        maxRedirects: 5,
+        headers: { 'User-Agent': 'SmartHome-Hub/cloudflared-installer' },
       });
-      response.data.on('error', reject);
-      fileStream.on('error', reject);
-      fileStream.on('finish', () => resolve());
-      response.data.pipe(fileStream);
-    });
 
-    // Финальный 100%-tick — без него UI остаётся на 99%.
-    opts.onProgress?.({
-      ratio: 1,
-      bytesDone,
-      bytesTotal: bytesTotal ?? bytesDone,
-      elapsedMs: Date.now() - startedAt,
-    });
+      const total = parseInt(String(response.headers['content-length'] ?? ''), 10);
+      const bytesTotal = Number.isFinite(total) && total > 0 ? total : null;
+      let bytesDone = 0;
+      let lastReport = 0;
 
-    if (asset.endsWith('.tgz')) {
-      // macOS: распаковываем через системный tar — он есть на каждой macOS из
-      // коробки. Внутри архива один файл `cloudflared`.
-      await this.extractTgz(partPath, targetDir);
-      await rm(partPath, { force: true });
-    } else {
-      await rename(partPath, finalPath);
+      await new Promise<void>((resolve, reject) => {
+        const fileStream = createWriteStream(partPath);
+        response.data.on('data', (chunk: Buffer) => {
+          bytesDone += chunk.length;
+          const now = Date.now();
+          if (opts.onProgress && now - lastReport >= 125) {
+            lastReport = now;
+            opts.onProgress({
+              ratio: bytesTotal ? bytesDone / bytesTotal : null,
+              bytesDone,
+              bytesTotal,
+              elapsedMs: now - startedAt,
+            });
+          }
+        });
+        response.data.on('error', reject);
+        fileStream.on('error', reject);
+        fileStream.on('finish', () => resolve());
+        response.data.pipe(fileStream);
+      });
+
+      // Финальный 100%-tick — без него UI остаётся на 99%.
+      opts.onProgress?.({
+        ratio: 1,
+        bytesDone,
+        bytesTotal: bytesTotal ?? bytesDone,
+        elapsedMs: Date.now() - startedAt,
+      });
+
+      if (asset.endsWith('.tgz')) {
+        // macOS: распаковываем через системный tar (есть на каждой macOS).
+        // Внутри архива один файл `cloudflared`.
+        await this.extractTgz(partPath, targetDir);
+        await cleanupPart();
+      } else {
+        await rename(partPath, finalPath);
+      }
+
+      if (process.platform !== 'win32') {
+        // 0o755 — owner: rwx, group/other: r-x. Стандартный mode для /usr/local/bin.
+        await chmod(finalPath, 0o755);
+      }
+
+      log.info(
+        `[cloudflared-installer] installed → ${finalPath} (${bytesDone} bytes in ${Date.now() - startedAt}ms)`,
+      );
+      return finalPath;
+    } catch (err) {
+      // Любая ошибка по пути → чистим .part, чтобы retry начался с нуля и не оставлял мусор.
+      await cleanupPart();
+      throw err;
     }
-
-    if (process.platform !== 'win32') {
-      // 0o755 — owner: rwx, group/other: r-x. Стандартный mode для бинарников в /usr/local/bin.
-      await chmod(finalPath, 0o755);
-    }
-
-    log.info(`[cloudflared-installer] installed → ${finalPath} (${bytesDone} bytes in ${Date.now() - startedAt}ms)`);
-    return finalPath;
   }
 
   private async extractTgz(tgzPath: string, targetDir: string): Promise<void> {
@@ -197,7 +212,17 @@ export class CloudflaredInstaller {
       const child = spawn('tar', ['-xzf', tgzPath, '-C', targetDir], {
         stdio: 'ignore',
       });
-      child.on('error', reject);
+      // ENOENT при отсутствии tar в PATH (теоретический edge на чистой macOS) —
+      // ловим явно с понятной ошибкой, иначе UI покажет «Error: spawn tar ENOENT».
+      child.on('error', (e: NodeJS.ErrnoException) => {
+        if (e.code === 'ENOENT') {
+          reject(
+            new Error(
+              'Системная утилита `tar` не найдена. Установите Xcode CLT: xcode-select --install',
+            ),
+          );
+        } else reject(e);
+      });
       child.on('exit', (code) => {
         if (code === 0) resolve();
         else reject(new Error(`tar exited with code ${code}`));

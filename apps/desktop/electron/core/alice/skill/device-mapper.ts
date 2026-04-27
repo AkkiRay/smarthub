@@ -45,6 +45,8 @@ export interface YandexSmartHomeDevice {
   type: string;
   capabilities: YandexCapability[];
   properties: YandexProperty[];
+  /** REQUIRED Yandex 2026: { reportable: bool } — true если хоть одна cap/prop reportable. */
+  status_info: { reportable: boolean };
   device_info?: {
     manufacturer: string;
     model?: string;
@@ -110,14 +112,18 @@ export function mapDeviceToYandex(
   // partial cache) — отдаём пустые массивы вместо краша всего mapper-pipeline'а.
   const rawCaps = Array.isArray(device.capabilities) ? device.capabilities : [];
   const rawProps = Array.isArray(device.properties) ? device.properties : [];
+  const exposedCaps = rawCaps.filter(isExposableCapability);
+  const reportable =
+    exposedCaps.some((c) => c.reportable === true) || rawProps.some((p) => p.reportable === true);
   return {
     id: device.id,
     name,
     description: device.description?.trim() || undefined,
     room,
     type: device.type,
-    capabilities: rawCaps.filter(isExposableCapability).map(mapCapability),
+    capabilities: exposedCaps.map(mapCapability),
     properties: rawProps.map(mapProperty),
+    status_info: { reportable },
     device_info: {
       manufacturer: manufacturerLabel ?? HUB_MANUFACTURER,
       model:
@@ -167,6 +173,7 @@ export function mapSceneToYandex(
       },
     ],
     properties: [],
+    status_info: { reportable: false },
     device_info: {
       manufacturer: manufacturerLabel ?? HUB_MANUFACTURER,
       model: 'scene',

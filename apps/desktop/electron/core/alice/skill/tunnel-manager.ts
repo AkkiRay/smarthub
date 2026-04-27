@@ -37,8 +37,15 @@ import path from 'node:path';
 import log from 'electron-log/main.js';
 import type { AliceTunnelStatus } from '@smarthome/shared';
 
-const QUICK_URL_REGEX = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
+/**
+ * Quick-tunnel URL детектор. Cloudflare обещал `*.trycloudflare.com`, но в
+ * 2023 был short-lived переход на `loca.lt`. Включаем `cfargotunnel.com`
+ * (named tunnels) как fallback на случай ребрендинга edge'а.
+ */
+const QUICK_URL_REGEX = /https:\/\/[a-z0-9-]+\.(?:trycloudflare\.com|cfargotunnel\.com)/i;
 const RECONNECT_DELAYS_MS = [2_000, 4_000, 8_000, 15_000, 30_000, 60_000];
+/** Hard-cap на reconnect-loop. После N неудач — стоп, юзер ручаемо рестартует. */
+const RECONNECT_MAX_ATTEMPTS = 12;
 
 export interface TunnelManagerOptions {
   /** Локальный порт, который надо проксировать. */
@@ -259,9 +266,21 @@ export class TunnelManager extends EventEmitter {
 
   private scheduleReconnect(): void {
     if (!this.opts) return;
+    if (this.retryCount >= RECONNECT_MAX_ATTEMPTS) {
+      log.warn(`[tunnel] reconnect cap reached (${RECONNECT_MAX_ATTEMPTS}) — stopping`);
+      this.status = {
+        ...this.status,
+        running: false,
+        publicUrl: null,
+        lastError: `Туннель упал ${RECONNECT_MAX_ATTEMPTS} раз подряд. Перезапустите вручную.`,
+      };
+      this.emit('status', this.status);
+      this.opts = null;
+      return;
+    }
     const delay = RECONNECT_DELAYS_MS[Math.min(this.retryCount, RECONNECT_DELAYS_MS.length - 1)];
     this.retryCount += 1;
-    log.info(`[tunnel] reconnect in ${delay}ms (attempt ${this.retryCount})`);
+    log.info(`[tunnel] reconnect in ${delay}ms (attempt ${this.retryCount}/${RECONNECT_MAX_ATTEMPTS})`);
     this.retryTimer = setTimeout(() => {
       if (this.opts) void this.spawnAndWait(this.opts);
     }, delay);

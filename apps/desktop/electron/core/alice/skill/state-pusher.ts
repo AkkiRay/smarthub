@@ -28,10 +28,23 @@ import log from 'electron-log/main.js';
 import type { Capability, Device, DeviceProperty } from '@smarthome/shared';
 
 const DEBOUNCE_MS = 1_000;
-const STATE_URL = (skillId: string): string =>
-  `https://dialogs.yandex.net/api/v1/skills/${skillId}/callback/state`;
-const DISCOVERY_URL = (skillId: string): string =>
-  `https://dialogs.yandex.net/api/v1/skills/${skillId}/callback/discovery`;
+/** UUID v4 (loose). Yandex skill_id ВСЕГДА UUID — defense-in-depth от path-injection. */
+const SKILL_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertValidSkillId(skillId: string): void {
+  if (!SKILL_ID_REGEX.test(skillId)) {
+    throw new Error(`Invalid skillId format`);
+  }
+}
+
+const STATE_URL = (skillId: string): string => {
+  assertValidSkillId(skillId);
+  return `https://dialogs.yandex.net/api/v1/skills/${skillId}/callback/state`;
+};
+const DISCOVERY_URL = (skillId: string): string => {
+  assertValidSkillId(skillId);
+  return `https://dialogs.yandex.net/api/v1/skills/${skillId}/callback/discovery`;
+};
 
 /**
  * Cap на pending-Map. Если flush() висит (cloudflared down, сеть упала), enqueue
@@ -78,13 +91,17 @@ export class StatePusher {
     }
   }
 
-  /** Принудительный flush — например, после явного действия из UI. */
+  /** Принудительный flush — например, после явного действия из UI. Никогда не throws. */
   async flushNow(): Promise<void> {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    return this.flush();
+    try {
+      await this.flush();
+    } catch (e) {
+      log.warn('[state-pusher] flushNow swallowed error', e);
+    }
   }
 
   /**
@@ -147,8 +164,23 @@ export class StatePusher {
     } catch (e) {
       log.warn('[state-pusher] state callback failed', e);
       const err = e as { response?: { status?: number } };
-      if (err.response?.status === 401) this.deps.onUnauthorized?.();
-      // Не ретраим — Алиса всё равно поллит query при следующем взаимодействии.
+      const status = err.response?.status;
+      if (status === 401) {
+        // 401 — токен отозван/не от того аккаунта; ретраить бесполезно, дроп.
+        this.deps.onUnauthorized?.();
+        return;
+      }
+      // Network/timeout/5xx — re-enqueue последний state, чтобы при следующем
+      // events/debounce-tick попытка повторилась. Перезаписываем текущим pending'ом
+      // (новые события приоритет): берём более свежее значение.
+      for (const d of batch) {
+        if (!this.pending.has(d.id)) this.pending.set(d.id, d);
+      }
+      // Sched re-flush через debounce-окно — Алиса всё равно поллит query параллельно,
+      // но отрисованный state в приложении догонит реальный.
+      if (!this.timer && this.pending.size > 0) {
+        this.timer = setTimeout(() => void this.flush(), DEBOUNCE_MS);
+      }
     }
   }
 }

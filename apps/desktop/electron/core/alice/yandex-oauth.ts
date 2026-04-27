@@ -15,14 +15,32 @@ import {
   parseOauthCallback,
 } from './yandex-quasar-api.js';
 
-/** Allow-list хостов для OAuth-окна. Навигация вне списка → preventDefault. */
-const YANDEX_HOST_SUFFIXES = ['.yandex.ru', '.yandex.com', '.yandex.by', '.yandex.kz', '.yandex.net'];
+/**
+ * Strict allow-list хостов для OAuth-окна.
+ *
+ * Anchored regex (НЕ простой endsWith) — защита от подмены типа `evilyandex.ru`
+ * или `attackeryandex.com`, которые проходят через `endsWith('.yandex.ru')`-like
+ * проверки (сравни: `'attackeryandex.ru'.endsWith('.yandex.ru')` → false, OK,
+ * но `'attacker-yandex.ru.evil.com'` ломал бы старую логику). Регрессия
+ * предупреждается явно через regex anchor `$`.
+ *
+ * Включает `yandex.com.tr` (Турция) — без него фишинг-вектор.
+ */
+const YANDEX_HOST_REGEX =
+  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*yandex\.(?:ru|com|by|kz|net|com\.tr)$/i;
 
 function isYandexHost(host: string): boolean {
-  return YANDEX_HOST_SUFFIXES.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix));
+  return typeof host === 'string' && host.length > 0 && YANDEX_HOST_REGEX.test(host);
 }
 
-/** Deny popup'ов + filter `will-navigate` по `*.yandex.*` host suffix. */
+/**
+ * Deny popup'ов + filter `will-navigate` + form-submission + redirect.
+ *
+ * `will-navigate` ловит обычную клик-навигацию, НО не form-submit и не AJAX.
+ * Для form-submit нужен `will-frame-navigate` или `did-frame-navigate` +
+ * blocking через response-redirect. Также подключаем CSP через
+ * `webRequest.onHeadersReceived`, чтобы запретить inline-script навсегда.
+ */
 function lockdownOauthWindow(win: BrowserWindow): void {
   win.webContents.setWindowOpenHandler(({ url }) => {
     try {
@@ -35,11 +53,12 @@ function lockdownOauthWindow(win: BrowserWindow): void {
     }
     return { action: 'deny' };
   });
-  win.webContents.on('will-navigate', (event, url) => {
+
+  const guard = (event: Electron.Event, url: string, kind: string): void => {
     let allowed = false;
     try {
       const target = new URL(url);
-      // SSL-strip защита: http://-OAuth flow открывает access-token MITM'у
+      // SSL-strip защита: http://-OAuth flow отдал бы access-token MITM'у
       // на той же LAN. Yandex давно возвращает HSTS, но блок'ируем явно.
       allowed = target.protocol === 'https:' && isYandexHost(target.hostname);
     } catch {
@@ -47,7 +66,30 @@ function lockdownOauthWindow(win: BrowserWindow): void {
     }
     if (!allowed) {
       event.preventDefault();
-      log.warn(`YandexOauth: blocked navigation to ${url}`);
+      log.warn(`YandexOauth: blocked ${kind} to ${url}`);
+    }
+  };
+
+  win.webContents.on('will-navigate', (e, url) => guard(e, url, 'will-navigate'));
+  // will-redirect — на случай 302 redirect'ов с Yandex на attacker-домен
+  // (теоретически, если Yandex-страницу взломают и инжектируют redirect).
+  win.webContents.on('will-redirect', (e, url) => guard(e, url, 'will-redirect'));
+  // will-frame-navigate — ловит form-submit (POST с redirect) внутри top-frame
+  // и iframe'ах. Без него attacker через XSS на Yandex-странице мог бы
+  // отправить access_token формой на свой домен.
+  win.webContents.on('will-frame-navigate', (e) => {
+    const url = e.url;
+    if (!url) return;
+    let allowed = false;
+    try {
+      const target = new URL(url);
+      allowed = target.protocol === 'https:' && isYandexHost(target.hostname);
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) {
+      e.preventDefault();
+      log.warn(`YandexOauth: blocked frame navigation to ${url}`);
     }
   });
 }

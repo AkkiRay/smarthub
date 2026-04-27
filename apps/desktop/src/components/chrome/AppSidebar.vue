@@ -64,7 +64,15 @@
           aria-hidden="true"
         />
       </button>
-      <span class="text--micro sidebar__version">SmartHome Hub v{{ ui.version || '1.0.0' }}</span>
+      <RouterLink
+        to="/settings#updates"
+        class="sidebar__version text--micro"
+        :class="{ 'sidebar__version--has-update': hasUpdate }"
+        :title="versionTitle"
+      >
+        <span class="sidebar__version-label">SmartHome Hub v{{ ui.version || '1.0.0' }}</span>
+        <span v-if="hasUpdate" class="sidebar__version-pip" aria-hidden="true" />
+      </RouterLink>
     </div>
   </aside>
 </template>
@@ -75,6 +83,7 @@ import { useRoute } from 'vue-router';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useAliceStore } from '@/stores/alice';
 import { useUiStore } from '@/stores/ui';
+import { useUpdaterStore } from '@/stores/updater';
 import { useGsap } from '@/composables/useGsap';
 import { useSpeakerNavigation } from '@/composables/useSpeakerNavigation';
 import { useNavItems } from '@/composables/useNavItems';
@@ -84,7 +93,18 @@ import JarvisOrb from '@/components/visuals/JarvisOrb.vue';
 const station = useYandexStationStore();
 const alice = useAliceStore();
 const ui = useUiStore();
+const updater = useUpdaterStore();
 const speakerNav = useSpeakerNavigation();
+
+const hasUpdate = computed(
+  () => updater.isAvailable || updater.isDownloading || updater.isDownloaded,
+);
+const versionTitle = computed(() => {
+  if (updater.isDownloaded) return `Обновление ${updater.newVersion} готово — нажмите для установки`;
+  if (updater.isDownloading) return `Скачивается ${updater.newVersion ?? 'обновление'}…`;
+  if (updater.isAvailable) return `Доступно обновление ${updater.newVersion}`;
+  return 'Открыть настройки и проверить обновления';
+});
 const root = useTemplateRef<HTMLElement>('root');
 
 /** Hub-card → пульт колонки. Lookup / sync инкапсулирован в useSpeakerNavigation. */
@@ -563,9 +583,55 @@ onBeforeUnmount(() => {
   }
 
   &__version {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     text-align: center;
-    opacity: 0.65;
+    text-decoration: none;
+    color: var(--color-text-muted);
+    opacity: 0.7;
+    padding: 4px 8px;
+    border-radius: 999px;
+    transition:
+      color 200ms var(--ease-out),
+      opacity 200ms var(--ease-out),
+      background-color 200ms var(--ease-out);
+
+    &:hover {
+      opacity: 1;
+      color: var(--color-text-primary);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--color-brand-purple) 70%, transparent);
+      outline-offset: 2px;
+    }
+
+    &--has-update {
+      opacity: 1;
+      color: transparent;
+      background: linear-gradient(90deg, var(--color-brand-purple), var(--color-brand-pink));
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
   }
+
+  &__version-pip {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-brand-pink);
+    box-shadow: 0 0 10px rgba(255, 97, 230, 0.7);
+    animation: sidebar-pip-pulse 1.8s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+}
+
+@keyframes sidebar-pip-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.3); opacity: 1; }
 }
 
 // Tablet 720–1100px: compact-режим (icon-only), иконки по центру column.

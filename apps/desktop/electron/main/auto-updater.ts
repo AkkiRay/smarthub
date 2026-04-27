@@ -126,10 +126,16 @@ export function initAutoUpdater(deps: InitUpdaterDeps): UpdaterController {
   });
 
   autoUpdater.on('download-progress', (p: ProgressInfo) => {
+    const inflightVersion =
+      status.state === 'available' ||
+      status.state === 'downloading' ||
+      status.state === 'downloaded'
+        ? status.version
+        : undefined;
     setStatus({
       state: 'downloading',
       currentVersion: app.getVersion(),
-      version: status.version,
+      ...(inflightVersion !== undefined ? { version: inflightVersion } : {}),
       percent: Math.round(p.percent),
       bytesPerSecond: p.bytesPerSecond,
       transferred: p.transferred,
