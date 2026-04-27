@@ -20,7 +20,7 @@ export const ALICE_TIMEOUT = {
   GLAGOL_PING_INTERVAL_MS: 10_000,
   /** Таймаут ожидания response с `requestId` после `sendCommand`. */
   WS_RESPONSE_MS: 4000,
-  /** Минимум между двумя refresh-ами JWT — защита от refresh-loop при 401-каскаде. */
+  /** Min-delay между двумя refresh JWT (debounce-окно). */
   TOKEN_REFRESH_DEBOUNCE_MS: 5000,
 } as const;
 

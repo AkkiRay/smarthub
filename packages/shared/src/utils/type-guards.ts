@@ -74,10 +74,7 @@ export function asBool(value: unknown, fallback = false): boolean {
   return fallback;
 }
 
-/**
- * Привести unknown к number. Защита от `NaN` / `Infinity`: если результат
- * не finite, возвращает fallback.
- */
+/** Cast unknown → finite number; non-finite (`NaN` / `Infinity`) → fallback. */
 export function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -107,12 +104,10 @@ export function asInt(value: unknown, fallback = 0): number {
 }
 
 /**
- * Integer с clamp'ом в диапазон `[min, max]`. Используется для
- * brightness/volume/temperature commands — защита от драйверов, которые
- * присылают значения вне декларированного range.
+ * Integer c clamp'ом в `[min, max]`. Используется для
+ * brightness / volume / temperature command'ов.
  *
- * @param fallback - Если задан, используется при non-numeric value.
- *                   По умолчанию = `min`.
+ * @param fallback - Используется при non-numeric value. По умолчанию `min`.
  */
 export function asClampedInt(value: unknown, min: number, max: number, fallback = min): number {
   const n = asInt(value, fallback);

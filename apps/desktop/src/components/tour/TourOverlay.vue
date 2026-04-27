@@ -189,10 +189,9 @@ const targetRect = ref<DOMRect | null>(null);
 const vw = ref(typeof window !== 'undefined' ? window.innerWidth : 1280);
 const vh = ref(typeof window !== 'undefined' ? window.innerHeight : 800);
 const tooltipH = ref(260);
-/** True пока syncTarget не завершил измерение нового шага. Тултип в это время
- *  держим opacity:0 — иначе он мигает в center-fallback'е до прихода halo. */
+/** True пока syncTarget не завершил measure нового шага; тултип в это время opacity:0. */
 const isMeasuring = ref(false);
-/** Confirm-pill: защита от случайного exit (overlay-click / Esc / close-кнопка). */
+/** Confirm-pill: подтверждение exit (overlay-click / Esc / close-кнопка). */
 const confirmingSkip = ref(false);
 
 const current = computed(() => tour.current);
@@ -248,8 +247,7 @@ async function waitForTarget(selectors: readonly string[]): Promise<HTMLElement 
   return null;
 }
 
-/** Fixed-элементы (titlebar) — `nearest`, чтобы не скроллить; остальное — `center`,
- *  иначе у placement не остаётся места для side-выбора. */
+/** Detect fixed-элементы (titlebar) — scrollIntoView c `nearest` вместо `center`. */
 function isFixedElement(el: HTMLElement): boolean {
   let node: HTMLElement | null = el;
   while (node && node !== document.body) {

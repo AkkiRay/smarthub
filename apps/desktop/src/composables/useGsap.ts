@@ -97,14 +97,9 @@ export function useGsap(scope?: GsapScope) {
     return undefined;
   };
 
-  // Lazy-init: ctx создаётся при первом tween-вызове, чтобы захватить mounted
-  // scope element. `gsap.context(fn, scope)` сам ставит правильный selector
-  // через `gsap.utils.selector(scope)` — строки → `scope.querySelectorAll`,
-  // Element/NodeList/Array — pass-through. Раньше самописный selector валился
-  // на staggered child-tween'ах: GSAP при создании per-element Tween вызывает
-  // selector(target), наш override не различал тип и слепо звал
-  // `el.querySelectorAll(target)`, который через `Element.toString()` получал
-  // либо `[object HTMLDivElement]`, либо href anchor'а — невалидный CSS.
+  // Lazy-init ctx: создаётся при первом tween-вызове c уже-mounted scope-element'ом.
+  // `gsap.context(fn, scope)` через `gsap.utils.selector(scope)` маршрутизирует
+  // string → `scope.querySelectorAll`, Element/NodeList/Array — pass-through.
   let ctx: gsap.Context | null = null;
   const ensureCtx = (): gsap.Context => {
     if (ctx) return ctx;

@@ -55,7 +55,7 @@ export const useScenesStore = defineStore('scenes', () => {
         error: 'Сценарий не выполнен',
       })
       .catch(() => {
-        /* toaster уже показал error — глотаем, чтобы не падать в unhandledRejection */
+        /* error уже показан в toaster'е через runWithToast */
       });
   }
 

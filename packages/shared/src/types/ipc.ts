@@ -289,8 +289,7 @@ export interface IpcApi {
 
     /**
      * Сверить владельца dialogsOauthToken — дёрнуть login.yandex.ru/info.
-     * Если токен валиден, в AliceStatus.skill.dialogsTokenOwner появится display_name.
-     * Это защита от типичной ошибки «вошёл не тем аккаунтом».
+     * При валидном токене в AliceStatus.skill.dialogsTokenOwner появится display_name.
      */
     verifyDialogsToken: () => Promise<AliceStatus>;
 

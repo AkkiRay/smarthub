@@ -168,8 +168,7 @@ export interface DeviceProperty {
  * - `offline`     — устройство явно ответило что выключено (например cloud
  *                   `online: false`).
  * - `unreachable` — последний `readState()` бросил исключение (network,
- *                   auth, gone-from-cloud). Polling продолжается с 4× reduced
- *                   cadence чтобы не флудить LAN.
+ *                   auth, gone-from-cloud). Polling — 4× reduced cadence.
  * - `pairing`     — сейчас добавляется; ещё не виден в основном UI.
  */
 export type DeviceStatus = 'online' | 'offline' | 'unreachable' | 'pairing';

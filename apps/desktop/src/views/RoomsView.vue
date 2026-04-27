@@ -188,11 +188,10 @@
               :aria-label="`Цвет: ${p.name}`"
               @click="onBulkColor(room.id, p)"
             />
-            <!-- Кастом-пипетка: тот же swatch UI, но с native input type="color".
-                 Browser открывает системный picker, мы дебаунсим input-events
-                 (см. onCustomColorChange) чтобы не спамить execute() пока пипетку
-                 двигают. Конечный цвет идёт через `onBulkCustomColor` → тот же
-                 builder, что и для пресетов. -->
+            <!-- Кастом-пипетка: native input type="color" в swatch UI.
+                 Input-events дебаунсятся через onCustomColorChange;
+                 финальный цвет — через onBulkCustomColor (тот же builder,
+                 что и для пресетов). -->
             <label
               class="room__bulk-swatch room__bulk-swatch--custom"
               :title="'Свой цвет'"
@@ -518,8 +517,6 @@ interface ColorParams {
 
 /** Достаёт типизированные `parameters` color_setting'а — `null` если cap отсутствует. */
 function colorParamsOf(device: Device): ColorParams | null {
-  // device.capabilities ДОЛЖЕН быть массивом (Device-type), но в SQLite могли остаться
-  // legacy-записи без него — defensive guard, чтобы не уронить весь bulk-flow.
   const caps = Array.isArray(device.capabilities) ? device.capabilities : [];
   const cap = caps.find((c) => c.type === 'devices.capabilities.color_setting');
   if (!cap) return null;
@@ -681,10 +678,7 @@ async function onBulkCustomColor(roomId: string, hex: string): Promise<void> {
   });
 }
 
-/**
- * `<input type="color">` стреляет `input`-event'ами на каждом движении пипетки.
- * Дебаунсим 250ms тишины + дедупим one-color-per-room, чтобы не спамить execute().
- */
+/** Дебаунс input-events `<input type="color">` (250ms) + dedupe one-color-per-room. */
 const customColorDebounce = new Map<string, ReturnType<typeof setTimeout>>();
 const lastCustomColor = new Map<string, string>();
 function onCustomColorChange(roomId: string, hex: string): void {

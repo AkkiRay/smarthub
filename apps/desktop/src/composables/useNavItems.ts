@@ -49,7 +49,6 @@ export function useNavItems(): ComputedRef<NavItem[]> {
       label: 'Поиск',
       shortLabel: 'Поиск',
       icon: 'search',
-      // Badge — count `unpairedCandidates`, чтобы не дублировать «Устройства».
       badge: devices.unpairedCandidates.length || undefined,
       tour: 'sidebar-discovery',
     },

@@ -22,9 +22,8 @@
  *     `releaseType: 'release'` — pre-release / draft не подхватываются.
  *
  * Dev-mode:
- *   - `app.isPackaged === false` → `autoUpdater.checkForUpdatesAndNotify()` молча
- *     no-op'ит. Чтобы не сыпать ошибками в DevTools при dev-сессии, мы вообще не
- *     инициализируем feed в dev — экспортируем noop-controller.
+ *   - `app.isPackaged === false` → feed не инициализируется,
+ *     экспортируется noop-controller.
  *
  * @see apps/desktop/electron/main/ipc/handlers.ts — IPC binding.
  * @see packages/shared/src/types/ipc.ts (UpdateStatus / IpcEvents.update:status).
