@@ -21,8 +21,11 @@
         class="sidebar__item"
         active-class="is-active"
         :data-tour="item.tour"
+        :data-icon-anim="item.icon"
       >
-        <BaseIcon :name="item.icon" :size="22" class="sidebar__icon" :aria-hidden="true" />
+        <span class="sidebar__icon-wrap">
+          <BaseIcon :name="item.icon" :size="22" class="sidebar__icon" :aria-hidden="true" />
+        </span>
         <span class="sidebar__label">{{ item.label }}</span>
         <span v-if="item.badge" class="sidebar__badge">{{ item.badge }}</span>
       </RouterLink>
@@ -337,7 +340,21 @@ onBeforeUnmount(() => {
     }
   }
 
-  // Icon slot: clean SVG, transition по color.
+  // Wrapper для icon — даёт ::before/::after слои под ring-pulse / shine
+  // эффекты, не задевая SVG-glyph внутри. Сетка sidebar__item кладёт wrap
+  // в первую 38px-колонку.
+  &__icon-wrap {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    isolation: isolate;
+  }
+
+  // Icon glyph: чистый SVG. Transition по color + transform для micro-interactions.
+  // is-active triggers per-icon one-shot keyframes (см. блок ниже).
   &__icon {
     width: 38px;
     height: 38px;
@@ -348,6 +365,7 @@ onBeforeUnmount(() => {
     background: transparent;
     border: 0;
     transition: color 180ms var(--ease-out);
+    transform-origin: 50% 50%;
 
     :deep(svg) {
       width: 22px;
@@ -507,12 +525,12 @@ onBeforeUnmount(() => {
     border-radius: 50%;
     background: var(--status-color);
     border: 2px solid var(--color-bg, #0d0d12);
-    transition: background-color 200ms var(--ease-out);
+    transition: background-color var(--trans-base);
     // Pip поверх орба без клипа.
     z-index: 2;
 
     .sidebar__hub-card.is-active & {
-      animation: hubPipPulse 2.4s ease-in-out infinite;
+      animation: hubPipPulse calc(2.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
     }
   }
 
@@ -583,8 +601,8 @@ onBeforeUnmount(() => {
     color: var(--color-text-muted);
     flex-shrink: 0;
     transition:
-      color 200ms var(--ease-out),
-      transform 200ms var(--ease-out);
+      color var(--trans-base),
+      transform var(--trans-transform);
   }
 
   &__version {
@@ -599,9 +617,9 @@ onBeforeUnmount(() => {
     padding: 4px 8px;
     border-radius: 999px;
     transition:
-      color 200ms var(--ease-out),
-      opacity 200ms var(--ease-out),
-      background-color 200ms var(--ease-out);
+      color var(--trans-base),
+      opacity var(--trans-base),
+      background-color var(--trans-base);
 
     &:hover {
       opacity: 1;
@@ -629,19 +647,208 @@ onBeforeUnmount(() => {
     border-radius: 50%;
     background: var(--color-brand-pink);
     box-shadow: 0 0 10px rgba(255, 97, 230, 0.7);
-    animation: sidebar-pip-pulse 1.8s ease-in-out infinite;
+    animation: sidebar-pip-pulse calc(1.8s / max(var(--motion-scale, 1), 0.001)) ease-in-out
+      infinite;
     flex-shrink: 0;
   }
+}
+
+// Scale calibrated 2026-04-27: 1.3→1.18 + opacity 0.85→1 → 0.92→1 — пульс
+// мягче в peripheral vision sidebar'а.
+// =============================================================================
+// Per-item one-shot icon animations: запускаются при добавлении `.is-active`.
+// 7 уникальных keyframes — каждый icon живёт по-своему когда становится
+// активным. Все ≤ 700ms, motion-scale-aware, single iteration.
+// =============================================================================
+
+// home: тёплый pop с yellow-glow — «дом просыпается».
+.sidebar__item[data-icon-anim='home'].is-active .sidebar__icon {
+  animation: sidebar-icon-home calc(620ms / max(var(--motion-scale, 1), 0.001))
+    var(--ease-spring) 1;
+}
+@keyframes sidebar-icon-home {
+  0% {
+    transform: scale(0.78);
+    filter: brightness(0.7);
+  }
+  45% {
+    transform: scale(1.16);
+    filter: brightness(1.5)
+      drop-shadow(0 0 10px rgba(var(--color-brand-yellow-rgb, 255, 204, 0), 0.85));
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+// devices: сигнал-pulse (ring-rings из ::before/::after wrap'а).
+.sidebar__item[data-icon-anim='devices'].is-active .sidebar__icon-wrap::before,
+.sidebar__item[data-icon-anim='devices'].is-active .sidebar__icon-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(var(--color-brand-violet-rgb), 0.5);
+  pointer-events: none;
+}
+.sidebar__item[data-icon-anim='devices'].is-active .sidebar__icon-wrap::before {
+  animation: sidebar-icon-devices-ring calc(900ms / max(var(--motion-scale, 1), 0.001)) ease-out 1
+    forwards;
+}
+.sidebar__item[data-icon-anim='devices'].is-active .sidebar__icon-wrap::after {
+  animation: sidebar-icon-devices-ring calc(900ms / max(var(--motion-scale, 1), 0.001)) ease-out
+    180ms 1 forwards;
+}
+.sidebar__item[data-icon-anim='devices'].is-active .sidebar__icon {
+  animation: sidebar-icon-devices-pop calc(380ms / max(var(--motion-scale, 1), 0.001))
+    var(--ease-spring) 1;
+}
+@keyframes sidebar-icon-devices-ring {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+@keyframes sidebar-icon-devices-pop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+// rooms: door-open (skewY + scale) — «дверь приоткрывается».
+.sidebar__item[data-icon-anim='rooms'].is-active .sidebar__icon {
+  animation: sidebar-icon-rooms calc(540ms / max(var(--motion-scale, 1), 0.001))
+    var(--ease-spring) 1;
+  transform-origin: 30% 100%;
+}
+@keyframes sidebar-icon-rooms {
+  0% {
+    transform: scale(0.9) skewY(-10deg) rotate(-3deg);
+  }
+  55% {
+    transform: scale(1.08) skewY(4deg) rotate(2deg);
+  }
+  100% {
+    transform: scale(1) skewY(0) rotate(0);
+  }
+}
+
+// scenes: spotlight reveal — clip-path circle расширяется + scale-pop.
+.sidebar__item[data-icon-anim='scenes'].is-active .sidebar__icon {
+  animation: sidebar-icon-scenes calc(620ms / max(var(--motion-scale, 1), 0.001))
+    var(--ease-out) 1;
+}
+@keyframes sidebar-icon-scenes {
+  0% {
+    clip-path: circle(0% at 50% 50%);
+    transform: scale(0.85);
+    filter: brightness(2);
+  }
+  60% {
+    clip-path: circle(120% at 50% 50%);
+    transform: scale(1.1);
+    filter: brightness(1.4);
+  }
+  100% {
+    clip-path: circle(120% at 50% 50%);
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+// search (discovery): radar-spin 360° + scale settle.
+.sidebar__item[data-icon-anim='search'].is-active .sidebar__icon {
+  animation: sidebar-icon-search calc(700ms / max(var(--motion-scale, 1), 0.001))
+    cubic-bezier(0.45, 0, 0.55, 1) 1;
+}
+@keyframes sidebar-icon-search {
+  0% {
+    transform: rotate(0) scale(0.85);
+  }
+  60% {
+    transform: rotate(360deg) scale(1.15);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+// alice: voice-wave (multi-step elastic scale) с yellow-glow на пике.
+.sidebar__item[data-icon-anim='alice'].is-active .sidebar__icon {
+  animation: sidebar-icon-alice calc(760ms / max(var(--motion-scale, 1), 0.001))
+    cubic-bezier(0.34, 1.56, 0.64, 1) 1;
+}
+@keyframes sidebar-icon-alice {
+  0% {
+    transform: scale(0.9);
+    filter: brightness(1);
+  }
+  20% {
+    transform: scale(1.22);
+    filter: brightness(1.5)
+      drop-shadow(0 0 12px rgba(var(--color-brand-yellow-rgb, 255, 204, 0), 0.9));
+  }
+  40% {
+    transform: scale(0.94);
+  }
+  60% {
+    transform: scale(1.12);
+    filter: brightness(1.3)
+      drop-shadow(0 0 8px rgba(var(--color-brand-yellow-rgb, 255, 204, 0), 0.6));
+  }
+  80% {
+    transform: scale(0.98);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+// settings: cog-rotation полу-оборот + slight scale.
+.sidebar__item[data-icon-anim='settings'].is-active .sidebar__icon {
+  animation: sidebar-icon-settings calc(680ms / max(var(--motion-scale, 1), 0.001))
+    var(--ease-out) 1;
+}
+@keyframes sidebar-icon-settings {
+  0% {
+    transform: rotate(-45deg) scale(0.85);
+  }
+  60% {
+    transform: rotate(140deg) scale(1.12);
+  }
+  100% {
+    transform: rotate(180deg) scale(1);
+  }
+}
+
+// Reduced/off motion: все иконные анимации отключены.
+[data-motion='off'] .sidebar__item .sidebar__icon,
+[data-motion='off'] .sidebar__item .sidebar__icon-wrap::before,
+[data-motion='off'] .sidebar__item .sidebar__icon-wrap::after,
+[data-motion='reduced'] .sidebar__item .sidebar__icon,
+[data-motion='reduced'] .sidebar__item .sidebar__icon-wrap::before,
+[data-motion='reduced'] .sidebar__item .sidebar__icon-wrap::after {
+  animation: none !important;
 }
 
 @keyframes sidebar-pip-pulse {
   0%,
   100% {
     transform: scale(1);
-    opacity: 0.85;
+    opacity: 0.92;
   }
   50% {
-    transform: scale(1.3);
+    transform: scale(1.18);
     opacity: 1;
   }
 }

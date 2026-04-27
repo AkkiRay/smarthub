@@ -265,21 +265,13 @@
 </template>
 
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  useTemplateRef,
-  watch,
-  watchEffect,
-} from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { useDevicesStore } from '@/stores/devices';
 import { useScenesStore } from '@/stores/scenes';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useToasterStore } from '@/stores/toaster';
 import { useGsap } from '@/composables/useGsap';
+import { useBootstrapGate } from '@/composables/useBootstrapGate';
 import { useRouter } from 'vue-router';
 import DeviceCard from '@/components/devices/DeviceCard.vue';
 import AmbientMesh from '@/components/visuals/AmbientMesh.vue';
@@ -295,14 +287,48 @@ const router = useRouter();
 const root = useTemplateRef<HTMLElement>('root');
 
 /**
- * Bootstrap-gate: остаётся `false` пока async-stores (devices/scenes/yandex/
- * drivers) не закончат первичную гидрацию. До этого момента рендерится
- * `HomeSkeleton` — статичный shimmer-аналог, layout-размеры совпадают, поэтому
- * crossfade на real-content не вызывает прыжков. Решает прежний баг: секции
- * `home__rooms` / `home__alice` появлялись по отдельности по мере прихода данных,
- * сдвигая блоки выше/ниже на 100-200px.
+ * Bootstrap-gate: остаётся `false` пока не закончится bootstrap-волна.
+ * Min-duration 700ms гарантирует что shimmer-skeleton точно успеет показаться,
+ * даже если все store-источники резолвятся за 50-100ms (App.vue уже
+ * bootstrap'нул devices/yandex/alice). Без min-duration shimmer мелькал на
+ * 1-2 кадра и казался отсутствующим.
  */
-const bootstrapped = ref(false);
+// Lazy-thunk tasks: фактический вызов async-функций отложен до onMounted внутри
+// composable'а, чтобы хук не требовал hoist'а локальных ref'ов и функций.
+const gate = useBootstrapGate({
+  minDuration: 700,
+  tasks: [
+    () => (scenes.scenes.length ? Promise.resolve() : scenes.bootstrap()),
+    () => waitDevicesReady(),
+    () => loadDriversList(),
+  ],
+});
+const bootstrapped = gate.ready;
+
+function waitDevicesReady(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (!devices.isLoading) return resolve();
+    const stop = watch(
+      () => devices.isLoading,
+      (loading) => {
+        if (loading) return;
+        stop();
+        resolve();
+      },
+    );
+  });
+}
+
+async function loadDriversList(): Promise<void> {
+  try {
+    const drivers = await window.smarthome.drivers.list();
+    hasAnyIntegration.value = drivers.some(
+      (d) => d.active && d.id !== 'mock' && d.id !== 'yandex-station',
+    );
+  } catch {
+    /* idle */
+  }
+}
 
 // Reactive hour: пересчитывается при ре-маунте + раз в минуту,
 // чтобы greeting обновился после midnight без перезахода в view.
@@ -490,54 +516,8 @@ function runEntryAnimation(): void {
     );
 }
 
-onMounted(async () => {
-  // Параллельно стартуем все async-источники (scenes, drivers list).
-  // devices/yandex/alice уже бутстрапятся в App.vue — их прогресс читаем
-  // через store-флаги.
-  const tasks: Array<Promise<unknown>> = [];
-
-  if (!scenes.scenes.length) tasks.push(scenes.bootstrap().catch(() => undefined));
-
-  tasks.push(
-    (async () => {
-      try {
-        const drivers = await window.smarthome.drivers.list();
-        hasAnyIntegration.value = drivers.some(
-          (d) => d.active && d.id !== 'mock' && d.id !== 'yandex-station',
-        );
-      } catch {
-        /* idle */
-      }
-    })(),
-  );
-
-  // Devices store: ждём пока isLoading станет false. Если он уже false —
-  // resolve мгновенно. timeout 1500ms — safety net если IPC завис.
-  tasks.push(
-    new Promise<void>((resolve) => {
-      if (!devices.isLoading) return resolve();
-      const stop = watch(
-        () => devices.isLoading,
-        (loading) => {
-          if (loading) return;
-          stop();
-          resolve();
-        },
-      );
-    }),
-  );
-
-  // Cap общего ожидания: 1500ms. Если что-то висит — flip всё равно,
-  // skeleton не должен залипать.
-  await Promise.race([
-    Promise.all(tasks),
-    new Promise((r) => setTimeout(r, 1500)),
-  ]);
-
-  bootstrapped.value = true;
-  await nextTick();
-  runEntryAnimation();
-});
+// Запуск entry-animation после flip'а bootstrapped → real-content смонтирован.
+gate.whenReady().then(runEntryAnimation);
 </script>
 
 <style scoped lang="scss">

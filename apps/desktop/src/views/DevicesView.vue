@@ -63,49 +63,61 @@
       data-anim="block"
     />
 
-    <BaseEmpty
-      v-if="!filtered.length"
-      data-anim="block"
-      :title="devices.devices.length === 0 ? 'Устройств пока нет' : 'Нет устройств в выборке'"
-      :text="
-        devices.devices.length === 0
-          ? 'Импортируйте всё из «Дома с Алисой» одним нажатием — или найдите локально через сканер.'
-          : 'Попробуйте изменить фильтр или запустите поиск.'
-      "
-    >
-      <template #glyph>
-        <BaseIcon name="devices" :size="64" />
-      </template>
-      <template #actions>
-        <BaseButton
-          v-if="yandexAuthorized && devices.devices.length === 0"
-          variant="primary"
-          icon-left="refresh"
-          :loading="syncing"
-          @click="onSyncYandex"
-        >
-          Импорт из Яндекса
-        </BaseButton>
-        <BaseButton
-          v-else-if="!yandexAuthorized && devices.devices.length === 0"
-          variant="primary"
-          icon-right="arrow-right"
-          @click="$router.push('/alice')"
-        >
-          Войти через Яндекс
-        </BaseButton>
-        <BaseButton variant="ghost" icon-left="search" @click="onAdd"> Поиск в LAN </BaseButton>
-      </template>
-    </BaseEmpty>
-
-    <div v-else class="devices__grid bento-grid">
-      <DeviceCard
-        v-for="d in filtered"
-        :key="d.id"
-        :device="d"
-        @click="$router.push(`/devices/${d.id}`)"
+    <Transition name="list-fade" mode="out-in">
+      <SkeletonGrid
+        v-if="showSkeleton"
+        key="skeleton"
+        :count="6"
+        cell-min="220px"
+        cell-height="140px"
+        class="devices__grid"
       />
-    </div>
+
+      <BaseEmpty
+        v-else-if="!filtered.length"
+        key="empty"
+        data-anim="block"
+        :title="devices.devices.length === 0 ? 'Устройств пока нет' : 'Нет устройств в выборке'"
+        :text="
+          devices.devices.length === 0
+            ? 'Импортируйте всё из «Дома с Алисой» одним нажатием — или найдите локально через сканер.'
+            : 'Попробуйте изменить фильтр или запустите поиск.'
+        "
+      >
+        <template #glyph>
+          <BaseIcon name="devices" :size="64" />
+        </template>
+        <template #actions>
+          <BaseButton
+            v-if="yandexAuthorized && devices.devices.length === 0"
+            variant="primary"
+            icon-left="refresh"
+            :loading="syncing"
+            @click="onSyncYandex"
+          >
+            Импорт из Яндекса
+          </BaseButton>
+          <BaseButton
+            v-else-if="!yandexAuthorized && devices.devices.length === 0"
+            variant="primary"
+            icon-right="arrow-right"
+            @click="$router.push('/alice')"
+          >
+            Войти через Яндекс
+          </BaseButton>
+          <BaseButton variant="ghost" icon-left="search" @click="onAdd"> Поиск в LAN </BaseButton>
+        </template>
+      </BaseEmpty>
+
+      <div v-else key="grid" class="devices__grid bento-grid">
+        <DeviceCard
+          v-for="d in filtered"
+          :key="d.id"
+          :device="d"
+          @click="$router.push(`/devices/${d.id}`)"
+        />
+      </div>
+    </Transition>
   </section>
 </template>
 
@@ -116,6 +128,7 @@ import type { Device } from '@smarthome/shared';
 import { useDevicesStore } from '@/stores/devices';
 import { useRoomsStore } from '@/stores/rooms';
 import { useViewMount } from '@/composables/useViewMount';
+import { useBootstrapGate } from '@/composables/useBootstrapGate';
 import DeviceCard from '@/components/devices/DeviceCard.vue';
 import {
   BaseButton,
@@ -123,6 +136,7 @@ import {
   BaseIcon,
   BaseSegmented,
   BaseEmpty,
+  SkeletonGrid,
   type SegmentedOption,
 } from '@/components/base';
 
@@ -151,18 +165,22 @@ const roomFilter = ref<RoomFilterId>('__all');
 const yandexAuthorized = ref(false);
 const syncing = ref(false);
 
+// Bootstrap-gate с min-duration 500ms: гарантирует видимый shimmer даже когда
+// devices/rooms резолвятся за 50-100ms (App.vue их уже bootstrap'нул).
+const gate = useBootstrapGate({
+  minDuration: 500,
+  tasks: [() => (rooms.rooms.length ? Promise.resolve() : rooms.bootstrap())],
+});
+
+/** Skeleton-grid: пока gate не открыт ИЛИ store-loading + empty list. */
+const showSkeleton = computed(
+  () => !gate.ready.value || (devices.isLoading && devices.devices.length === 0),
+);
+
 // Backfill yandex-rooms — once per session.
 let backfillTried = false;
 
 onMounted(async () => {
-  // Rooms-store: для DeviceCard (room.id → name) и room-filter'а. Bootstrap идемпотентен.
-  if (rooms.rooms.length === 0) {
-    try {
-      await rooms.bootstrap();
-    } catch {
-      /* offline → fallback на roomName из meta */
-    }
-  }
   try {
     const auth = await window.smarthome.yandexStation.getAuthStatus();
     yandexAuthorized.value = auth.authorized;
@@ -286,6 +304,17 @@ useViewMount({
 
 <style scoped lang="scss">
 @use '@/styles/abstracts/mixins' as *;
+
+// Skeleton ↔ empty ↔ grid: opacity-only crossfade. Без translate/scale —
+// иначе grid скачет при switch'е states.
+.list-fade-enter-active,
+.list-fade-leave-active {
+  transition: opacity 220ms var(--ease-out);
+}
+.list-fade-enter-from,
+.list-fade-leave-to {
+  opacity: 0;
+}
 
 .devices {
   display: flex;
