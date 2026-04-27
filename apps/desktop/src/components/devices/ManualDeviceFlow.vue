@@ -388,10 +388,10 @@ function cryptoRandomId(): string {
       inset: 0;
       border-radius: 50%;
       border: 1.5px solid var(--color-brand-purple);
-      animation: mfPulse 2s ease-out infinite;
+      animation: mfPulse calc(2s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
 
       &--late {
-        animation-delay: 1s;
+        animation-delay: calc(1s * var(--motion-scale, 1));
       }
     }
 

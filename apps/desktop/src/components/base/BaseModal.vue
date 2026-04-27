@@ -245,9 +245,9 @@ onBeforeUnmount(() => {
     place-items: center;
     cursor: pointer;
     transition:
-      background 200ms var(--ease-out),
-      color 200ms var(--ease-out),
-      transform 200ms var(--ease-spring);
+      background var(--trans-base),
+      color var(--trans-base),
+      transform var(--trans-transform);
 
     svg {
       width: 14px;
@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
     &:hover {
       background: rgba(255, 255, 255, 0.12);
       color: var(--color-text-primary);
-      transform: scale(1.05);
+      transform: scale(1.04);
     }
     &:focus-visible {
       outline: 2px solid var(--color-brand-purple);
@@ -283,14 +283,16 @@ onBeforeUnmount(() => {
 }
 
 // ---- Transitions ---------------------------------------------------------
+// Durations через --motion-scale → off motion-level моментально гасит модалку
+// без задержки. Panel-shift уменьшен (16px→10px, scale 0.96→0.985) — мягче.
 .modal-enter-active,
 .modal-leave-active {
-  transition: opacity 240ms var(--ease-out);
+  transition: opacity calc(220ms * var(--motion-scale, 1)) var(--ease-out);
 
   .modal__panel {
     transition:
-      transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
-      opacity 240ms var(--ease-out);
+      transform calc(280ms * var(--motion-scale, 1)) var(--ease-soft),
+      opacity calc(220ms * var(--motion-scale, 1)) var(--ease-out);
   }
 }
 
@@ -298,7 +300,7 @@ onBeforeUnmount(() => {
 .modal-leave-to {
   opacity: 0;
   .modal__panel {
-    transform: translateY(16px) scale(0.96);
+    transform: translateY(10px) scale(0.985);
     opacity: 0;
   }
 }

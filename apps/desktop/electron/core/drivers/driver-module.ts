@@ -17,16 +17,25 @@
  *   - Возвращает {@link DeviceDriver} instance, который registry зарегистрирует.
  */
 
-import type { DeviceDriver, DriverDescriptor } from '@smarthome/shared';
+import type { DeviceDriver, DriverDescriptor, DriverProbeResult } from '@smarthome/shared';
 import type { SettingsStore } from '../storage/settings-store.js';
 
 export interface DriverModuleDeps {
   settings: SettingsStore;
 }
 
+export type { DriverProbeResult };
+
 export interface DriverModule {
   /** Метаданные для UI; видны даже если драйвер ещё не активирован. */
   descriptor: Omit<DriverDescriptor, 'active'>;
   /** Возвращает null, если creds не введены — тогда UI показывает «нужны учётные данные». */
   create(deps: DriverModuleDeps): Promise<DeviceDriver | null>;
+  /**
+   * Опциональный light-probe для кнопки «Проверить подключение» в UI.
+   * Не должен инициализировать polling / WS-streams / persistent state — только
+   * один HTTP-запрос на endpoint провайдера для валидации creds. Timeout
+   * рекомендуется 6–10s. На fail возвращает `{ ok: false, message }` (не throw).
+   */
+  probe?(values: Record<string, string>, deps: DriverModuleDeps): Promise<DriverProbeResult>;
 }

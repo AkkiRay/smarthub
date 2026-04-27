@@ -655,6 +655,9 @@ function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
   background: rgba(var(--glass-tint), var(--glass-alpha-soft));
   border: 1px solid var(--glass-edge);
   min-width: 0;
+  // Reserved height: panel не схлопывается при readState mid-flight (capability
+  // на момент re-render может temporary lose `state` — вернётся через ms).
+  min-height: 88px;
   transition: opacity 200ms var(--ease-out);
 
   &--busy {

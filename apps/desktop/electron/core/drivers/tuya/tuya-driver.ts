@@ -7,17 +7,16 @@
 
 import axios, { type AxiosInstance } from 'axios';
 import { createHash, createHmac } from 'node:crypto';
-import log from 'electron-log/main.js';
 import type {
   Capability,
   Device,
   DeviceCommand,
   DeviceCommandResult,
-  DeviceDriver,
   DeviceProperty,
   DeviceType,
   DiscoveredDevice,
 } from '@smarthome/shared';
+import { BaseDriver } from '../_shared/base-driver.js';
 
 interface TuyaCreds {
   apiKey: string;
@@ -38,7 +37,7 @@ interface TuyaStatusItem {
   value: unknown;
 }
 
-export class TuyaDriver implements DeviceDriver {
+export class TuyaDriver extends BaseDriver {
   readonly id = 'tuya' as const;
   readonly displayName = 'Tuya / Smart Life';
 
@@ -46,6 +45,7 @@ export class TuyaDriver implements DeviceDriver {
   private token: TuyaToken | null = null;
 
   constructor(private creds: TuyaCreds) {
+    super();
     const region = creds.region ?? 'eu';
     this.http = axios.create({
       baseURL: `https://openapi.tuya${region}.com`,
@@ -81,7 +81,7 @@ export class TuyaDriver implements DeviceDriver {
         },
       }));
     } catch (e) {
-      log.warn(`Tuya discovery failed: ${(e as Error).message}`);
+      this.logWarn('discovery failed', e);
       return [];
     }
   }
@@ -135,34 +135,20 @@ export class TuyaDriver implements DeviceDriver {
   }
 
   async execute(device: Device, command: DeviceCommand): Promise<DeviceCommandResult> {
-    const errOf = (code: string, message?: string): DeviceCommandResult => ({
-      deviceId: device.id,
-      capability: command.capability,
-      instance: command.instance,
-      status: 'ERROR',
-      errorCode: code,
-      errorMessage: message,
-    });
-
     const tuyaCmd = canonicalToTuya(device, command);
-    if (!tuyaCmd) return errOf('UNSUPPORTED_CAPABILITY');
+    if (!tuyaCmd) return this.err(device, command, 'UNSUPPORTED_CAPABILITY');
 
     try {
       await this.signedRequest('POST', `/v1.0/devices/${device.externalId}/commands`, {
         commands: [tuyaCmd],
       });
-      return {
-        deviceId: device.id,
-        capability: command.capability,
-        instance: command.instance,
-        status: 'DONE',
-      };
+      return this.ok(device, command.capability, command.instance);
     } catch (e) {
-      return errOf('DEVICE_UNREACHABLE', (e as Error).message);
+      return this.err(device, command, 'DEVICE_UNREACHABLE', e);
     }
   }
 
-  async shutdown() {
+  override async shutdown(): Promise<void> {
     this.token = null;
   }
 

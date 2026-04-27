@@ -79,15 +79,19 @@ export const useYandexStationStore = defineStore('yandexStation', () => {
    * `idle | listening | speaking | busy`. Glagol-states `SHAZAM` и прочие → `busy`.
    *
    * При `connection !== 'connected'` всегда `idle`.
+   *
+   * Glagol-quirk: явный `aliceState='SPEAKING'` часто пропускается, во время
+   * TTS приходит `BUSY` либо `THINKING` + `vinsResponse.cards[].text` в одном
+   * event'е. Поэтому источник истины SPEAKING — `aliceText`, появившийся
+   * ПОСЛЕ последнего `aliceState='IDLE'` (включая same-event со state'ом).
    */
   const voiceState = computed<'idle' | 'listening' | 'speaking' | 'busy'>(() => {
     if (status.value?.connection !== 'connected') return 'idle';
 
-    // Glagol-resolver: `aliceState` может пропустить SPEAKING (BUSY → response →
-    // IDLE). `aliceText` свежее `aliceState` → активный TTS-ответ, отдаём speaking.
     let latestStateIdx = -1;
     let latestState: string | undefined;
-    let latestSpeakingSignalIdx = -1;
+    let latestAliceTextIdx = -1;
+    let latestIdleIdx = -1;
     for (let i = events.value.length - 1; i >= 0; i--) {
       const e = events.value[i];
       if (!e) continue;
@@ -95,13 +99,19 @@ export const useYandexStationStore = defineStore('yandexStation', () => {
         latestStateIdx = i;
         latestState = e.aliceState;
       }
-      if (latestSpeakingSignalIdx === -1 && e.aliceText) {
-        latestSpeakingSignalIdx = i;
+      if (latestAliceTextIdx === -1 && e.aliceText) {
+        latestAliceTextIdx = i;
       }
-      if (latestStateIdx !== -1 && latestSpeakingSignalIdx !== -1) break;
+      if (latestIdleIdx === -1 && e.aliceState === 'IDLE') {
+        latestIdleIdx = i;
+      }
+      if (latestStateIdx !== -1 && latestAliceTextIdx !== -1 && latestIdleIdx !== -1) break;
     }
 
-    if (latestSpeakingSignalIdx > latestStateIdx) return 'speaking';
+    // aliceText появился после последнего IDLE — Алиса сейчас озвучивает ответ.
+    // Покрывает: BUSY+aliceText same-event, THINKING+aliceText same-event,
+    // и любые будущие state-метки glagol'а во время TTS.
+    if (latestAliceTextIdx !== -1 && latestAliceTextIdx > latestIdleIdx) return 'speaking';
 
     if (latestState === 'LISTENING') return 'listening';
     if (latestState === 'SPEAKING') return 'speaking';

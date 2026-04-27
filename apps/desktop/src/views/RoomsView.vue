@@ -19,206 +19,208 @@
 
       <div v-if="rooms.rooms.length" class="rooms__grid bento-grid">
         <article
-        v-for="room in roomsWithStats"
-        :key="room.id"
-        class="room"
-        data-anim="item"
-        :class="{
-          'room--yandex': room.origin === 'yandex',
-          'room--active': room.activeCount > 0,
-          'room--empty': room.deviceCount === 0,
-        }"
-      >
-        <!-- ============== Hero: icon + name + meta ============== -->
-        <header class="room__hero">
-          <span class="room__icon" v-safe-html="room.icon" />
-          <div class="room__hero-copy">
-            <h3 class="room__name">{{ room.name }}</h3>
-            <p class="room__meta">
-              <span v-if="room.deviceCount > 0">
-                {{ room.deviceCount }} {{ pluralizeDevice(room.deviceCount) }}
-              </span>
-              <span v-else class="room__meta--muted">Пусто</span>
-              <span
-                v-if="room.onlineCount < room.deviceCount && room.deviceCount > 0"
-                class="room__meta--warn"
-              >
-                · {{ room.deviceCount - room.onlineCount }} офлайн
-              </span>
-            </p>
-          </div>
-
-          <!-- Top-right action chips — компактные icon-кнопки. -->
-          <div class="room__hero-actions">
-            <span
-              v-if="room.origin === 'yandex'"
-              class="room__yandex-badge"
-              title="Импортировано из «Дома с Алисой»"
-            >
-              <BaseIcon name="alice" :size="12" />
-            </span>
-            <button
-              v-else
-              type="button"
-              class="room__icon-btn"
-              aria-label="Редактировать"
-              title="Редактировать"
-              @click.stop="onEdit(room)"
-            >
-              <BaseIcon name="edit" :size="14" />
-            </button>
-            <button
-              v-if="room.origin !== 'yandex'"
-              type="button"
-              class="room__icon-btn room__icon-btn--danger"
-              aria-label="Удалить"
-              title="Удалить"
-              @click.stop="onRemove(room.id, room.name)"
-            >
-              <BaseIcon name="trash" :size="14" />
-            </button>
-          </div>
-        </header>
-
-        <!-- ====== Smart toggle: счётчик-кнопка. Клик — на/выкл всех вместе ====== -->
-        <button
-          v-if="room.toggleableCount > 0"
-          type="button"
-          class="room__toggle"
+          v-for="room in roomsWithStats"
+          :key="room.id"
+          class="room"
+          data-anim="item"
           :class="{
-            'is-all-on': room.activeCount === room.toggleableCount,
-            'is-partial': room.activeCount > 0 && room.activeCount < room.toggleableCount,
-            'is-all-off': room.activeCount === 0,
+            'room--yandex': room.origin === 'yandex',
+            'room--active': room.activeCount > 0,
+            'room--empty': room.deviceCount === 0,
           }"
-          :disabled="!!bulkBusy[room.id]"
-          :data-loading="!!bulkBusy[room.id]"
-          :title="room.activeCount === room.toggleableCount ? 'Выключить всё' : 'Включить всё'"
-          :aria-label="room.activeCount === room.toggleableCount ? 'Выключить всё' : 'Включить всё'"
-          @click.stop="onBulkToggle(room.id, room.activeCount !== room.toggleableCount)"
         >
-          <span class="room__toggle-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <!-- Лампочка с лучами в ON-state. -->
-              <path
-                v-if="room.activeCount > 0"
-                d="M12 3a6 6 0 0 1 6 6c0 2.4-1.4 4.4-3 5.4V17H9v-2.6C7.4 13.4 6 11.4 6 9a6 6 0 0 1 6-6zM9 18h6M10 21h4"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linejoin="round"
-                stroke-linecap="round"
-              />
-              <!-- Power-icon в OFF-state. -->
-              <path
+          <!-- ============== Hero: icon + name + meta ============== -->
+          <header class="room__hero">
+            <span class="room__icon" v-safe-html="room.icon" />
+            <div class="room__hero-copy">
+              <h3 class="room__name">{{ room.name }}</h3>
+              <p class="room__meta">
+                <span v-if="room.deviceCount > 0">
+                  {{ room.deviceCount }} {{ pluralizeDevice(room.deviceCount) }}
+                </span>
+                <span v-else class="room__meta--muted">Пусто</span>
+                <span
+                  v-if="room.onlineCount < room.deviceCount && room.deviceCount > 0"
+                  class="room__meta--warn"
+                >
+                  · {{ room.deviceCount - room.onlineCount }} офлайн
+                </span>
+              </p>
+            </div>
+
+            <!-- Top-right action chips — компактные icon-кнопки. -->
+            <div class="room__hero-actions">
+              <span
+                v-if="room.origin === 'yandex'"
+                class="room__yandex-badge"
+                title="Импортировано из «Дома с Алисой»"
+              >
+                <BaseIcon name="alice" :size="12" />
+              </span>
+              <button
                 v-else
-                d="M12 3v9M5.6 7.4a8 8 0 1 0 12.8 0"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-              />
-            </svg>
-          </span>
-          <span class="room__toggle-meta">
-            <strong class="room__toggle-num">
-              {{ room.activeCount }}<span class="room__toggle-sep">/</span
-              >{{ room.toggleableCount }}
-            </strong>
-            <span class="room__toggle-caption">
-              {{
-                room.activeCount === room.toggleableCount
-                  ? 'всё включено'
-                  : room.activeCount === 0
-                    ? 'всё выключено'
-                    : pluralizeWith(room.activeCount, ['включена', 'включены', 'включено'])
-              }}
-            </span>
-          </span>
-          <span class="room__toggle-hint" aria-hidden="true">
-            <BaseIcon
-              :name="room.activeCount === room.toggleableCount ? 'close' : 'check'"
-              :size="12"
-            />
-          </span>
-        </button>
+                type="button"
+                class="room__icon-btn"
+                aria-label="Редактировать"
+                title="Редактировать"
+                @click.stop="onEdit(room)"
+              >
+                <BaseIcon name="edit" :size="14" />
+              </button>
+              <button
+                v-if="room.origin !== 'yandex'"
+                type="button"
+                class="room__icon-btn room__icon-btn--danger"
+                aria-label="Удалить"
+                title="Удалить"
+                @click.stop="onRemove(room.id, room.name)"
+              >
+                <BaseIcon name="trash" :size="14" />
+              </button>
+            </div>
+          </header>
 
-        <!-- ============== Preview-чипы устройств ============== -->
-        <div v-if="room.previewDevices.length" class="room__chips">
-          <RouterLink
-            v-for="d in room.previewDevices"
-            :key="d.id"
-            :to="`/devices/${d.id}`"
-            class="room__chip"
-            :class="{ 'is-on': isDeviceOn(d) }"
-            @click.stop
-          >
-            {{ d.name }}
-          </RouterLink>
-          <span v-if="room.deviceCount > room.previewDevices.length" class="room__chip-more">
-            +{{ room.deviceCount - room.previewDevices.length }}
-          </span>
-        </div>
-
-        <!-- ============== Inline brightness slider ============== -->
-        <label v-if="room.dimmableCount > 0" class="room__bulk-bright" @click.stop>
-          <span class="room__bulk-label">
-            <BaseIcon name="light" :size="11" />
-            Яркость · {{ room.dimmableCount }} {{ pluralizeLamp(room.dimmableCount) }}
-          </span>
-          <input
-            type="range"
-            min="1"
-            max="100"
-            step="1"
-            class="room__bulk-slider"
-            @input="
-              onBrightnessSliderInput(room.id, ($event.target as HTMLInputElement).valueAsNumber)
+          <!-- ====== Smart toggle: счётчик-кнопка. Клик — на/выкл всех вместе ====== -->
+          <button
+            v-if="room.toggleableCount > 0"
+            type="button"
+            class="room__toggle"
+            :class="{
+              'is-all-on': room.activeCount === room.toggleableCount,
+              'is-partial': room.activeCount > 0 && room.activeCount < room.toggleableCount,
+              'is-all-off': room.activeCount === 0,
+            }"
+            :disabled="!!bulkBusy[room.id]"
+            :data-loading="!!bulkBusy[room.id]"
+            :title="room.activeCount === room.toggleableCount ? 'Выключить всё' : 'Включить всё'"
+            :aria-label="
+              room.activeCount === room.toggleableCount ? 'Выключить всё' : 'Включить всё'
             "
-          />
-        </label>
+            @click.stop="onBulkToggle(room.id, room.activeCount !== room.toggleableCount)"
+          >
+            <span class="room__toggle-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <!-- Лампочка с лучами в ON-state. -->
+                <path
+                  v-if="room.activeCount > 0"
+                  d="M12 3a6 6 0 0 1 6 6c0 2.4-1.4 4.4-3 5.4V17H9v-2.6C7.4 13.4 6 11.4 6 9a6 6 0 0 1 6-6zM9 18h6M10 21h4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                />
+                <!-- Power-icon в OFF-state. -->
+                <path
+                  v-else
+                  d="M12 3v9M5.6 7.4a8 8 0 1 0 12.8 0"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </span>
+            <span class="room__toggle-meta">
+              <strong class="room__toggle-num">
+                {{ room.activeCount }}<span class="room__toggle-sep">/</span
+                >{{ room.toggleableCount }}
+              </strong>
+              <span class="room__toggle-caption">
+                {{
+                  room.activeCount === room.toggleableCount
+                    ? 'всё включено'
+                    : room.activeCount === 0
+                      ? 'всё выключено'
+                      : pluralizeWith(room.activeCount, ['включена', 'включены', 'включено'])
+                }}
+              </span>
+            </span>
+            <span class="room__toggle-hint" aria-hidden="true">
+              <BaseIcon
+                :name="room.activeCount === room.toggleableCount ? 'close' : 'check'"
+                :size="12"
+              />
+            </span>
+          </button>
 
-        <!-- ============== Color palette ============== -->
-        <div v-if="room.colorableCount > 0" class="room__bulk-palette" @click.stop>
-          <span class="room__bulk-label">
-            <BaseIcon name="color" :size="11" />
-            Цвет · {{ room.colorableCount }} {{ pluralizeLamp(room.colorableCount) }}
-          </span>
-          <div class="room__bulk-palette-grid">
-            <button
-              v-for="p in COLOR_PRESETS"
-              :key="p.hex"
-              type="button"
-              class="room__bulk-swatch"
-              :style="{ '--swatch': p.hex }"
-              :title="p.name"
-              :aria-label="`Цвет: ${p.name}`"
-              @click="onBulkColor(room.id, p)"
+          <!-- ============== Preview-чипы устройств ============== -->
+          <div v-if="room.previewDevices.length" class="room__chips">
+            <RouterLink
+              v-for="d in room.previewDevices"
+              :key="d.id"
+              :to="`/devices/${d.id}`"
+              class="room__chip"
+              :class="{ 'is-on': isDeviceOn(d) }"
+              @click.stop
+            >
+              {{ d.name }}
+            </RouterLink>
+            <span v-if="room.deviceCount > room.previewDevices.length" class="room__chip-more">
+              +{{ room.deviceCount - room.previewDevices.length }}
+            </span>
+          </div>
+
+          <!-- ============== Inline brightness slider ============== -->
+          <label v-if="room.dimmableCount > 0" class="room__bulk-bright" @click.stop>
+            <span class="room__bulk-label">
+              <BaseIcon name="light" :size="11" />
+              Яркость · {{ room.dimmableCount }} {{ pluralizeLamp(room.dimmableCount) }}
+            </span>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              step="1"
+              class="room__bulk-slider"
+              @input="
+                onBrightnessSliderInput(room.id, ($event.target as HTMLInputElement).valueAsNumber)
+              "
             />
-            <!-- Кастом-пипетка: native input type="color" в swatch UI.
+          </label>
+
+          <!-- ============== Color palette ============== -->
+          <div v-if="room.colorableCount > 0" class="room__bulk-palette" @click.stop>
+            <span class="room__bulk-label">
+              <BaseIcon name="color" :size="11" />
+              Цвет · {{ room.colorableCount }} {{ pluralizeLamp(room.colorableCount) }}
+            </span>
+            <div class="room__bulk-palette-grid">
+              <button
+                v-for="p in COLOR_PRESETS"
+                :key="p.hex"
+                type="button"
+                class="room__bulk-swatch"
+                :style="{ '--swatch': p.hex }"
+                :title="p.name"
+                :aria-label="`Цвет: ${p.name}`"
+                @click="onBulkColor(room.id, p)"
+              />
+              <!-- Кастом-пипетка: native input type="color" в swatch UI.
                  Input-events дебаунсятся через onCustomColorChange;
                  финальный цвет — через onBulkCustomColor (тот же builder,
                  что и для пресетов). -->
-            <label
-              class="room__bulk-swatch room__bulk-swatch--custom"
-              :title="'Свой цвет'"
-              :aria-label="'Выбрать свой цвет'"
-            >
-              <BaseIcon name="plus" :size="14" />
-              <input
-                type="color"
-                class="room__bulk-swatch-input"
-                :value="lastCustomColor.get(room.id) ?? '#a961ff'"
-                @input="onCustomColorChange(room.id, ($event.target as HTMLInputElement).value)"
-                @change="onCustomColorChange(room.id, ($event.target as HTMLInputElement).value)"
-              />
-            </label>
+              <label
+                class="room__bulk-swatch room__bulk-swatch--custom"
+                :title="'Свой цвет'"
+                :aria-label="'Выбрать свой цвет'"
+              >
+                <BaseIcon name="plus" :size="14" />
+                <input
+                  type="color"
+                  class="room__bulk-swatch-input"
+                  :value="lastCustomColor.get(room.id) ?? '#a961ff'"
+                  @input="onCustomColorChange(room.id, ($event.target as HTMLInputElement).value)"
+                  @change="onCustomColorChange(room.id, ($event.target as HTMLInputElement).value)"
+                />
+              </label>
+            </div>
           </div>
-        </div>
 
-        <p v-if="room.origin === 'yandex'" class="room__hint">
-          Управляется «Домом с Алисой» — изменяйте в приложении Яндекс
-        </p>
-      </article>
+          <p v-if="room.origin === 'yandex'" class="room__hint">
+            Управляется «Домом с Алисой» — изменяйте в приложении Яндекс
+          </p>
+        </article>
       </div>
 
       <BaseEmpty
@@ -826,7 +828,6 @@ onMounted(async () => {
     /* не залогинен — пропускаем */
   }
 });
-
 </script>
 
 <style scoped lang="scss">

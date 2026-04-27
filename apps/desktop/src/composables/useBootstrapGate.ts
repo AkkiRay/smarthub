@@ -58,13 +58,10 @@ export function useBootstrapGate(opts: BootstrapGateOptions = {}): BootstrapGate
     const timeout = opts.timeout ?? DEFAULT_TIMEOUT;
 
     const taskPromises = (opts.tasks ?? []).map((t) =>
-      typeof t === 'function' ? t().catch(() => undefined) : t.catch?.(() => undefined) ?? t,
+      typeof t === 'function' ? t().catch(() => undefined) : (t.catch?.(() => undefined) ?? t),
     );
 
-    await Promise.race([
-      Promise.all(taskPromises),
-      new Promise((r) => setTimeout(r, timeout)),
-    ]);
+    await Promise.race([Promise.all(taskPromises), new Promise((r) => setTimeout(r, timeout))]);
 
     const elapsed = Date.now() - start;
     if (elapsed < min) {

@@ -3,6 +3,7 @@
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
   border-radius: var(--radius-md);
+  flex-shrink: 0;
 
   &::after {
     content: '';
@@ -14,17 +15,52 @@
       rgba(255, 255, 255, 0.06) 50%,
       transparent 100%
     );
-    animation: shimmer 1.6s linear infinite;
+    animation: shimmer calc(1.6s / max(var(--motion-scale, 1), 0.001)) linear infinite;
     background-size: 200% 100%;
+    pointer-events: none;
   }
 
   &--line {
     height: 14px;
+    border-radius: var(--radius-pill);
   }
+
   &--card {
     height: 140px;
+    border-radius: var(--radius-lg);
   }
+
   &--circle {
     border-radius: 50%;
+    width: 32px;
+    height: 32px;
   }
+
+  &--pill {
+    height: 24px;
+    border-radius: var(--radius-pill);
+  }
+
+  &--tile {
+    height: 120px;
+    border-radius: var(--radius-lg);
+  }
+
+  &--rounded-sm {
+    border-radius: var(--radius-sm);
+  }
+  &--rounded-md {
+    border-radius: var(--radius-md);
+  }
+  &--rounded-lg {
+    border-radius: var(--radius-lg);
+  }
+  &--rounded-pill {
+    border-radius: var(--radius-pill);
+  }
+}
+
+.app--reduce-motion .skeleton::after {
+  animation: none;
+  opacity: 0.6;
 }

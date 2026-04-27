@@ -222,11 +222,11 @@ function truncate(s: string, n: number): string {
     &[data-state='SPEAKING'] .monitor__chip-dot {
       background: var(--color-brand-pink);
       box-shadow: 0 0 0 0 rgba(var(--color-brand-pink-rgb), 0.5);
-      animation: monitorChipPulse 1.4s ease-out infinite;
+      animation: monitorChipPulse calc(1.4s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
     }
     &[data-state='LISTENING'] .monitor__chip-dot {
       background: var(--color-brand-purple);
-      animation: monitorChipPulse 1.6s ease-out infinite;
+      animation: monitorChipPulse calc(1.6s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
     }
     &[data-state='BUSY'] .monitor__chip-dot {
       background: var(--color-warning);

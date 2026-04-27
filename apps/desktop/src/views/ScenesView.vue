@@ -25,46 +25,46 @@
           data-anim="item"
           :style="{ '--accent': s.accent }"
         >
-        <div class="scene__head">
-          <span class="scene__icon" v-safe-html="s.icon" />
-          <BaseButton
-            variant="ghost"
-            size="icon-sm"
-            icon-left="edit"
-            aria-label="Редактировать"
-            @click.stop="openEdit(s)"
-          />
-        </div>
-        <h3 class="scene__name">{{ s.name }}</h3>
-        <p class="text--small scene__meta">
-          {{ s.actions.length }}
-          {{ pluralize(s.actions.length, ['действие', 'действия', 'действий']) }}
-        </p>
-        <div class="scene__chips">
-          <span v-if="s.exposeToStation" class="scene__chip">
-            <BaseIcon name="alice" :size="12" />
-            Алиса
-          </span>
-        </div>
-        <div class="scene__actions">
-          <BaseButton
-            variant="primary"
-            size="sm"
-            icon-left="arrow-right"
-            :disabled="!s.actions.length"
-            @click.stop="run(s.id)"
-          >
-            Запустить
-          </BaseButton>
-          <BaseButton
-            variant="danger"
-            size="icon-sm"
-            icon-left="trash"
-            aria-label="Удалить"
-            @click.stop="remove(s.id, s.name)"
-          />
-        </div>
-      </article>
+          <div class="scene__head">
+            <span class="scene__icon" v-safe-html="s.icon" />
+            <BaseButton
+              variant="ghost"
+              size="icon-sm"
+              icon-left="edit"
+              aria-label="Редактировать"
+              @click.stop="openEdit(s)"
+            />
+          </div>
+          <h3 class="scene__name">{{ s.name }}</h3>
+          <p class="text--small scene__meta">
+            {{ s.actions.length }}
+            {{ pluralize(s.actions.length, ['действие', 'действия', 'действий']) }}
+          </p>
+          <div class="scene__chips">
+            <span v-if="s.exposeToStation" class="scene__chip">
+              <BaseIcon name="alice" :size="12" />
+              Алиса
+            </span>
+          </div>
+          <div class="scene__actions">
+            <BaseButton
+              variant="primary"
+              size="sm"
+              icon-left="arrow-right"
+              :disabled="!s.actions.length"
+              @click.stop="run(s.id)"
+            >
+              Запустить
+            </BaseButton>
+            <BaseButton
+              variant="danger"
+              size="icon-sm"
+              icon-left="trash"
+              aria-label="Удалить"
+              @click.stop="remove(s.id, s.name)"
+            />
+          </div>
+        </article>
 
         <button class="card scene__create" data-anim="item" @click="openCreate">
           <BaseIcon name="plus" :size="32" />
@@ -591,7 +591,6 @@ onMounted(async () => {
     }
   }
 });
-
 </script>
 
 <style scoped lang="scss">

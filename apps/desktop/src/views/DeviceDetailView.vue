@@ -22,40 +22,46 @@
       </BasePageHeader>
 
       <div class="detail__layout">
-        <!-- Speaker hero: AliceStationPanel (now-playing/volume/transport/log)
-           + категории команд + PC-stream. -->
-        <SpeakerControlSurface
-          v-if="isYandexStation"
-          :device="device"
-          class="detail__speaker-surface"
-          data-anim="block"
-        />
+        <!-- Hero: Speaker pult ↔ generic device hero. Crossfade через
+             <Transition mode="out-in"> + min-height сохраняет grid-row. -->
+        <Transition name="hero-fade" mode="out-in">
+          <SpeakerControlSurface
+            v-if="isYandexStation"
+            key="speaker"
+            :device="device"
+            class="detail__speaker-surface"
+            data-anim="block"
+          />
+          <div
+            v-else
+            key="generic"
+            class="detail__hero card card--gradient"
+            :class="{
+              'detail__hero--on': isOn,
+              'detail__hero--off': hasOnOff && !isOn,
+            }"
+            :style="heroStyle"
+            data-anim="block"
+          >
+            <div class="detail__hero-icon" v-safe-html="iconFor(device.type)" />
+            <div class="detail__hero-text">
+              <span class="text--micro">{{ statusLabel }}</span>
+              <h2 class="text--display detail__hero-title">{{ device.name }}</h2>
+              <span class="detail__hero-status" :data-state="device.status">
+                <span class="detail__hero-dot" />
+                {{ statusChipLabel }}
+              </span>
+            </div>
+          </div>
+        </Transition>
 
-        <!-- Generic hero для всех остальных устройств. -->
+        <!-- Capabilities. v-show вместо v-if — DOM не пересобирается при
+             temp-empty list'е (offline/refresh window) → controls не «прыгают». -->
         <div
-          v-else
-          class="detail__hero card card--gradient"
-          :class="{
-            'detail__hero--on': isOn,
-            'detail__hero--off': hasOnOff && !isOn,
-          }"
-          :style="heroStyle"
+          v-show="visibleCapabilities.length"
+          class="card detail__capabilities"
           data-anim="block"
         >
-          <div class="detail__hero-icon" v-safe-html="iconFor(device.type)" />
-          <div class="detail__hero-text">
-            <span class="text--micro">{{ statusLabel }}</span>
-            <h2 class="text--display detail__hero-title">{{ device.name }}</h2>
-            <span class="detail__hero-status" :data-state="device.status">
-              <span class="detail__hero-dot" />
-              {{ statusChipLabel }}
-            </span>
-          </div>
-        </div>
-
-        <!-- Capabilities. На станции скрыты quasar.* (TTS/voice — в SpeakerControlSurface).
-           Остальное: LED, cloud-volume, режимы. -->
-        <div v-if="visibleCapabilities.length" class="card detail__capabilities" data-anim="block">
           <h3 class="text--h2">
             {{ isYandexStation ? 'Дополнительные возможности' : 'Управление' }}
           </h3>
@@ -64,19 +70,21 @@
             cloud-API «Дома с Алисой».
           </p>
           <div class="detail__caps">
-            <div
-              v-for="(cap, idx) in visibleCapabilities"
-              :key="`${cap.type}::${cap.parameters?.instance ?? cap.state?.instance ?? idx}`"
-              class="detail__cap"
-            >
-              <CapabilityControl :device="device" :capability="cap" />
-            </div>
+            <TransitionGroup name="cap-fade" tag="div" class="detail__caps-inner">
+              <div
+                v-for="(cap, idx) in visibleCapabilities"
+                :key="`${cap.type}::${cap.parameters?.instance ?? cap.state?.instance ?? idx}`"
+                class="detail__cap"
+              >
+                <CapabilityControl :device="device" :capability="cap" />
+              </div>
+            </TransitionGroup>
           </div>
         </div>
 
-        <div v-if="visibleProperties.length" class="card detail__props" data-anim="block">
+        <div v-show="visibleProperties.length" class="card detail__props" data-anim="block">
           <h3 class="text--h2">Показания</h3>
-          <ul class="detail__props-list">
+          <TransitionGroup tag="ul" name="cap-fade" class="detail__props-list">
             <li
               v-for="(p, idx) in visibleProperties"
               :key="`${p.type}::${p.parameters.instance ?? idx}`"
@@ -111,7 +119,7 @@
                 <span class="prop__bar-fill" />
               </div>
             </li>
-          </ul>
+          </TransitionGroup>
         </div>
 
         <div class="card detail__assignment" data-anim="block">
@@ -209,7 +217,7 @@
         title="Загружаем устройство…"
         description="Тянем актуальное состояние из реестра."
       />
-      <div class="detail__skeleton card" data-anim="block">
+      <div class="detail__skeleton card shine-load" data-anim="block">
         <div class="detail__skeleton-bar detail__skeleton-bar--md" />
         <div class="detail__skeleton-bar detail__skeleton-bar--sm" />
         <div class="detail__skeleton-bar detail__skeleton-bar--lg" />
@@ -219,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDevicesStore } from '@/stores/devices';
 import { useRoomsStore } from '@/stores/rooms';
@@ -238,7 +246,7 @@ import {
   ConfirmDialog,
   type SelectOption,
 } from '@/components/base';
-import type { Device } from '@smarthome/shared';
+import type { Capability, Device, DeviceProperty } from '@smarthome/shared';
 import { DRIVER_SHORT_LABEL } from '@smarthome/shared';
 
 const route = useRoute();
@@ -291,31 +299,56 @@ const hasLiveGlagolSession = computed(
 /**
  * Capabilities для рендера ниже SpeakerControlSurface.
  * На станции `devices.capabilities.quasar*` скрыты (TTS/voice — в пульте).
+ *
+ * Sticky-fallback: temp-empty (offline / readState mid-flight) не пересобирает
+ * DOM — controls остаются видимыми. Cache сбрасывается при навигации между
+ * устройствами через watch по device.id.
  */
-const visibleCapabilities = computed(() => {
+const liveCapabilities = computed<Capability[]>(() => {
   const all = device.value?.capabilities ?? [];
   if (!isYandexStation.value) return all;
   return all.filter((c) => !c.type.startsWith('devices.capabilities.quasar'));
 });
 
+const stickyCapabilities = ref<Capability[]>([]);
+
+const visibleCapabilities = computed<Capability[]>(() =>
+  liveCapabilities.value.length > 0 ? liveCapabilities.value : stickyCapabilities.value,
+);
+
+watch(liveCapabilities, (next) => {
+  if (next.length > 0) stickyCapabilities.value = next;
+});
+
+watch(
+  () => device.value?.id,
+  () => {
+    stickyCapabilities.value = [];
+  },
+);
+
 /**
- * Real-time aliceState из glagol-WS для подмены `voice_activity` property
+ * Real-time voice-state из glagol-WS для подмены `voice_activity` property
  * на станции. Cloud-snapshot не содержит мгновенного playback-state'а.
+ *
+ * Источник — `station.voiceState` (resolver, который правильно учитывает
+ * `aliceText`+`IDLE` для определения SPEAKING vs THINKING). Сырой
+ * `aliceState` нельзя использовать: glagol часто шлёт `BUSY` / `THINKING`
+ * во время TTS вместо `SPEAKING` → UI показывал «Думает» когда колонка говорит.
  */
 const liveVoiceActivity = computed<string | null>(() => {
   if (!hasLiveGlagolSession.value) return null;
-  for (const e of [...station.events].reverse()) {
-    if (e.aliceState) return e.aliceState.toLowerCase();
-  }
-  return null;
+  return station.voiceState;
 });
 
 /**
  * Properties для рендера:
  *   1. Live `voice_activity` из glagol-WS на станции с открытым WS.
  *   2. Filter: properties без значения скрыты.
+ *
+ * Sticky-fallback: см. visibleCapabilities — temp-empty не пересобирает DOM.
  */
-const visibleProperties = computed(() => {
+const liveProperties = computed<DeviceProperty[]>(() => {
   const all = device.value?.properties ?? [];
   return all
     .map((p) => {
@@ -335,6 +368,23 @@ const visibleProperties = computed(() => {
       (p) => p.state?.value !== undefined && p.state?.value !== null && p.state?.value !== '',
     );
 });
+
+const stickyProperties = ref<DeviceProperty[]>([]);
+
+const visibleProperties = computed<DeviceProperty[]>(() =>
+  liveProperties.value.length > 0 ? liveProperties.value : stickyProperties.value,
+);
+
+watch(liveProperties, (next) => {
+  if (next.length > 0) stickyProperties.value = next;
+});
+
+watch(
+  () => device.value?.id,
+  () => {
+    stickyProperties.value = [];
+  },
+);
 
 const driverLabel = computed<string>(
   () => DRIVER_SHORT_LABEL[device.value?.driver ?? 'yeelight'] ?? '—',
@@ -502,6 +552,8 @@ const VOICE_ACTIVITY_STATES: Record<string, VoiceState> = {
   speaking: { label: 'Говорит', tone: 'active' },
   thinking: { label: 'Думает', tone: 'processing' },
   shazam: { label: 'Распознаёт музыку', tone: 'processing' },
+  // Alias под `station.voiceState` — он отдаёт canonical 4 значения.
+  busy: { label: 'Думает', tone: 'processing' },
 };
 
 function isStateProp(instance: string): boolean {
@@ -866,13 +918,29 @@ useViewMount({ scope: root });
   }
 
   &__hero-status[data-state='online'] &__hero-dot {
-    animation: heroDotPulse 2s ease-out infinite;
+    animation: heroDotPulse calc(2s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
   }
 
   &__caps {
     display: flex;
     flex-direction: column;
     gap: 14px;
+    min-height: 56px;
+  }
+
+  &__caps-inner {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  &__capabilities {
+    min-height: 140px;
+  }
+
+  &__props {
+    min-height: 120px;
   }
 
   &__capabilities-hint {
@@ -891,6 +959,7 @@ useViewMount({ scope: root });
   }
 
   &__props-list {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 12px;
@@ -1196,7 +1265,7 @@ useViewMount({ scope: root });
       border-color: rgba(var(--color-success-rgb), 0.3);
 
       .prop__chip-dot {
-        animation: heroDotPulse 2s ease-out infinite;
+        animation: heroDotPulse calc(2s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
       }
     }
 
@@ -1206,7 +1275,7 @@ useViewMount({ scope: root });
       border-color: rgba(var(--color-brand-purple-rgb), 0.28);
 
       .prop__chip-dot {
-        animation: heroDotPulse 1.4s ease-out infinite;
+        animation: heroDotPulse calc(1.4s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
       }
     }
 
@@ -1216,7 +1285,7 @@ useViewMount({ scope: root });
       border-color: rgba(var(--color-danger-rgb), 0.32);
 
       .prop__chip-dot {
-        animation: heroDotPulse 1s ease-out infinite;
+        animation: heroDotPulse calc(1s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
       }
     }
   }
@@ -1243,6 +1312,37 @@ useViewMount({ scope: root });
     background: linear-gradient(90deg, var(--color-brand-violet) 0%, var(--color-brand-pink) 100%);
     transition: width 480ms var(--ease-out);
   }
+}
+
+// Hero swap (Speaker ↔ generic): opacity-only crossfade, mode='out-in'.
+// Без translate/scale — grid-row держит min-height (200px) → нет прыжка.
+.hero-fade-enter-active,
+.hero-fade-leave-active {
+  transition:
+    opacity 240ms var(--ease-out),
+    filter 240ms var(--ease-out);
+}
+.hero-fade-enter-from,
+.hero-fade-leave-to {
+  opacity: 0;
+  filter: blur(4px);
+}
+
+// Capability/property add/remove: opacity + reduced height collapse.
+.cap-fade-enter-active,
+.cap-fade-leave-active {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+.cap-fade-enter-from,
+.cap-fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.cap-fade-leave-active {
+  position: absolute;
+  inset-inline: 0;
 }
 
 @keyframes heroDotPulse {

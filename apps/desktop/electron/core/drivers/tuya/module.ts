@@ -1,5 +1,7 @@
 import type { DriverModule } from '../driver-module.js';
 import { TuyaDriver } from './tuya-driver.js';
+import { probeViaDiscover } from '../_shared/probe-via-discover.js';
+import { defaultRegion } from '../_shared/region-detect.js';
 
 export const tuyaModule: DriverModule = {
   descriptor: {
@@ -16,15 +18,22 @@ export const tuyaModule: DriverModule = {
     docsUrl: 'https://developer.tuya.com/en/docs/iot/api-reference?id=Ka431f4ub0r1u',
     credentialsSchema: [
       {
+        key: '__register',
+        kind: 'register-link',
+        label: 'Открыть Tuya IoT Cloud',
+        hint: 'Cloud → Projects → Create. Укажите Smart Home → IoT Core. Скопируйте Access ID = API Key, Access Secret = API Secret.',
+        url: 'https://platform.tuya.com/cloud/projects',
+      },
+      {
         key: 'apiKey',
-        label: 'API Key',
+        label: 'API Key (Access ID)',
         kind: 'text',
         placeholder: 't-xxxxxxxxxxxxxxxx',
         required: true,
       },
       {
         key: 'apiSecret',
-        label: 'API Secret',
+        label: 'API Secret (Access Secret)',
         kind: 'password',
         placeholder: '••••••••••••',
         required: true,
@@ -33,13 +42,13 @@ export const tuyaModule: DriverModule = {
         key: 'uid',
         label: 'UID',
         kind: 'text',
-        hint: 'Только если устройства привязаны к конкретному пользователю.',
+        hint: 'Tuya IoT Cloud → Project → Devices → Link Tuya App Account → User ID. Без UID хаб не сможет получить список устройств.',
       },
       {
         key: 'region',
         label: 'Регион',
         kind: 'select',
-        defaultValue: 'eu',
+        defaultValue: defaultRegion('tuya'),
         options: [
           { value: 'eu', label: 'Europe (eu)' },
           { value: 'us', label: 'United States (us)' },
@@ -47,6 +56,7 @@ export const tuyaModule: DriverModule = {
           { value: 'in', label: 'India (in)' },
         ],
       },
+      { key: '__test', kind: 'test-button', label: 'Проверить' },
     ],
   },
   async create({ settings }) {
@@ -63,5 +73,19 @@ export const tuyaModule: DriverModule = {
       region: c.region,
       uid: c.uid,
     });
+  },
+  async probe(values) {
+    if (!values['apiKey'] || !values['apiSecret']) {
+      return { ok: false, message: 'Введите API Key и API Secret' };
+    }
+    return probeViaDiscover(
+      async () =>
+        new TuyaDriver({
+          apiKey: values['apiKey']!,
+          apiSecret: values['apiSecret']!,
+          region: values['region'] || undefined,
+          uid: values['uid'] || undefined,
+        }),
+    );
   },
 };

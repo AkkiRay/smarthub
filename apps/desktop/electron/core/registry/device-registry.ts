@@ -76,10 +76,15 @@ export function createDeviceRegistry(deps: {
 
   /**
    * Push-подписки на каждом драйвере, который умеет real-time (yandex-iot
-   * через `updates_url` WS, в будущем — MQTT/Hue eventstream/etc). Регистрируем
-   * один раз в init(); драйвер сам управляет своим транспортом.
+   * через `updates_url` WS, в будущем — MQTT/Hue eventstream/etc). Wired в
+   * init() и переподписываются на каждый `driver:reloaded` event — иначе
+   * после signIn / setCredentials / signOut новый driver instance остаётся
+   * без push-listener'а и real-time updates теряются.
+   *
+   * Map хранит per-driver unsub: позволяет точечно перевязать ОДИН driver
+   * без полного rewire.
    */
-  const pushUnsubscribes: Array<() => void> = [];
+  const pushUnsubscribesByDriver = new Map<string, () => void>();
   const wirePushFromDriver = (driver: ReturnType<DriverRegistry['list']>[number]): void => {
     if (typeof driver.subscribePush !== 'function') return;
     const unsub = driver.subscribePush((externalId, partial) => {
@@ -99,8 +104,24 @@ export function createDeviceRegistry(deps: {
       };
       persistAndEmit(merged);
     });
-    pushUnsubscribes.push(unsub);
+    pushUnsubscribesByDriver.set(driver.id, unsub);
   };
+
+  const rewirePushForDriver = (driverId: string): void => {
+    const old = pushUnsubscribesByDriver.get(driverId);
+    if (old) {
+      try {
+        old();
+      } catch {
+        /* unsubscribe best-effort */
+      }
+      pushUnsubscribesByDriver.delete(driverId);
+    }
+    const driver = deps.driverRegistry.get(driverId as Parameters<DriverRegistry['get']>[0]);
+    if (driver) wirePushFromDriver(driver);
+  };
+
+  let driverReloadHandlerAttached = false;
 
   return {
     async init(): Promise<void> {
@@ -117,21 +138,32 @@ export function createDeviceRegistry(deps: {
     /**
      * Hub вызывает ПОСЛЕ driverRegistry.init() — иначе `driverRegistry.list()`
      * ещё пуст. Subscribe ко всем драйверам, которые умеют push (yandex-iot
-     * через WS, MQTT-bridge, etc). Идемпотентно — повторный вызов не дублирует
-     * подписки, потому что хранятся `unsubscribe`-функции.
+     * через WS, MQTT-bridge, etc). Идемпотентно — повторный вызов снимает
+     * старые подписки и пересоздаёт.
+     *
+     * Также подписываемся на `driver:reloaded` от driverRegistry — каждый
+     * reload (signIn/signOut/setCredentials) автоматически re-wires push для
+     * нового instance'а драйвера.
      */
     wirePushSubscriptions(): void {
-      // Если уже были подписки (reload-driver кейс) — снимаем старые.
-      for (const unsub of pushUnsubscribes) {
+      for (const unsub of pushUnsubscribesByDriver.values()) {
         try {
           unsub();
         } catch {
           /* unsubscribe best-effort */
         }
       }
-      pushUnsubscribes.length = 0;
+      pushUnsubscribesByDriver.clear();
       for (const driver of deps.driverRegistry.list()) wirePushFromDriver(driver);
-      log.info(`DeviceRegistry: ${pushUnsubscribes.length} push-subscriptions wired`);
+      log.info(`DeviceRegistry: ${pushUnsubscribesByDriver.size} push-subscriptions wired`);
+
+      if (!driverReloadHandlerAttached) {
+        driverReloadHandlerAttached = true;
+        deps.driverRegistry.on('driver:reloaded', (driverId) => {
+          rewirePushForDriver(driverId);
+          log.info(`DeviceRegistry: re-wired push for ${driverId} after reload`);
+        });
+      }
     },
 
     on<E extends keyof DeviceRegistryEvents>(
@@ -364,14 +396,14 @@ export function createDeviceRegistry(deps: {
 
     /** Hub вызывает при app shutdown — отписываемся от всех push-стримов и таймеров. */
     shutdown(): void {
-      for (const unsub of pushUnsubscribes) {
+      for (const unsub of pushUnsubscribesByDriver.values()) {
         try {
           unsub();
         } catch {
           /* unsubscribe best-effort */
         }
       }
-      pushUnsubscribes.length = 0;
+      pushUnsubscribesByDriver.clear();
       for (const timer of pendingTimers) clearTimeout(timer);
       pendingTimers.clear();
       refreshLocks.clear();

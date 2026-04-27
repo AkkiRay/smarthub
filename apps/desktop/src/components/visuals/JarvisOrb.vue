@@ -12,33 +12,65 @@
     ]"
     :aria-hidden="true"
   >
-    <span class="orb__halo" />
-    <span class="orb__ring" />
+    <!-- Многослойный halo: 3 уровня с разным blur'ом и сдвигом hue для
+         хроматического «lens-feel». Не дёргается синхронно — у каждого
+         собственный период. -->
+    <span class="orb__halo orb__halo--inner" />
+    <span class="orb__halo orb__halo--mid" />
+    <span class="orb__halo orb__halo--wide" />
+
+    <!-- Rim-light: тонкая conic-gradient полоска по периметру, медленно
+         вращается. Сигнатурный «lens flare» эффект — заменяет 3 broadcast-
+         кольца, которые ощущались датированными (~2018 trend). -->
+    <span class="orb__rim" />
+
+    <!-- Three.js canvas: outer + inner shells + accent points. -->
     <canvas ref="canvasEl" class="orb__canvas" />
-    <!-- Spectral analyzer: 28 баров по окружности. Каждый — отдельный wrap для
-         rotate, внутренний `i` — для scaleY (декомпозиция нужна, чтобы keyframe
-         анимация не конфликтовала с позиционным rotate). Стаггер делителем-простым
-         (73мс) даёт «органическую» волну вместо синхронного ripple. -->
+
+    <!-- Click ring (одноразовый — резервный hook, kept для визуального
+         feedback'а если в будущем понадобится). -->
+    <span class="orb__ring" />
+
+    <!-- Spectrum analyzer: 14 баров (было 28). Появляется только на
+         speaking — остальные voice-states получают свои элементы ниже. -->
     <div v-if="withSpectrum" class="orb__spectrum" aria-hidden="true">
       <span v-for="n in SPECTRUM_BARS" :key="n" class="orb__spectrum-wrap" :style="{ '--i': n }">
         <i class="orb__spectrum-bar" />
       </span>
     </div>
-    <!-- Ambient broadcast: 3 концентрических кольца, расширяются от орба наружу
-         с шагом по фазе. Создают ощущение, что орб «передаёт сигнал» — нужны
-         в Welcome, где вокруг него вращаются orbital chips (протоколы). -->
-    <div v-if="ambient" class="orb__broadcast" aria-hidden="true">
-      <span class="orb__broadcast-ring" style="--phase: 0" />
-      <span class="orb__broadcast-ring" style="--phase: 1" />
-      <span class="orb__broadcast-ring" style="--phase: 2" />
-    </div>
+
+    <!-- Listening: одиночный core-pulse в центре (вместо 28 spectrum баров).
+         Чёткий фокус: «жду команду». -->
+    <span v-if="voiceMode && voiceState === 'listening'" class="orb__pulse" aria-hidden="true" />
+
+    <!-- Busy: одиночная scan-дуга по halo вместо sweep'а по spectrum'у. -->
+    <span v-if="voiceMode && voiceState === 'busy'" class="orb__scan" aria-hidden="true" />
   </div>
 </template>
 
 <script setup lang="ts">
-// 3D-globe на Three.js: icosphere wireframe + points + контр-спинящееся ядро.
-// mousemove → tilt; hover → ×1.7 spin; click → impulse + pulse + ring;
-// reduce-motion → spin ×0.4 (не 0).
+/**
+ * @fileoverview JarvisOrb — 3D-сфера на Three.js с layered halo, rim-light
+ * и voice-reactive режимами. Cinematic-minimalism: медленные движения,
+ * volumetric glow, единичные сигналы вместо busy-spectrum'а.
+ *
+ * Архитектура геометрии:
+ *  - outer shell: wireframe icosphere detail=props.detail, radius=1.4
+ *  - inner shell: wireframe icosphere detail=2, radius=0.85, counter-rotate
+ *  - accent points: 7 штук по Fibonacci-lattice на outer sphere
+ *
+ * Animation:
+ *  - base spin вокруг Y (0.005 rad/frame standard)
+ *  - Lissajous tilt по X (две синусоиды разных частот → non-repetitive)
+ *  - mouse-tilt overrides Lissajous (только в non-voice/non-ambient)
+ *  - voice-amp drives: outer opacity, inner scale, halo CSS-var
+ *
+ * Voice modes (CSS-driven):
+ *  - idle    → минимум (только shells + halo breath)
+ *  - listening → + core-pulse в центре
+ *  - speaking  → + 14-bar spectrum
+ *  - busy      → + scan-дуга на halo
+ */
 
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -57,31 +89,33 @@ interface Props {
   /** Detail у IcosahedronGeometry (1-4). 3 — оптимально по плотности/перфу. */
   detail?: number;
   /**
-   * Voice-reactive режим: синтетическая волна звука драйвит scale, ядро и halo.
-   * Отключает mousemove-tilt — орб «слушает» Алису, а не мышку. Welcome остаётся
-   * без этого флага (там mouse-tracking — это часть знакомства с приложением).
+   * Voice-reactive режим: synthetic envelope drives core/halo/wireframe.
+   * Отключает mouse-tilt — орб «слушает» Алису, а не курсор.
    */
   voiceMode?: boolean;
-  /** Голосовое состояние Алисы; определяет огибающую амплитуды. */
+  /** Голосовое состояние — определяет огибающую амплитуды и какие layer'ы видны. */
   voiceState?: OrbVoiceState;
   /**
-   * Spectral analyzer вокруг орба: 28 радиальных баров со staggered-волной.
-   * По умолчанию включается для voice-mode на размерах ≥md (на sm/avatar
-   * слишком тесно — превратится в кашу). Можно переопределить вручную.
+   * Spectrum-анализатор (14 баров) появляется автоматически на voice-mode size ≥ md
+   * только во время speaking. Можно форсировать через prop.
    */
   spectrum?: boolean;
   /**
-   * Ambient режим (онбординг / hero без голоса):
+   * Ambient режим (онбординг / hero):
    *   - mouse-tilt отключён, орб «живёт сам»
-   *   - multi-axis lazy spin (тумбл по X+Y одновременно)
-   *   - broadcast-кольца расширяются от орба наружу — визуальная «передача»
-   *     сигнала к orbital-chips (протоколам интеграций)
-   * Несовместим с voiceMode (там Алиса задаёт ритм, ambient бы конфликтовал).
+   *   - Lissajous tilt на двух осях
+   *   - rim-light единственный сигнал «передачи» (вместо 3 broadcast-колец)
+   * Несовместим с voiceMode (там Алиса задаёт ритм).
    */
   ambient?: boolean;
 }
 
-const SPECTRUM_BARS = 28;
+// 14 баров (было 28) — менее «AI-assistant cliché», более изящная волна.
+const SPECTRUM_BARS = 14;
+
+// Accent points — 7 штук по Fibonacci-lattice на outer sphere.
+const ACCENT_COUNT = 7;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 const props = withDefaults(defineProps<Props>(), {
   size: 'md',
@@ -94,11 +128,14 @@ const props = withDefaults(defineProps<Props>(), {
   ambient: false,
 });
 
-// Auto-default: spectrum on если voice-mode и size достаточно крупный.
-// Sidebar (sm) сознательно остаётся минималистичным — там 40px, бары лишние.
+// Spectrum видим только когда: voice-mode + voiceState='speaking' + size ≥ md.
+// Sidebar (sm) исключаем — на 40px бары сливаются. Idle/listening/busy
+// получают свои визуальные сигналы (core-pulse / scan-arc) — спектр для них
+// не нужен. `spectrum={false}` явно отключает даже на speaking.
 const withSpectrum = computed<boolean>(() => {
-  if (props.spectrum !== undefined) return props.spectrum;
+  if (props.spectrum === false) return false;
   if (!props.voiceMode) return false;
+  if (props.voiceState !== 'speaking') return false;
   return props.size === 'md' || props.size === 'lg' || props.size === 'xl' || props.size === 'hero';
 });
 
@@ -108,16 +145,19 @@ const { reduceMotion } = storeToRefs(ui);
 const rootEl = useTemplateRef<HTMLElement>('rootEl');
 const canvasEl = useTemplateRef<HTMLCanvasElement>('canvasEl');
 
-// Three.js state — нереактивно, иначе Vue triggers per-frame.
+// Three.js state — нереактивно (Vue triggers per-frame были бы катастрофой).
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
 let group: THREE.Group | null = null;
-let core: THREE.LineSegments | null = null;
 
-let wireMat: THREE.LineBasicMaterial | null = null;
-let pointsMat: THREE.PointsMaterial | null = null;
-let coreMat: THREE.LineBasicMaterial | null = null;
+let outerWire: THREE.LineSegments | null = null;
+let innerWire: THREE.LineSegments | null = null;
+let accentDots: THREE.Points | null = null;
+
+let outerMat: THREE.LineBasicMaterial | null = null;
+let innerMat: THREE.LineBasicMaterial | null = null;
+let dotsMat: THREE.PointsMaterial | null = null;
 
 let raf = 0;
 let resizeObs: ResizeObserver | null = null;
@@ -132,65 +172,65 @@ let mouseX = 0;
 let mouseY = 0;
 let lastMouseAt = performance.now();
 
-// Pulse-scale релакс к 1.
+// Pulse-scale релакс к 1 после click'а.
 let pulseScale = 1;
 
-// Voice envelope: synthetic «звуковая волна» Алисы. Считаем суммой нескольких
-// синусов разной частоты — глаз воспринимает это как настоящую речь, хотя WSS
-// glagol-канал амплитуды не отдаёт (там только state-changes). Сглаживаем
-// через damping для естественного нарастания/затухания.
-let voiceAmp = 0; // 0..1 — текущая «громкость»
-let voiceTarget = 0; // куда стремимся
+// Voice envelope: synthetic «звуковая волна» Алисы. WSS glagol амплитуды не
+// отдаёт, генерим сами — глаз воспринимает sum-of-sines как настоящую речь.
+let voiceAmp = 0;
+let voiceTarget = 0;
 
 /**
- * Огибающая амплитуды для голосовых состояний:
- *  - idle/busy → 0 (орб не «звучит», только базовый spin)
- *  - listening → медленное «сердцебиение» (ждёт команду)
- *  - speaking → хаотичная волна из 3 расстроенных синусов с envelope-модуляцией
- *
- * Возвращает значение 0..1, сэмплируется на каждом кадре в animate().
+ * Огибающая амплитуды:
+ *  - idle/busy → 0 (тихо, busy управляется отдельным scan-arc'ом)
+ *  - listening → медленный heartbeat (период 1.4s, peak 0.32)
+ *  - speaking  → speech-like waveform (3 синуса разных частот + envelope)
  */
 function voiceEnvelope(t: number, state: OrbVoiceState): number {
   if (state === 'idle' || state === 'busy') return 0;
   if (state === 'listening') {
-    // Период ~1.4с, пик 0.32 — мягкий heartbeat.
     const phase = (t % 1.4) / 1.4;
     return Math.max(0, Math.sin(phase * Math.PI)) * 0.32;
   }
-  // speaking: speech-like waveform. Три синуса разной частоты + envelope-модуляция,
-  // чтобы амплитуда «гуляла» как у живой речи, а не была равномерным пульсом.
+  // speaking: 3 расстроенных синуса + slow envelope-modulation.
   const a = Math.sin(t * 11.0) * 0.42;
   const b = Math.sin(t * 7.3 + 1.7) * 0.34;
   const c = Math.sin(t * 17.5 + 0.9) * 0.22;
-  const env = (Math.sin(t * 2.7) + Math.sin(t * 1.1 + 0.5) + 2) / 4; // 0..1 slow envelope
+  const env = (Math.sin(t * 2.7) + Math.sin(t * 1.1 + 0.5) + 2) / 4;
   return Math.min(1, Math.abs(a + b + c) * env);
 }
 
-// 0xRRGGBB-int'ы из constants/brandColors — JS-сцена и SCSS-токены не расходятся.
-// Voice-mode переопределяет палитру по голосовым состояниям, чтобы орб «менял
-// настроение» когда Алиса слушает / говорит — без прибегания к CSS-фильтрам.
-const palette = computed<{ wire: number; points: number; core: number }>(() => {
+// 0xRRGGBB-int'ы из shared/BRAND. Voice-mode переопределяет палитру по
+// состоянию Алисы — орб «меняет настроение» без CSS-фильтров.
+const palette = computed<{ outer: number; inner: number; dots: number }>(() => {
   if (props.state === 'error') {
-    return { wire: BRAND_HEX.danger, points: BRAND_HEX.orange, core: BRAND_HEX.warning };
+    return { outer: BRAND_HEX.danger, inner: BRAND_HEX.coral, dots: BRAND_HEX.warning };
   }
   if (props.voiceMode) {
     if (props.voiceState === 'listening') {
-      return { wire: BRAND_HEX.cyan, points: BRAND_HEX.violet, core: BRAND_HEX.purpleHi };
+      return { outer: BRAND_HEX.cyan, inner: BRAND_HEX.violet, dots: BRAND_HEX.purpleHi };
     }
     if (props.voiceState === 'speaking') {
-      return { wire: BRAND_HEX.purple, points: BRAND_HEX.pink, core: BRAND_HEX.purpleHi };
+      return { outer: BRAND_HEX.purple, inner: BRAND_HEX.pink, dots: BRAND_HEX.amber };
     }
     if (props.voiceState === 'busy') {
-      return { wire: BRAND_HEX.amber, points: BRAND_HEX.purple, core: BRAND_HEX.purpleSoft };
+      return { outer: BRAND_HEX.amber, inner: BRAND_HEX.purple, dots: BRAND_HEX.purpleSoft };
     }
-    // idle in voice-mode — спокойный violet/purple
-    return { wire: BRAND_HEX.violet, points: BRAND_HEX.purple, core: BRAND_HEX.purpleSoft };
+    return { outer: BRAND_HEX.violet, inner: BRAND_HEX.purple, dots: BRAND_HEX.purpleSoft };
   }
   if (props.state === 'active') {
-    return { wire: BRAND_HEX.purple, points: BRAND_HEX.pink, core: BRAND_HEX.purpleHi };
+    return { outer: BRAND_HEX.purple, inner: BRAND_HEX.pink, dots: BRAND_HEX.purpleHi };
   }
-  return { wire: BRAND_HEX.violet, points: BRAND_HEX.purple, core: BRAND_HEX.purpleSoft };
+  return { outer: BRAND_HEX.violet, inner: BRAND_HEX.purple, dots: BRAND_HEX.purpleSoft };
 });
+
+/** Fibonacci-lattice vertex на единичной сфере; i из [0..total). */
+function fibonacciPoint(i: number, total: number): THREE.Vector3 {
+  const y = 1 - (2 * (i + 0.5)) / total;
+  const r = Math.sqrt(Math.max(0, 1 - y * y));
+  const azimuth = i * GOLDEN_ANGLE;
+  return new THREE.Vector3(Math.cos(azimuth) * r, y, Math.sin(azimuth) * r);
+}
 
 function init(): void {
   const el = rootEl.value;
@@ -217,46 +257,54 @@ function init(): void {
   group = new THREE.Group();
   scene.add(group);
 
-  const sphereGeo = new THREE.IcosahedronGeometry(1.4, props.detail);
-
-  const wireGeo = new THREE.WireframeGeometry(sphereGeo);
-  wireMat = new THREE.LineBasicMaterial({
-    color: palette.value.wire,
+  // === Outer shell: тонкий wireframe icosphere ===========================
+  const outerGeo = new THREE.IcosahedronGeometry(1.4, props.detail);
+  const outerWireGeo = new THREE.WireframeGeometry(outerGeo);
+  outerMat = new THREE.LineBasicMaterial({
+    color: palette.value.outer,
     transparent: true,
-    opacity: 0.45,
+    opacity: 0.32,
   });
-  const wire = new THREE.LineSegments(wireGeo, wireMat);
-  group.add(wire);
+  outerWire = new THREE.LineSegments(outerWireGeo, outerMat);
+  group.add(outerWire);
 
-  // Points на вершинах icosphere.
-  const pointsGeo = new THREE.BufferGeometry();
-  pointsGeo.setAttribute('position', sphereGeo.getAttribute('position'));
-  pointsMat = new THREE.PointsMaterial({
-    color: palette.value.points,
-    size: 0.05,
+  // === Inner shell: counter-rotate, более яркий ==========================
+  const innerGeo = new THREE.IcosahedronGeometry(0.85, 2);
+  const innerWireGeo = new THREE.WireframeGeometry(innerGeo);
+  innerMat = new THREE.LineBasicMaterial({
+    color: palette.value.inner,
     transparent: true,
-    opacity: 1,
+    opacity: 0.55,
+  });
+  innerWire = new THREE.LineSegments(innerWireGeo, innerMat);
+  group.add(innerWire);
+
+  // === Accent points: 7 ярких dots по Fibonacci-lattice на outer sphere ==
+  // Заменяют плотные Points (которые были на каждой вершине detail=3) — меньше
+  // visual noise, больше «премиум» feeling.
+  const dotPositions = new Float32Array(ACCENT_COUNT * 3);
+  for (let i = 0; i < ACCENT_COUNT; i++) {
+    const v = fibonacciPoint(i, ACCENT_COUNT).multiplyScalar(1.4);
+    dotPositions[i * 3] = v.x;
+    dotPositions[i * 3 + 1] = v.y;
+    dotPositions[i * 3 + 2] = v.z;
+  }
+  const dotsGeo = new THREE.BufferGeometry();
+  dotsGeo.setAttribute('position', new THREE.BufferAttribute(dotPositions, 3));
+  dotsMat = new THREE.PointsMaterial({
+    color: palette.value.dots,
+    size: 0.08,
+    transparent: true,
+    opacity: 0.95,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     sizeAttenuation: true,
   });
-  const points = new THREE.Points(pointsGeo, pointsMat);
-  group.add(points);
+  accentDots = new THREE.Points(dotsGeo, dotsMat);
+  group.add(accentDots);
 
-  // Внутреннее ядро (контр-спин).
-  const coreSphere = new THREE.IcosahedronGeometry(0.55, 1);
-  const coreWire = new THREE.WireframeGeometry(coreSphere);
-  coreMat = new THREE.LineBasicMaterial({
-    color: palette.value.core,
-    transparent: true,
-    opacity: 0.6,
-  });
-  core = new THREE.LineSegments(coreWire, coreMat);
-  group.add(core);
-
-  // sphereGeo уже клонирован в wire/points — освобождаем промежуточные.
-  sphereGeo.dispose();
-  coreSphere.dispose();
+  outerGeo.dispose();
+  innerGeo.dispose();
 }
 
 function animate(): void {
@@ -264,26 +312,22 @@ function animate(): void {
 
   const tSec = performance.now() / 1000;
 
-  // Базовый spin: всегда заметно крутится даже на idle, чтобы орб «жил».
-  // Ускоряется в active/speaking/busy. Hover усиливает только без voice-mode —
-  // в voice-mode орб «слушает» Алису и не реагирует на мышь.
-  let baseSpin = 0.008;
-  if (props.state === 'active') baseSpin = 0.012;
-  if (props.state === 'error') baseSpin = 0.016;
+  // Базовый spin: медленнее предыдущей версии (0.008 → 0.005). Cinematic-feel.
+  let baseSpin = 0.005;
+  if (props.state === 'active') baseSpin = 0.008;
+  if (props.state === 'error') baseSpin = 0.012;
   if (props.voiceMode) {
-    if (props.voiceState === 'busy') baseSpin = 0.024;
-    else if (props.voiceState === 'speaking') baseSpin = 0.014;
-    else if (props.voiceState === 'listening') baseSpin = 0.01;
+    if (props.voiceState === 'busy') baseSpin = 0.014;
+    else if (props.voiceState === 'speaking') baseSpin = 0.009;
+    else if (props.voiceState === 'listening') baseSpin = 0.006;
   }
-  if (props.ambient) baseSpin = 0.006; // медленный, кинематографичный
+  if (props.ambient) baseSpin = 0.004; // самый медленный — кинематографичный
   if (reduceMotion.value) baseSpin *= 0.4;
 
-  // Mouse-tilt отключаем в voice-mode и ambient. Welcome теперь ambient — орб
-  // не реагирует на мышь, живёт собственной анимацией.
   const mouseDriven = !props.voiceMode && !props.ambient;
   if (props.voiceMode) {
     voiceTarget = voiceEnvelope(tSec, props.voiceState);
-    voiceAmp += (voiceTarget - voiceAmp) * 0.18; // smooth attack/release
+    voiceAmp += (voiceTarget - voiceAmp) * 0.12;
     mouseX = 0;
     mouseY = 0;
   } else if (!mouseDriven) {
@@ -294,74 +338,75 @@ function animate(): void {
     mouseY *= 0.96;
   }
 
-  const targetRotY = mouseDriven ? mouseX * 0.6 : 0;
-  const targetRotX = mouseDriven ? mouseY * 0.5 : 0;
+  // Lissajous tilt по X: две синусоиды разных частот → non-repetitive
+  // organic motion. Mouse-tilt overrides когда курсор активен.
+  const lissajousX = Math.sin(tSec * 0.31) * 0.14 + Math.sin(tSec * 0.13) * 0.06;
+  const lissajousY = Math.sin(tSec * 0.21 + 1.3) * 0.08;
 
-  curRotY += (targetRotY - curRotY) * 0.06 + velY + baseSpin;
-  curRotX += (targetRotX - curRotX) * 0.06;
+  const targetRotY = mouseDriven ? mouseX * 0.6 : lissajousY;
+  const targetRotX = mouseDriven ? mouseY * 0.5 : lissajousX;
 
-  // Multi-axis tumble: для busy («думает») и ambient — синхронный поворот по X
-  // на синусоиде создаёт ощущение «вычисления», когда орб не просто крутится
-  // вокруг одной оси, а перекатывается. Без этого busy визуально неотличим
-  // от обычного spin.
-  if ((props.voiceMode && props.voiceState === 'busy') || props.ambient) {
-    const xTumble = Math.sin(tSec * (props.ambient ? 0.42 : 0.9)) * 0.32;
-    curRotX += (xTumble - curRotX) * 0.08;
-  } else {
-    curRotX = Math.max(-0.55, Math.min(0.55, curRotX));
+  curRotY += (targetRotY - curRotY) * 0.05 + velY + baseSpin;
+  curRotX += (targetRotX - curRotX) * 0.05;
+
+  // Multi-axis tumble для busy («думаю») — синхронный поворот по X на синусоиде
+  // создаёт ощущение «вычисления». Без этого busy неотличим от обычного spin.
+  if (props.voiceMode && props.voiceState === 'busy') {
+    const xTumble = Math.sin(tSec * 0.7) * 0.28;
+    curRotX += (xTumble - curRotX) * 0.06;
   }
 
-  velY *= 0.94; // damping импульса
-  pulseScale += (1 - pulseScale) * 0.12; // релакс к 1
+  velY *= 0.94;
+  pulseScale += (1 - pulseScale) * 0.08;
 
   group.rotation.y = curRotY;
   group.rotation.x = curRotX;
 
-  // Idle breathing — лёгкая синусоида scale без voice-mode и ambient: даже
-  // «спокойный» орб не должен быть статичным.
+  // Idle breathing — едва заметная синусоида scale (без voice/ambient).
   let stateScale = 1;
   if (!props.voiceMode && !props.ambient) {
-    stateScale = 1 + Math.sin(tSec * 1.3) * 0.018;
+    stateScale = 1 + Math.sin(tSec * 1.1) * 0.012;
   }
-  // Voice-mode: «дыхание» от амплитуды. Listening → core тянет внимание внутрь
-  // (см. ниже), для group делаем меньшее рост — фокус на ядре, не на оболочке.
+  // Voice-mode: «дыхание» от амплитуды. Listening меньше (фокус внутрь),
+  // speaking — заметнее (орб «говорит» наружу).
   const voiceScale = props.voiceMode
-    ? 1 + voiceAmp * (props.voiceState === 'listening' ? 0.08 : 0.18)
+    ? 1 + voiceAmp * (props.voiceState === 'listening' ? 0.05 : 0.12)
     : 1;
-  // Ambient: периодическое «дыхание» в ритме broadcast-колец (~5с).
-  const ambientScale = props.ambient ? 1 + Math.sin(tSec * 0.62) * 0.025 : 1;
+  // Ambient: медленный 8s breath.
+  const ambientScale = props.ambient ? 1 + Math.sin(tSec * 0.78) * 0.018 : 1;
   group.scale.setScalar(pulseScale * voiceScale * stateScale * ambientScale);
 
-  // Core: контр-спин + расширение/яркость на пиках амплитуды. Listening даёт
-  // ядру отдельный, более сильный отклик (фокус внутрь).
-  if (core) {
-    core.rotation.y -= baseSpin * 2.5;
-    core.rotation.x += baseSpin * 1.5;
+  // Inner shell: counter-rotate по обоим осям. Скорость в 1.8× outer'а.
+  if (innerWire) {
+    innerWire.rotation.y -= baseSpin * 1.8;
+    innerWire.rotation.x += baseSpin * 1.1;
     if (props.voiceMode) {
-      const coreBoost = props.voiceState === 'listening' ? 0.7 : 0.45;
-      core.scale.setScalar(1 + voiceAmp * coreBoost);
-      if (coreMat) coreMat.opacity = 0.45 + voiceAmp * 0.5;
+      const innerBoost = props.voiceState === 'listening' ? 0.55 : 0.3;
+      innerWire.scale.setScalar(1 + voiceAmp * innerBoost);
+      if (innerMat) innerMat.opacity = 0.45 + voiceAmp * 0.4;
     } else if (props.ambient) {
-      // Ambient: ядро дышит независимо от внешней оболочки — двухслойный
-      // «организм», а не монолитный куль. Period 3.4с противофаза с oblochkoi.
-      core.scale.setScalar(1 + Math.sin(tSec * 1.85) * 0.12);
-      if (coreMat) coreMat.opacity = 0.5 + Math.sin(tSec * 1.85) * 0.18;
+      // Ambient: ядро дышит независимо от outer'а — двухслойный «организм».
+      innerWire.scale.setScalar(1 + Math.sin(tSec * 1.45) * 0.08);
+      if (innerMat) innerMat.opacity = 0.5 + Math.sin(tSec * 1.45) * 0.12;
     }
   }
 
-  // Points в voice-mode пульсируют размером — выглядит как «искры» голоса.
-  if (props.voiceMode && pointsMat) {
-    pointsMat.size = 0.05 + voiceAmp * 0.06;
-    pointsMat.opacity = 0.7 + voiceAmp * 0.3;
-  } else if (props.ambient && pointsMat) {
-    // Ambient: размер вершин слегка пульсирует — «искры» при broadcast.
-    pointsMat.size = 0.05 + Math.abs(Math.sin(tSec * 0.62)) * 0.03;
-    pointsMat.opacity = 0.7 + Math.abs(Math.sin(tSec * 0.62)) * 0.25;
+  // Accent dots: pulse в voice-mode + slight independent rotation для
+  // «искристого» feeling.
+  if (accentDots) {
+    accentDots.rotation.y = curRotY * 0.85;
+    accentDots.rotation.x = curRotX * 0.85;
+    if (props.voiceMode && dotsMat) {
+      dotsMat.size = 0.08 + voiceAmp * 0.06;
+      dotsMat.opacity = 0.85 + voiceAmp * 0.15;
+    } else if (props.ambient && dotsMat) {
+      dotsMat.size = 0.08 + Math.abs(Math.sin(tSec * 0.78)) * 0.02;
+    }
   }
 
-  // Wire opacity тоже плавает — общая «жизненность» орба под голос.
-  if (props.voiceMode && wireMat) {
-    wireMat.opacity = 0.45 + voiceAmp * 0.3;
+  // Outer wire opacity «дышит» в voice-mode.
+  if (props.voiceMode && outerMat) {
+    outerMat.opacity = 0.32 + voiceAmp * 0.28;
   }
 
   // CSS-var для halo glow — синхронизируем blur-фон с амплитудой звука.
@@ -408,17 +453,15 @@ function onMouseMove(e: MouseEvent): void {
 
 // Реактивная palette → обновляем materials без re-init сцены.
 watch(palette, (p) => {
-  wireMat?.color.setHex(p.wire);
-  pointsMat?.color.setHex(p.points);
-  coreMat?.color.setHex(p.core);
+  outerMat?.color.setHex(p.outer);
+  innerMat?.color.setHex(p.inner);
+  dotsMat?.color.setHex(p.dots);
 });
 
 onMounted(() => {
   init();
   raf = requestAnimationFrame(animate);
 
-  // В ambient/voice-mode мышь не нужна — экономим listener и предотвращаем
-  // случайные tilt'ы при движении курсора рядом с орбом.
   const mouseDriven = !props.voiceMode && !props.ambient;
   if (mouseDriven) {
     const target: Window | HTMLElement | null = props.trackWindow ? window : rootEl.value;
@@ -441,7 +484,6 @@ onBeforeUnmount(() => {
 
   resizeObs?.disconnect();
 
-  // Полный teardown GPU-ресурсов.
   if (group) {
     group.traverse((obj) => {
       if (obj instanceof THREE.LineSegments || obj instanceof THREE.Points) {
@@ -449,27 +491,33 @@ onBeforeUnmount(() => {
       }
     });
   }
-  wireMat?.dispose();
-  pointsMat?.dispose();
-  coreMat?.dispose();
+  outerMat?.dispose();
+  innerMat?.dispose();
+  dotsMat?.dispose();
   renderer?.dispose();
 
   renderer = null;
   scene = null;
   camera = null;
   group = null;
-  core = null;
-  wireMat = null;
-  pointsMat = null;
-  coreMat = null;
+  outerWire = null;
+  innerWire = null;
+  accentDots = null;
+  outerMat = null;
+  innerMat = null;
+  dotsMat = null;
 });
 </script>
 
 <style scoped lang="scss">
 .orb {
   --orb-size: 80px;
-  --orb-glow: rgba(var(--color-brand-purple-rgb), 0.55);
-  --orb-glow-2: rgba(var(--color-brand-pink-rgb), 0.45);
+  // Базовая палитра halo — переопределяется state/voice-state модификаторами.
+  --orb-halo-1: rgba(var(--color-brand-violet-rgb), 0.55);
+  --orb-halo-2: rgba(var(--color-brand-purple-rgb), 0.42);
+  --orb-halo-3: rgba(var(--color-brand-pink-rgb), 0.18);
+  --orb-rim: rgba(var(--color-brand-purple-rgb), 0.7);
+  --orb-rim-2: rgba(var(--color-brand-pink-rgb), 0.4);
   // Voice-amp 0..1 — пишется из animate(), читается в halo.
   --orb-voice-amp: 0;
 
@@ -480,10 +528,9 @@ onBeforeUnmount(() => {
   display: inline-block;
   isolation: isolate;
   pointer-events: none;
-  // Idle/active без voice-mode: лёгкое CSS-дыхание ВО ВНЕШНЕМ слое (Three.js
-  // делает свой scale в animate(), а это — внешний контейнер). Никогда не
-  // должен быть статичен — даже на parking page орб «дышит».
-  animation: orbBreath 4.6s ease-in-out infinite alternate;
+  // Тончайшее CSS-дыхание во внешнем контейнере (Three.js делает свой scale).
+  // Period 6s (было 4.6s) — более кинематографично.
+  animation: orbBreath calc(6s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite alternate;
 
   &--sm {
     --orb-size: 40px;
@@ -501,71 +548,174 @@ onBeforeUnmount(() => {
     --orb-size: clamp(340px, 46vw, 600px);
   }
 
+  // State-driven halo палитра. Модификаторы переопределяют только токены
+  // halo/rim — ничего не дублируем.
   &--idle {
-    --orb-glow: rgba(var(--color-brand-violet-rgb), 0.42);
-    --orb-glow-2: rgba(var(--color-brand-purple-rgb), 0.32);
+    --orb-halo-1: rgba(var(--color-brand-violet-rgb), 0.5);
+    --orb-halo-2: rgba(var(--color-brand-purple-rgb), 0.35);
+    --orb-halo-3: rgba(var(--color-brand-pink-rgb), 0.16);
   }
   &--active {
-    --orb-glow: rgba(var(--color-brand-purple-rgb), 0.7);
-    --orb-glow-2: rgba(var(--color-brand-pink-rgb), 0.55);
+    --orb-halo-1: rgba(var(--color-brand-purple-rgb), 0.7);
+    --orb-halo-2: rgba(var(--color-brand-pink-rgb), 0.5);
+    --orb-halo-3: rgba(var(--color-brand-amber-rgb), 0.22);
+    --orb-rim: rgba(var(--color-brand-purple-rgb), 0.85);
+    --orb-rim-2: rgba(var(--color-brand-pink-rgb), 0.55);
   }
   &--error {
-    --orb-glow: rgba(255, 85, 119, 0.6);
-    --orb-glow-2: rgba(255, 138, 77, 0.5);
+    --orb-halo-1: rgba(255, 85, 119, 0.6);
+    --orb-halo-2: rgba(255, 138, 77, 0.5);
+    --orb-halo-3: rgba(255, 85, 119, 0.22);
+    --orb-rim: rgba(255, 85, 119, 0.7);
+    --orb-rim-2: rgba(255, 138, 77, 0.4);
+  }
+
+  // Voice-state палитры.
+  &--voice-listening {
+    --orb-halo-1: rgba(var(--color-brand-cyan-rgb), 0.55);
+    --orb-halo-2: rgba(var(--color-brand-violet-rgb), 0.42);
+    --orb-halo-3: rgba(var(--color-brand-purple-rgb), 0.18);
+    --orb-rim: rgba(var(--color-brand-cyan-rgb), 0.7);
+    --orb-rim-2: rgba(var(--color-brand-violet-rgb), 0.45);
+  }
+  &--voice-speaking {
+    --orb-halo-1: rgba(var(--color-brand-purple-rgb), 0.7);
+    --orb-halo-2: rgba(var(--color-brand-pink-rgb), 0.55);
+    --orb-halo-3: rgba(var(--color-brand-amber-rgb), 0.25);
+    --orb-rim: rgba(var(--color-brand-pink-rgb), 0.85);
+    --orb-rim-2: rgba(var(--color-brand-amber-rgb), 0.5);
+  }
+  &--voice-busy {
+    --orb-halo-1: rgba(var(--color-brand-amber-rgb), 0.6);
+    --orb-halo-2: rgba(var(--color-brand-purple-rgb), 0.45);
+    --orb-halo-3: rgba(var(--color-brand-yellow-rgb), 0.22);
+    --orb-rim: rgba(var(--color-brand-amber-rgb), 0.75);
+    --orb-rim-2: rgba(var(--color-brand-purple-rgb), 0.5);
   }
 }
 
+// =============================================================================
+// 3-layer volumetric halo: каждый layer на своём blur'е и периоде anim'а.
+// Сдвиг по hue (violet → purple → pink/amber) даёт «хроматический» edge —
+// premium-lens feel. На voice-mode keyframes отключаются, opacity/scale
+// тянутся за CSS-var --orb-voice-amp из animate() ticker'а.
+// =============================================================================
 .orb__halo {
   position: absolute;
-  inset: -22%;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%, var(--orb-glow) 0%, transparent 55%),
-    radial-gradient(circle at 70% 30%, var(--orb-glow-2) 0%, transparent 50%);
-  filter: blur(24px);
-  // В voice-mode opacity тянется за амплитудой — halo «дышит» под голос.
-  // По дефолту работает обычная idle-анимация orbHalo (см. ниже).
-  opacity: calc(0.55 + var(--orb-voice-amp) * 0.45);
-  transform: scale(calc(1 + var(--orb-voice-amp) * 0.08));
-  z-index: -1;
   pointer-events: none;
-  animation: orbHalo 5s ease-in-out infinite alternate;
+  z-index: -1;
+
+  &--inner {
+    inset: -12%;
+    background: radial-gradient(circle at 50% 50%, var(--orb-halo-1) 0%, transparent 55%);
+    filter: blur(12px);
+    animation: orbHaloInner calc(6s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite
+      alternate;
+  }
+  &--mid {
+    inset: -22%;
+    background: radial-gradient(circle at 50% 50%, var(--orb-halo-2) 0%, transparent 60%);
+    filter: blur(28px);
+    animation: orbHaloMid calc(8s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite
+      alternate-reverse;
+  }
+  &--wide {
+    inset: -45%;
+    background:
+      radial-gradient(circle at 65% 30%, var(--orb-halo-3) 0%, transparent 55%),
+      radial-gradient(circle at 35% 70%, var(--orb-halo-3) 0%, transparent 60%);
+    filter: blur(72px);
+    animation: orbHaloWide calc(12s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite
+      alternate;
+  }
 }
 
-// В voice-mode keyframes-анимация выключена: glow управляется CSS-var из JS-`animate()`.
-.orb--voice .orb__halo {
+// В voice-mode keyframes выключаем — opacity/scale управляются JS (--orb-voice-amp).
+.orb--voice .orb__halo--inner {
   animation: none;
+  opacity: calc(0.65 + var(--orb-voice-amp) * 0.35);
+  transform: scale(calc(1 + var(--orb-voice-amp) * 0.06));
+  transition:
+    opacity 90ms linear,
+    transform 90ms linear;
+}
+.orb--voice .orb__halo--mid {
+  animation: none;
+  opacity: calc(0.55 + var(--orb-voice-amp) * 0.4);
+  transform: scale(calc(1 + var(--orb-voice-amp) * 0.04));
   transition:
     opacity 90ms linear,
     transform 90ms linear;
 }
 
-// Busy («думает»): halo вращается вокруг орба — gradient-сместился по углу,
-// glow-точка перемещается по окружности. Чёткий визуальный сигнал «processing».
-.orb--voice-busy .orb__halo {
-  animation: orbHaloOrbit 2.8s linear infinite;
-  filter: blur(20px);
+// =============================================================================
+// Rim-light: thin conic-gradient ring по edge'у орба. Сигнатурный эффект —
+// «lens flare»/«iridescent rim». 12s-период вращения, медленный → premium.
+// =============================================================================
+.orb__rim {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    var(--orb-rim) 60deg,
+    var(--orb-rim-2) 110deg,
+    transparent 180deg,
+    transparent 280deg,
+    rgba(255, 255, 255, 0.18) 320deg,
+    transparent 360deg
+  );
+  // Mask: оставляем только тонкое кольцо по краю (radial alpha-gradient).
+  -webkit-mask: radial-gradient(
+    circle at center,
+    transparent 49%,
+    #000 49.5%,
+    #000 50.5%,
+    transparent 51%
+  );
+  mask: radial-gradient(circle at center, transparent 49%, #000 49.5%, #000 50.5%, transparent 51%);
+  animation: orbRimRotate calc(12s / max(var(--motion-scale, 1), 0.001)) linear infinite;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.85;
 }
 
-// Listening: halo сжимается внутрь (фокус), а ядро в Three.js одновременно
-// растёт — в сумме «втягивающее» движение, как у настоящей речи распознавания.
-.orb--voice-listening .orb__halo {
-  animation: orbHaloFocus 1.4s ease-in-out infinite;
+// На sm (sidebar 40px) маска даёт слишком тонкую полоску — увеличиваем толщину.
+.orb--sm .orb__rim {
+  -webkit-mask: radial-gradient(
+    circle at center,
+    transparent 47%,
+    #000 48%,
+    #000 52%,
+    transparent 53%
+  );
+  mask: radial-gradient(circle at center, transparent 47%, #000 48%, #000 52%, transparent 53%);
+  opacity: 0.7;
 }
 
-// Speaking: halo пульсирует резче, blur меньше — orb ярко «излучает».
-.orb--voice-speaking .orb__halo {
-  animation: orbHaloEmit 0.8s ease-in-out infinite;
-  filter: blur(18px);
+// Speaking: rim вращается быстрее (даёт ощущение active broadcast'а).
+.orb--voice-speaking .orb__rim {
+  animation-duration: calc(5s / max(var(--motion-scale, 1), 0.001));
+  opacity: 1;
+}
+// Busy: rim становится amber-tinted и вращается ещё медленнее (медитативно
+// «думает»).
+.orb--voice-busy .orb__rim {
+  animation-duration: calc(16s / max(var(--motion-scale, 1), 0.001));
+  opacity: 0.95;
 }
 
-// Ring — расходящаяся волна на click.
+// =============================================================================
+// Click ring (резерв для будущего click-feedback).
+// =============================================================================
 .orb__ring {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--orb-glow-2), white 25%);
-  box-shadow: 0 0 16px var(--orb-glow-2);
+  border: 1.5px solid var(--orb-rim);
+  box-shadow: 0 0 16px var(--orb-rim);
   opacity: 0;
   pointer-events: none;
 }
@@ -579,11 +729,9 @@ onBeforeUnmount(() => {
 }
 
 // =============================================================================
-// Spectral analyzer: радиальные бары вокруг орба
+// Spectrum analyzer (только speaking): 14 баров, длинные тонкие, period 1.2s.
+// Менее «AI-cliché» чем 28-bar wall, более elegant feel.
 // =============================================================================
-// Каждый бар — wrap (rotate в плоскости) + inner i (scaleY-анимация). Стаггер
-// 73мс на бар + длинный 1.6с период даёт «несинхронную» волну, которая не
-// складывается обратно в чистый ripple за один период.
 .orb__spectrum {
   position: absolute;
   inset: 0;
@@ -597,151 +745,154 @@ onBeforeUnmount(() => {
   inset: 0;
   display: grid;
   place-items: center;
-  transform: rotate(calc((var(--i) - 1) * (360deg / 28)));
+  transform: rotate(calc((var(--i) - 1) * (360deg / 14)));
 }
 
 .orb__spectrum-bar {
-  --base-amp: 0.5; // idle (state-driven, см. ниже)
-  --peak-amp: 1.05;
+  --base-amp: 0.4;
+  --peak-amp: 1.2;
   display: block;
-  width: 2px;
-  height: calc(var(--orb-size) * 0.18);
-  margin-bottom: calc(var(--orb-size) * 0.92);
+  width: 1.5px;
+  height: calc(var(--orb-size) * 0.16);
+  margin-bottom: calc(var(--orb-size) * 0.94);
   border-radius: 2px;
   background: linear-gradient(
     0deg,
     rgba(var(--color-brand-pink-rgb), 0) 0%,
-    rgba(var(--color-brand-pink-rgb), 0.85) 38%,
+    rgba(var(--color-brand-amber-rgb), 0.7) 30%,
+    rgba(var(--color-brand-pink-rgb), 0.95) 65%,
     rgba(var(--color-brand-purple-rgb), 1) 100%
   );
   transform: scaleY(var(--base-amp));
   transform-origin: 50% 100%;
-  filter: drop-shadow(0 0 4px rgba(var(--color-brand-purple-rgb), 0.45));
-  animation: orbSpectrumPulse 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  animation-delay: calc(var(--i) * -73ms);
+  filter: drop-shadow(0 0 4px rgba(var(--color-brand-pink-rgb), 0.45));
+  // Period 1.2s, stagger -90ms на бар (×14 = ~1.26s — не повторяется в фазе).
+  animation: orbSpectrumPulse calc(1.2s / max(var(--motion-scale, 1), 0.001))
+    cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: calc(var(--i) * -90ms * var(--motion-scale, 1));
   will-change: transform, opacity;
-  opacity: 0.55;
+  opacity: 0.7;
 }
 
 @keyframes orbSpectrumPulse {
   0%,
   100% {
     transform: scaleY(var(--base-amp));
-    opacity: 0.45;
+    opacity: 0.5;
   }
   50% {
-    transform: scaleY(var(--peak-amp));
-    opacity: 0.95;
-  }
-}
-
-// State-driven амплитуда. Idle — едва дышит; listening — внятный пульс;
-// speaking — широкая волна; busy — radar-sweep по периметру.
-.orb--voice-idle .orb__spectrum-bar {
-  --base-amp: 0.32;
-  --peak-amp: 0.7;
-}
-.orb--voice-listening .orb__spectrum-bar {
-  --base-amp: 0.45;
-  --peak-amp: 1.15;
-}
-.orb--voice-speaking .orb__spectrum-bar {
-  --base-amp: 0.55;
-  --peak-amp: 1.55;
-  animation-duration: 0.9s;
-  background: linear-gradient(
-    0deg,
-    rgba(var(--color-brand-pink-rgb), 0) 0%,
-    rgba(255, 184, 102, 0.9) 30%,
-    rgba(var(--color-brand-pink-rgb), 1) 70%,
-    rgba(var(--color-brand-purple-rgb), 1) 100%
-  );
-}
-// Busy: radar-sweep вокруг орба. Период 1.4с равномерно делится на 28 баров
-// (50мс на бар) — пик «бежит» по кругу как луч локатора, а не пульсирует
-// синхронно. Чёткий визуальный сигнал «думаю / обрабатываю».
-.orb--voice-busy .orb__spectrum-bar {
-  --base-amp: 0.35;
-  --peak-amp: 1.4;
-  animation-name: orbSpectrumSweep;
-  animation-duration: 1.4s;
-  animation-timing-function: cubic-bezier(0.16, 0.84, 0.44, 1);
-  animation-delay: calc(var(--i) * -50ms);
-  background: linear-gradient(
-    0deg,
-    rgba(255, 184, 102, 0) 0%,
-    rgba(255, 184, 102, 0.85) 50%,
-    rgba(var(--color-brand-purple-rgb), 1) 100%
-  );
-  filter: drop-shadow(0 0 6px rgba(255, 184, 102, 0.4));
-}
-.orb--error .orb__spectrum-bar {
-  background: linear-gradient(
-    0deg,
-    rgba(255, 85, 119, 0) 0%,
-    rgba(255, 138, 77, 0.9) 40%,
-    rgba(255, 85, 119, 1) 100%
-  );
-  filter: drop-shadow(0 0 5px rgba(255, 85, 119, 0.5));
-}
-
-// =============================================================================
-// Ambient broadcast rings (Welcome / онбординг)
-// =============================================================================
-// Три концентрических кольца, расходятся от орба наружу с шагом по фазе —
-// визуальная «передача» сигнала к orbital-chips (протоколам интеграций).
-.orb__broadcast {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-}
-
-.orb__broadcast-ring {
-  --phase: 0;
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1px solid rgba(var(--color-brand-purple-rgb), 0.4);
-  box-shadow:
-    0 0 32px rgba(var(--color-brand-purple-rgb), 0.25),
-    inset 0 0 18px rgba(var(--color-brand-pink-rgb), 0.2);
-  opacity: 0;
-  animation: orbBroadcast 5.4s cubic-bezier(0.16, 0.84, 0.44, 1) infinite;
-  animation-delay: calc(var(--phase) * 1.8s);
-}
-
-@keyframes orbBroadcast {
-  0% {
-    transform: scale(0.85);
-    opacity: 0;
-    border-color: rgba(var(--color-brand-purple-rgb), 0.6);
-  }
-  20% {
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-    border-color: rgba(var(--color-brand-pink-rgb), 0);
-  }
-}
-
-@keyframes orbSpectrumSweep {
-  0%,
-  70%,
-  100% {
-    transform: scaleY(var(--base-amp));
-    opacity: 0.35;
-  }
-  40% {
     transform: scaleY(var(--peak-amp));
     opacity: 1;
   }
 }
 
 // =============================================================================
-// Idle breath: внешний контейнер слегка пульсирует — орб никогда не статичен.
+// Listening: одиночный core-pulse в центре. Чистый focus, не 28 баров.
+// =============================================================================
+.orb__pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--orb-size) * 0.18);
+  height: calc(var(--orb-size) * 0.18);
+  margin-top: calc(var(--orb-size) * -0.09);
+  margin-left: calc(var(--orb-size) * -0.09);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(var(--color-brand-cyan-rgb), 0.95) 0%,
+    rgba(var(--color-brand-violet-rgb), 0.6) 60%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 24px rgba(var(--color-brand-cyan-rgb), 0.6),
+    0 0 48px rgba(var(--color-brand-violet-rgb), 0.4);
+  animation: orbCorePulse calc(1.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes orbCorePulse {
+  0%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+// =============================================================================
+// Busy: одиночная scan-arc на halo. Conic-gradient, медленно вращается. Чёткий
+// сигнал «processing» без агрессивного 28-bar sweep'а.
+// =============================================================================
+.orb__scan {
+  position: absolute;
+  inset: -8%;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(var(--color-brand-amber-rgb), 0.72) 30deg,
+    rgba(var(--color-brand-yellow-rgb), 0.55) 50deg,
+    transparent 80deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(
+    circle at center,
+    transparent 46%,
+    #000 47%,
+    #000 53%,
+    transparent 54%
+  );
+  mask: radial-gradient(circle at center, transparent 46%, #000 47%, #000 53%, transparent 54%);
+  animation: orbScanRotate calc(2.4s / max(var(--motion-scale, 1), 0.001)) linear infinite;
+  pointer-events: none;
+  z-index: 1;
+  filter: drop-shadow(0 0 12px rgba(var(--color-brand-amber-rgb), 0.5));
+}
+
+@keyframes orbScanRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Voice/ambient переопределяют idle-breath на orb-уровне (внутри keyframes уже
+// своё движение).
+.orb--voice,
+.orb--ambient {
+  animation: none;
+}
+
+// =============================================================================
+// Reduced-motion: глушим все CSS-keyframes. Three.js spin сам глушится через
+// reduceMotion ×0.4 в animate().
+// =============================================================================
+@media (prefers-reduced-motion: reduce) {
+  .orb {
+    animation: none;
+  }
+  .orb__halo,
+  .orb__rim,
+  .orb__spectrum-bar,
+  .orb__pulse,
+  .orb__scan {
+    animation: none;
+  }
+  .orb__spectrum-bar {
+    transform: scaleY(var(--base-amp));
+    opacity: 0.55;
+  }
+  .orb__rim {
+    opacity: 0.5;
+  }
+}
+
+// =============================================================================
+// Keyframes
 // =============================================================================
 @keyframes orbBreath {
   0% {
@@ -752,96 +903,43 @@ onBeforeUnmount(() => {
   }
 }
 
-// Halo state-варианты: каждое голосовое состояние получает свою форму движения.
-// Busy — orbiting glow (точка света бегает по окружности halo).
-@keyframes orbHaloOrbit {
-  0% {
-    transform: rotate(0deg) scale(1.04);
-    opacity: 0.55;
-  }
-  50% {
-    transform: rotate(180deg) scale(1.12);
-    opacity: 0.85;
-  }
-  100% {
-    transform: rotate(360deg) scale(1.04);
-    opacity: 0.55;
-  }
-}
-
-// Listening — halo сжимается внутрь (втягивает внимание).
-@keyframes orbHaloFocus {
+@keyframes orbHaloInner {
   0%,
   100% {
-    transform: scale(1.02);
-    opacity: 0.55;
-  }
-  50% {
-    transform: scale(0.88);
-    opacity: 0.85;
-  }
-}
-
-// Speaking — резкий короткий пульс наружу.
-@keyframes orbHaloEmit {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.6;
-  }
-  50% {
-    transform: scale(1.18);
-    opacity: 1;
-  }
-}
-
-// Voice-mode/ambient переопределяют idle-breath на orb-уровне (внутри
-// keyframes уже своё движение, breath сверху создавал бы дрожание).
-.orb--voice,
-.orb--ambient {
-  animation: none;
-}
-
-// Reduce-motion — глушим CSS-keyframes, оставляем тонкую базовую амплитуду.
-// Three.js spin сам глушится через reduceMotion ×0.4 в animate().
-@media (prefers-reduced-motion: reduce) {
-  .orb {
-    animation: none;
-  }
-  .orb__spectrum-bar {
-    animation: none;
-    transform: scaleY(var(--base-amp));
-    opacity: 0.55;
-  }
-  .orb__broadcast-ring {
-    animation: none;
-    opacity: 0.25;
-    transform: scale(1.6);
-  }
-  .orb--voice .orb__halo,
-  .orb--ambient .orb__halo {
-    animation: none !important;
-  }
-}
-
-@keyframes orbHalo {
-  0% {
-    opacity: 0.45;
+    opacity: 0.65;
     transform: scale(0.96);
   }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.04);
+  }
+}
+@keyframes orbHaloMid {
+  0%,
   100% {
-    opacity: 0.8;
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
     transform: scale(1.06);
   }
 }
-@keyframes orbRingPulse {
-  0% {
-    opacity: 0.85;
-    transform: scale(0.98);
-  }
+@keyframes orbHaloWide {
+  0%,
   100% {
-    opacity: 0;
-    transform: scale(1.45);
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes orbRimRotate {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

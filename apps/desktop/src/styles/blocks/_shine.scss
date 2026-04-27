@@ -1,0 +1,70 @@
+// shine-load — initialization-phase оверлей для skeleton-корней.
+// Brand-tinted diagonal sweep идёт по surface'у пока bootstrap-gate держит
+// skeleton'ы; после flip'а skeleton fade-out'ит вместе с shine'ом, а реальный
+// контент въезжает cascade-reveal'ом (см. useViewMount / runEntryAnimation).
+//
+// Реализован через ::before на skeleton-root'е → не плодит DOM, не блокирует
+// shimmer-pulse у вложенных .skeleton'ов (они работают параллельно: shimmer
+// = «карточка живая», shine-load = «вся секция инициализируется»).
+//
+// border-radius: inherit — sheen повторяет radius родителя, не вылезает за края.
+// mix-blend-mode: screen — gradient проявляется только поверх тёмных surface'ов
+// и не «убивает» цвет skeleton-плиток.
+.shine-load {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      105deg,
+      transparent 32%,
+      rgba(var(--color-brand-violet-rgb), 0.1) 44%,
+      rgba(var(--color-brand-yellow-rgb), 0.18) 50%,
+      rgba(var(--color-brand-pink-rgb), 0.1) 56%,
+      transparent 68%
+    );
+    background-size: 240% 240%;
+    background-position: -55% 50%;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    z-index: 1;
+    animation: shine-sweep calc(2.4s / max(var(--motion-scale, 1), 0.001)) linear infinite;
+  }
+
+  // Контентные children поднимаются над sheen'ом (skeleton-плитки видны
+  // под gradient'ом, а не наоборот).
+  > * {
+    position: relative;
+    z-index: 0;
+  }
+}
+
+@keyframes shine-sweep {
+  0% {
+    background-position: -55% 50%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    background-position: 155% 50%;
+    opacity: 0;
+  }
+}
+
+// Reduced / off motion — статичный subtle gradient без sweep'а.
+[data-motion='off'] .shine-load::before,
+[data-motion='reduced'] .shine-load::before,
+.app--reduce-motion .shine-load::before {
+  animation: none;
+  opacity: 0.55;
+  background-position: 50% 50%;
+}

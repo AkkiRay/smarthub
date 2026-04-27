@@ -36,13 +36,14 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import log from 'electron-log/main.js';
-import type {
-  AliceSkillConfig,
-  Device,
-  DeviceCommand,
-  DeviceCommandResult,
-  Room,
-  Scene,
+import {
+  mapWithLimit,
+  type AliceSkillConfig,
+  type Device,
+  type DeviceCommand,
+  type DeviceCommandResult,
+  type Room,
+  type Scene,
 } from '@smarthome/shared';
 import { buildExposedDeviceList, isSceneYandexId, sceneIdFromYandexId } from './device-mapper.js';
 import { TokenIssuer } from './token-issuer.js';
@@ -54,24 +55,6 @@ const RESPONSE_BUDGET_MS = 2_500;
 const ACTION_CONCURRENCY_LIMIT = 8;
 /** Hard-timeout на чтение request body. */
 const BODY_READ_TIMEOUT_MS = 8_000;
-
-/** Pool-сериализация: max N concurrent. Возвращает результат в порядке входа. */
-async function mapWithLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const idx = cursor++;
-      out[idx] = await fn(items[idx]!, idx);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
 
 /**
  * Allow-list redirect_uri для /authorize — open-redirect защита.

@@ -84,7 +84,7 @@
     &:hover {
       background: var(--color-bg-elevated);
       border-color: rgba(var(--tile-tone-rgb), 0.36);
-      transform: translateY(-2px);
+      transform: translate3d(0, var(--lift), 0);
       box-shadow: var(--shadow-hover);
 
       &::before {
@@ -97,7 +97,7 @@
     }
 
     &:active {
-      transform: translateY(0);
+      transform: translate3d(0, 0, 0) scale(var(--press-scale));
       transition-duration: var(--dur-instant);
     }
 

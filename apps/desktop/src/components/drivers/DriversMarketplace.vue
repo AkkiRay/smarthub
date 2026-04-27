@@ -64,6 +64,7 @@
             <div v-if="expanded === d.id" class="marketplace__panel">
               <DriverCredentialsForm
                 v-if="d.requiresCredentials && d.credentialsSchema"
+                :driver-id="d.id"
                 :schema="d.credentialsSchema"
                 :initial-values="(savedCreds[d.id] ?? {}) as Record<string, string>"
                 :busy="busyId === d.id"

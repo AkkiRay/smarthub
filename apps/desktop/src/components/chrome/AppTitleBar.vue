@@ -179,7 +179,7 @@ onBeforeUnmount(() => {
   // Separator строится разницей яркости + blur, без border-bottom.
   -webkit-app-region: drag;
   z-index: var(--z-sticky);
-  transition: background 320ms var(--ease-out);
+  transition: background var(--trans-medium);
 
   // Window blur: dimmed bg.
   &--blurred {
@@ -237,7 +237,7 @@ onBeforeUnmount(() => {
 
   &__wordmark-name {
     color: var(--color-text-primary);
-    transition: color 320ms var(--ease-out);
+    transition: color var(--trans-medium);
   }
   &__wordmark-suffix {
     color: var(--color-text-secondary);
@@ -271,8 +271,8 @@ onBeforeUnmount(() => {
     color: var(--color-text-secondary);
     -webkit-app-region: no-drag;
     transition:
-      background 200ms var(--ease-out),
-      opacity 240ms var(--ease-out);
+      background var(--trans-base),
+      opacity var(--trans-medium);
     max-width: 360px;
     min-width: 0;
 
@@ -325,7 +325,8 @@ onBeforeUnmount(() => {
     &--syncing {
       color: var(--color-brand-purple);
       .title-bar__status-dot {
-        animation: titleBarDotPulse 1.4s ease-in-out infinite;
+        animation: titleBarDotPulse calc(1.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out
+          infinite;
       }
     }
     &--offline {
@@ -352,8 +353,8 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: center;
     transition:
-      background 140ms linear,
-      color 140ms linear;
+      background var(--trans-base),
+      color var(--trans-base);
 
     svg {
       width: 11px;
@@ -394,10 +395,10 @@ onBeforeUnmount(() => {
   }
 }
 
-// Pill transition: fast, без spring.
+// Pill transition: fast, без spring. Через motion-scale.
 .title-pill-enter-active,
 .title-pill-leave-active {
-  transition: opacity 180ms var(--ease-out);
+  transition: opacity var(--trans-base);
 }
 .title-pill-enter-from,
 .title-pill-leave-to {

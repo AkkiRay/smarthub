@@ -19,10 +19,10 @@ export const tplinkTapoModule: DriverModule = {
       { key: 'password', label: 'Пароль TP-Link ID', kind: 'password', required: true },
       {
         key: 'hosts',
-        label: 'IP устройств (через запятую)',
+        label: 'IP устройств (опционально)',
         kind: 'text',
-        placeholder: '192.168.1.50, 192.168.1.51',
-        hint: 'Tapo не отвечает на UDP-broadcast — введите IP вручную или закрепите в DHCP.',
+        placeholder: 'auto',
+        hint: 'Можно оставить пустым — хаб сам опросит /24 LAN-сегмента и найдёт Tapo по KLAP-handshake. Заполните, только если автодискавери не находит устройство (например, в сегменте /16) или нужно ускорить старт.',
       },
     ],
   },

@@ -43,6 +43,7 @@ import {
 } from '@smarthome/shared';
 import { hsvToRgbInt, rgbIntToHsv } from '../_shared/color.js';
 import { BaseDriver } from '../_shared/base-driver.js';
+import { probeSubnet } from '../_shared/subnet-probe.js';
 
 const TAPO_HTTP_TIMEOUT_MS = 5000;
 const TAPO_KELVIN: { min: number; max: number } = { min: 2500, max: 6500 };
@@ -113,16 +114,49 @@ export class TPLinkTapoDriver extends BaseDriver {
     super();
   }
 
-  async discover(_signal: AbortSignal): Promise<DiscoveredDevice[]> {
-    // Tapo не отвечает на UDP broadcast — discovery делается через cloud OR явный список IP.
-    const hosts = this.creds.hosts ?? [];
-    const found: DiscoveredDevice[] = [];
+  async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
+    const explicit = (this.creds.hosts ?? []).filter(Boolean);
+    if (explicit.length > 0) return this.probeHosts(explicit, signal, /* logFailures */ true);
 
+    // Auto-mode: пробегаем /24 LAN-интерфейса с low concurrency. KLAP-handshake1
+    // занимает 80–200ms на устройство; non-Tapo хосты отлетают мгновенно по
+    // ECONNREFUSED либо по тайм-ауту 5с (опрос capped concurrency=16).
+    const found = await probeSubnet<DiscoveredDevice>({
+      driverId: this.id,
+      signal,
+      probeFn: async (host) => {
+        try {
+          const info = await this.getDeviceInfo(host);
+          const meta = inferMeta(info);
+          return {
+            driver: 'tplink-tapo',
+            externalId: info.device_id,
+            type: meta.isBulb ? DEVICE_TYPE.LIGHT : DEVICE_TYPE.SOCKET,
+            name: decodeBase64(info.nickname) || info.model,
+            address: host,
+            meta,
+          };
+        } catch {
+          return null;
+        }
+      },
+    });
+    if (found.length > 0) this.logInfo(`subnet-probe found ${found.length} Tapo device(s)`);
+    return found;
+  }
+
+  /** Probe явно заданного списка хостов (когда юзер вписал IP в creds.hosts). */
+  private async probeHosts(
+    hosts: string[],
+    _signal: AbortSignal,
+    logFailures: boolean,
+  ): Promise<DiscoveredDevice[]> {
+    const out: DiscoveredDevice[] = [];
     for (const host of hosts) {
       try {
         const info = await this.getDeviceInfo(host);
         const meta = inferMeta(info);
-        found.push({
+        out.push({
           driver: 'tplink-tapo',
           externalId: info.device_id,
           type: meta.isBulb ? DEVICE_TYPE.LIGHT : DEVICE_TYPE.SOCKET,
@@ -131,10 +165,10 @@ export class TPLinkTapoDriver extends BaseDriver {
           meta,
         });
       } catch (e) {
-        this.logWarn(`probe ${host} failed`, e);
+        if (logFailures) this.logWarn(`probe ${host} failed`, e);
       }
     }
-    return found;
+    return out;
   }
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {

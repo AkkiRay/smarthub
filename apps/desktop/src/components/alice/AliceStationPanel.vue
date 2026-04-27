@@ -226,7 +226,21 @@ const latest = computed(() => {
   return out;
 });
 
-const aliceState = computed(() => latest.value.aliceState ?? 'IDLE');
+// Источник истины — `station.voiceState` resolver (учитывает aliceText
+// fallback при BUSY/THINKING + TTS). Сырой `latest.aliceState` показывал
+// «Думает» во время реальной речи Алисы.
+const aliceState = computed(() => {
+  switch (station.voiceState) {
+    case 'listening':
+      return 'LISTENING';
+    case 'speaking':
+      return 'SPEAKING';
+    case 'busy':
+      return 'BUSY';
+    default:
+      return 'IDLE';
+  }
+});
 
 const aliceText = computed(() => latest.value.aliceText);
 const userText = computed(() => latest.value.userText);
@@ -699,13 +713,14 @@ function truncate(s: string, n: number): string {
         opacity: 1;
       }
       .vol-ico__wave {
-        animation: volWaveBreath 1.6s ease-in-out infinite;
+        animation: volWaveBreath calc(1.6s / max(var(--motion-scale, 1), 0.001)) ease-in-out
+          infinite;
       }
       .vol-ico__wave--2 {
-        animation-delay: 80ms;
+        animation-delay: calc(80ms * var(--motion-scale, 1));
       }
       .vol-ico__wave--3 {
-        animation-delay: 160ms;
+        animation-delay: calc(160ms * var(--motion-scale, 1));
       }
     }
 
@@ -719,25 +734,25 @@ function truncate(s: string, n: number): string {
       outline-offset: 2px;
     }
 
-    // Bump на изменение громкости.
+    // Bump на изменение громкости. Длительность через motion-scale.
     &--bump .vol-ico {
-      animation: volBump 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+      animation: volBump calc(320ms * var(--motion-scale, 1)) cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
     // Speaking: постоянная пульсация волн.
     &--speaking:not(.panel__vol-mute--mute) {
       .vol-ico__wave {
-        animation: volSpeak 1.2s ease-in-out infinite;
+        animation: volSpeak calc(1.2s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
       }
       .vol-ico__wave--2 {
-        animation-delay: 120ms;
+        animation-delay: calc(120ms * var(--motion-scale, 1));
       }
       .vol-ico__wave--3 {
-        animation-delay: 240ms;
+        animation-delay: calc(240ms * var(--motion-scale, 1));
       }
       &::after {
         opacity: 0.8;
-        animation: volPulseGlow 1.6s ease-out infinite;
+        animation: volPulseGlow calc(1.6s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
       }
     }
   }
@@ -843,7 +858,7 @@ function truncate(s: string, n: number): string {
       box-shadow:
         0 6px 24px rgba(var(--color-brand-pink-rgb), 0.45),
         0 0 0 2px rgba(255, 255, 255, 0.1) inset;
-      animation: tBtnPlayingPulse 2.4s ease-out infinite;
+      animation: tBtnPlayingPulse calc(2.4s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
     }
   }
 

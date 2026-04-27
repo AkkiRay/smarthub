@@ -1011,7 +1011,7 @@ async function onYandexMusicVoice(): Promise<void> {
   &[data-state='LISTENING']::after,
   &[data-state='SPEAKING']::after {
     opacity: 0.55;
-    animation: speakerHeroScan 2.8s ease-in-out infinite;
+    animation: speakerHeroScan calc(2.8s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
   }
 
   @media (max-width: 720px) {
@@ -1107,7 +1107,7 @@ async function onYandexMusicVoice(): Promise<void> {
 
     .speaker-hero__chip-dot {
       background: var(--color-success);
-      animation: heroChipPulse 2s ease-out infinite;
+      animation: heroChipPulse calc(2s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
     }
   }
   &[data-tone='warn'] {

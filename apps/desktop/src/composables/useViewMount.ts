@@ -7,6 +7,9 @@
  * `scope` резолвится в `onMounted` и ограничивает `querySelectorAll` корнем
  * view'а. `stagger.amount` ограничивает суммарное время волны независимо от
  * количества элементов.
+ *
+ * Возвращает handle с `runWave(opts?)` — для повторного re-fire после
+ * skeleton↔content swap'а (когда элементы появляются в DOM позже onMount'а).
  */
 
 import { onMounted, unref, type MaybeRefOrGetter } from 'vue';
@@ -30,6 +33,17 @@ export interface ViewMountOptions {
    * `await` не нужен.
    */
   defer?: Promise<void>;
+  /**
+   * `false` — не запускать волну автоматически на mount. Вызвать вручную
+   * через `handle.runWave()`. Полезно когда view сам управляет timing'ом
+   * (например через `RevealStage @reveal-done`).
+   */
+  auto?: boolean;
+}
+
+export interface ViewMountHandle {
+  /** Принудительный запуск волны. `delay` переопределяет default. */
+  runWave: (override?: { delay?: number }) => void;
 }
 
 function resolveScope(scope: ViewMountOptions['scope']): Element | null {
@@ -42,12 +56,13 @@ function pickAll(scope: Element | null, selector: string): Element[] {
   return Array.from(root.querySelectorAll(selector));
 }
 
-export function useViewMount(opts: ViewMountOptions = {}): void {
+export function useViewMount(opts: ViewMountOptions = {}): ViewMountHandle {
   const { from } = useGsap(null);
 
-  function runWave(): void {
+  function runWave(override?: { delay?: number }): void {
     const scope = resolveScope(opts.scope);
     const CLEAR = 'opacity,transform';
+    const baseDelay = override?.delay ?? opts.delay ?? 0;
 
     const headers = pickAll(scope, '[data-page-header], [data-anim="header"]');
     if (headers.length) {
@@ -55,7 +70,7 @@ export function useViewMount(opts: ViewMountOptions = {}): void {
         opacity: 0,
         y: 6,
         duration: 0.36,
-        delay: opts.delay ?? 0,
+        delay: baseDelay,
         ease: 'power2.out',
         clearProps: CLEAR,
       });
@@ -68,7 +83,7 @@ export function useViewMount(opts: ViewMountOptions = {}): void {
         y: 8,
         stagger: { each: 0.04, amount: 0.26, from: 'start' },
         duration: 0.4,
-        delay: (opts.delay ?? 0) + 0.06,
+        delay: baseDelay + 0.06,
         ease: 'power2.out',
         clearProps: CLEAR,
       });
@@ -81,18 +96,22 @@ export function useViewMount(opts: ViewMountOptions = {}): void {
         y: 6,
         stagger: { each: 0.035, amount: 0.36, from: 'start' },
         duration: 0.32,
-        delay: (opts.delay ?? 0) + 0.12,
+        delay: baseDelay + 0.12,
         ease: 'power2.out',
         clearProps: CLEAR,
       });
     }
   }
 
-  onMounted(() => {
-    if (opts.defer) {
-      void opts.defer.then(runWave);
-      return;
-    }
-    runWave();
-  });
+  if (opts.auto !== false) {
+    onMounted(() => {
+      if (opts.defer) {
+        void opts.defer.then(() => runWave());
+        return;
+      }
+      runWave();
+    });
+  }
+
+  return { runWave };
 }

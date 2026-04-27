@@ -261,26 +261,27 @@
   // depth-1: ambient floating-card; depth-2: hovered hero / panel; depth-3:
   // raised modal / popover. Каждый — комбинация ambient (key light) + brand-tint.
   --depth-1:
-    0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 8px 24px -12px rgba(0, 0, 0, 0.6),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6),
     0 2px 8px -4px rgba(var(--color-brand-violet-rgb), 0.18);
   --depth-2:
-    0 1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 18px 48px -24px rgba(0, 0, 0, 0.7),
+    0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 48px -24px rgba(0, 0, 0, 0.7),
     0 8px 24px -12px rgba(var(--color-brand-violet-rgb), 0.22);
   --depth-3:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
-    0 32px 80px -36px rgba(0, 0, 0, 0.78),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 32px 80px -36px rgba(0, 0, 0, 0.78),
     0 14px 36px -16px rgba(var(--color-brand-violet-rgb), 0.32);
 
   // ---- Glow halos (для interactive states, активных tile'ов, alice voice) ----
-  --glow-violet: 0 0 0 1px rgba(var(--color-brand-violet-rgb), 0.28),
+  --glow-violet:
+    0 0 0 1px rgba(var(--color-brand-violet-rgb), 0.28),
     0 0 24px rgba(var(--color-brand-violet-rgb), 0.42);
-  --glow-pink: 0 0 0 1px rgba(var(--color-brand-pink-rgb), 0.28),
+  --glow-pink:
+    0 0 0 1px rgba(var(--color-brand-pink-rgb), 0.28),
     0 0 24px rgba(var(--color-brand-pink-rgb), 0.42);
-  --glow-yellow: 0 0 0 1px rgba(var(--color-brand-yellow-rgb), 0.32),
+  --glow-yellow:
+    0 0 0 1px rgba(var(--color-brand-yellow-rgb), 0.32),
     0 0 24px rgba(var(--color-brand-yellow-rgb), 0.45);
-  --glow-cyan: 0 0 0 1px rgba(var(--color-brand-cyan-rgb), 0.28),
+  --glow-cyan:
+    0 0 0 1px rgba(var(--color-brand-cyan-rgb), 0.28),
     0 0 24px rgba(var(--color-brand-cyan-rgb), 0.4);
 
   // ---- Motion ----
@@ -321,10 +322,9 @@
   --trans-medium: var(--dur-medium) var(--ease-out);
   --trans-transform: var(--dur-medium) var(--ease-soft);
   --trans-press: var(--dur-fast) var(--ease-press);
-  --trans-colors: background var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
+  --trans-colors:
+    background var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 
   // ---- Semantic spacing scale (not opinionated about layout) ----
   --space-1: 4px;
@@ -418,16 +418,13 @@
 
   // Depth-токены в midnight — глубже + warm-violet tint.
   --depth-1:
-    0 1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 10px 28px -12px rgba(0, 0, 0, 0.7),
+    0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 10px 28px -12px rgba(0, 0, 0, 0.7),
     0 3px 10px -4px rgba(var(--color-brand-violet-rgb), 0.22);
   --depth-2:
-    0 1px 0 rgba(255, 255, 255, 0.07) inset,
-    0 22px 56px -24px rgba(0, 0, 0, 0.78),
+    0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 22px 56px -24px rgba(0, 0, 0, 0.78),
     0 10px 28px -12px rgba(var(--color-brand-violet-rgb), 0.28);
   --depth-3:
-    0 1px 0 rgba(255, 255, 255, 0.09) inset,
-    0 36px 90px -36px rgba(0, 0, 0, 0.85),
+    0 1px 0 rgba(255, 255, 255, 0.09) inset, 0 36px 90px -36px rgba(0, 0, 0, 0.85),
     0 16px 40px -16px rgba(var(--color-brand-violet-rgb), 0.4);
 
   // Аура: насыщеннее brand-палитра (violet → pink → yellow).

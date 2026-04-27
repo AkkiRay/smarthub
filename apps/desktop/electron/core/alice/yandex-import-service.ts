@@ -11,7 +11,12 @@
 
 import { createHash } from 'node:crypto';
 import log from 'electron-log/main.js';
-import type { DiscoveredDevice, YandexHomeHousehold, YandexHomeSnapshot } from '@smarthome/shared';
+import {
+  mapWithLimit,
+  type DiscoveredDevice,
+  type YandexHomeHousehold,
+  type YandexHomeSnapshot,
+} from '@smarthome/shared';
 
 /**
  * Лог SSID без раскрытия. SSID часто содержит privacy-данные (адрес, фамилия,
@@ -68,6 +73,11 @@ export class YandexImportService {
   private static readonly ORPHAN_SWEEP_MAX_RATIO = 0.5;
 
   constructor(private readonly deps: YandexImportServiceDeps) {}
+
+  /** mapWithLimit cap для импорта: 8 параллельных pair/refresh. Yandex API не
+   *  rate-limit'ит /devices, но 50+ конкурентных коннекшнов перегружают
+   *  локальный driver-pool. Cap 8 даёт 6-8x ускорение vs sequential. */
+  private static readonly IMPORT_CONCURRENCY = 8;
 
   async sync(): Promise<YandexImportSummary> {
     this.validateAuth();
@@ -402,7 +412,7 @@ export class YandexImportService {
     let failed = 0;
     let lastError: string | undefined;
 
-    for (const c of candidates) {
+    await mapWithLimit(candidates, YandexImportService.IMPORT_CONCURRENCY, async (c) => {
       const existing = this.deps.deviceRegistry.findByExternalId(
         YandexImportService.DRIVER_ID,
         c.externalId,
@@ -422,7 +432,7 @@ export class YandexImportService {
           `YandexImport.importDevices: pair/refresh ${c.externalId} (${c.name}) failed: ${lastError}`,
         );
       }
-    }
+    });
 
     let removed = 0;
     const orphanCandidates = this.deps.deviceRegistry

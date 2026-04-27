@@ -158,6 +158,15 @@
       </p>
     </section>
 
+    <!-- Loading skeleton (sync in-flight). -->
+    <div v-if="!hasSnapshot && station.isLoadingHome" class="home-dash__skeleton">
+      <div class="home-dash__skeleton-row">
+        <BaseSkeleton variant="line" width="40%" />
+        <BaseSkeleton variant="line" width="30%" />
+      </div>
+      <SkeletonGrid :count="6" cell-min="180px" cell-height="100px" />
+    </div>
+
     <!-- Empty state. -->
     <div v-if="!hasSnapshot && !station.isLoadingHome" class="home-dash__empty">
       <BaseIcon name="alice" :size="28" />
@@ -179,7 +188,15 @@ import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import type { YandexHomeSnapshot } from '@smarthome/shared';
 import type { IconName } from '@/components/base';
-import { BaseButton, BaseIcon, BaseSelect, BaseSwitch, type SelectOption } from '@/components/base';
+import {
+  BaseButton,
+  BaseIcon,
+  BaseSelect,
+  BaseSkeleton,
+  BaseSwitch,
+  SkeletonGrid,
+  type SelectOption,
+} from '@/components/base';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useDevicesStore } from '@/stores/devices';
 import { useToasterStore } from '@/stores/toaster';
@@ -800,6 +817,19 @@ function pluralize(n: number, forms: [string, string, string]): string {
     color: var(--color-text-muted);
     font-style: italic;
     line-height: 1.45;
+  }
+
+  &__skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 4px 0;
+  }
+
+  &__skeleton-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
   }
 
   &__empty {

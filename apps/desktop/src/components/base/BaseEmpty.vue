@@ -106,7 +106,7 @@ withDefaults(
   }
 
   &.is-loading :deep(svg) {
-    animation: emptyPulse 2.4s ease-in-out infinite;
+    animation: emptyPulse calc(2.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
   }
 }
 

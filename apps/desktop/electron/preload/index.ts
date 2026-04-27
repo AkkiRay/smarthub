@@ -74,6 +74,8 @@ const api: IpcApi = {
     list: () => invoke('drivers:list'),
     setCredentials: (driverId, creds) => invoke('drivers:set-credentials', driverId, creds),
     getCredentials: (driverId) => invoke('drivers:get-credentials', driverId),
+    testCredentials: (driverId, values) => invoke('drivers:test-credentials', driverId, values),
+    openExternal: (url) => invoke('drivers:open-external', url),
   },
   yandexStation: {
     discover: (timeoutMs) => invoke('yandexStation:discover', timeoutMs),

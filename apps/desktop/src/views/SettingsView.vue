@@ -212,12 +212,20 @@
           </div>
         </header>
 
-        <Transition name="settings-defer" mode="out-in">
-          <DriversMarketplace v-if="marketplaceReady" />
-          <div v-else class="settings__skeleton" aria-hidden="true">
-            <div v-for="n in 6" :key="n" class="settings__skeleton-row" />
-          </div>
-        </Transition>
+        <RevealStage
+          :ready="marketplaceReady"
+          :stagger-delay="0.08"
+          :stagger-amount="0.3"
+          :content-rise="8"
+          :content-enter-duration="0.45"
+        >
+          <template #skeleton>
+            <div class="settings__skeleton shine-load" aria-hidden="true">
+              <div v-for="n in 6" :key="n" class="settings__skeleton-row" data-skeleton-tile />
+            </div>
+          </template>
+          <DriversMarketplace />
+        </RevealStage>
       </article>
     </div>
   </section>
@@ -238,6 +246,7 @@ import {
   BaseSegmented,
   BaseSelect,
   BasePageHeader,
+  RevealStage,
   type SegmentedOption,
   type SelectOption,
 } from '@/components/base';

@@ -1,5 +1,6 @@
 import type { DriverModule } from '../driver-module.js';
 import { RubetekDriver } from './rubetek-driver.js';
+import { probeViaDiscover } from '../_shared/probe-via-discover.js';
 
 export const rubetekModule: DriverModule = {
   descriptor: {
@@ -14,6 +15,13 @@ export const rubetekModule: DriverModule = {
     maturity: 'planned',
     docsUrl: 'https://rubetek.com',
     credentialsSchema: [
+      {
+        key: '__register',
+        kind: 'register-link',
+        label: 'Открыть «Rubetek»',
+        hint: 'Используйте логин/пароль из мобильного приложения Rubetek.',
+        url: 'https://rubetek.com',
+      },
       { key: 'email', label: 'Email Rubetek', kind: 'text', required: true },
       { key: 'password', label: 'Пароль', kind: 'password', required: true },
       {
@@ -22,6 +30,7 @@ export const rubetekModule: DriverModule = {
         kind: 'text',
         hint: 'Опционально — фильтр по конкретному дому.',
       },
+      { key: '__test', kind: 'test-button', label: 'Проверить' },
     ],
   },
   async create({ settings }) {
@@ -36,5 +45,18 @@ export const rubetekModule: DriverModule = {
       password: c.password,
       houseId: c.houseId,
     });
+  },
+  async probe(values) {
+    if (!values['email'] || !values['password']) {
+      return { ok: false, message: 'Введите email и пароль' };
+    }
+    return probeViaDiscover(
+      async () =>
+        new RubetekDriver({
+          email: values['email']!,
+          password: values['password']!,
+          houseId: values['houseId'] || undefined,
+        }),
+    );
   },
 };

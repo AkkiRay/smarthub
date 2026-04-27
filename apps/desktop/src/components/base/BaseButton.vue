@@ -146,22 +146,25 @@ function animateRelease(): void {
   white-space: nowrap;
   cursor: pointer !important;
   user-select: none;
-  // Transition обоих background-форм: hover-rule использует shorthand.
+  // Все channel'ы через motion-tokens — реагируют на смену motion-level.
+  // Transform отдельным caнhannel'ом с soft easing'ом (без spring overshoot'а
+  // на hover — раньше combo lift+scale вызывала «дрожь» при быстром mouseover).
   transition:
-    background 180ms var(--ease-out),
-    background-color 180ms var(--ease-out),
-    border-color 180ms var(--ease-out),
-    color 180ms var(--ease-out),
-    transform 220ms var(--ease-spring),
-    box-shadow 220ms var(--ease-out),
-    outline-color 180ms var(--ease-out);
+    background var(--trans-base),
+    background-color var(--trans-base),
+    border-color var(--trans-base),
+    color var(--trans-base),
+    transform var(--trans-transform),
+    box-shadow var(--trans-medium),
+    outline-color var(--trans-base);
 
-  // Hover.
+  // Hover: только translateY (без scale) — меньше визуального шума при
+  // быстром перемещении мыши по ряду кнопок.
   &:hover:not(:disabled) {
     background: var(--bb-bg-hover);
     color: var(--bb-fg-hover);
     border-color: var(--bb-border-hover);
-    transform: translateY(-1px) scale(1.02);
+    transform: translate3d(0, var(--lift), 0);
     box-shadow:
       var(--bb-shadow-hover, 0 6px 18px rgba(0, 0, 0, 0.24)),
       0 0 0 1px var(--bb-border-hover);
@@ -169,9 +172,9 @@ function animateRelease(): void {
 
   &:active:not(:disabled) {
     background: var(--bb-bg-active);
-    transform: translateY(0) scale(0.98);
-    // Active: instant, без inertia.
-    transition-duration: 0ms;
+    transform: translate3d(0, 0, 0) scale(var(--press-scale));
+    // Active: instant, без inertia — тактильное «прижатие».
+    transition-duration: var(--dur-instant);
   }
 
   &:focus-visible {

@@ -22,9 +22,11 @@
   letter-spacing: -0.005em;
   white-space: nowrap;
   transition:
-    background 200ms var(--ease-out),
-    transform 200ms var(--ease-out),
-    box-shadow 200ms var(--ease-out);
+    background var(--trans-base),
+    border-color var(--trans-base),
+    color var(--trans-base),
+    transform var(--trans-transform),
+    box-shadow var(--trans-medium);
   @include focus-ring;
 
   // SVG sizing: фиксированный 16×16 для inline icon slot.
@@ -40,10 +42,11 @@
 
   &:hover {
     background: var(--bg-hover);
-    transform: translateY(-1px);
+    transform: translate3d(0, var(--lift), 0);
   }
   &:active {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
+    transition-duration: var(--dur-instant);
   }
 
   &--primary {
@@ -97,7 +100,7 @@
   }
 
   // Touch (coarse pointer): hover-эффекты отключены, явный tap-press через
-  // scale(0.97) и background-swap.
+  // scale(--press-scale) и background-swap. Длительность через --dur-instant.
   @media (hover: none) and (pointer: coarse) {
     height: var(--control-h-md);
     -webkit-tap-highlight-color: transparent;
@@ -109,8 +112,8 @@
     }
     &:active {
       background: var(--bg-hover);
-      transform: scale(0.97);
-      transition-duration: 80ms;
+      transform: scale(var(--press-scale));
+      transition-duration: var(--dur-instant);
     }
     &--sm {
       height: var(--control-h-sm);

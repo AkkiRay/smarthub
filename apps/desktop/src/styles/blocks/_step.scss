@@ -31,18 +31,27 @@
     gap: var(--space-2);
   }
 
+  // Dot фиксированной ширины 22px + transform-origin: left + scaleX(0.36) для
+  // inactive. Это держит place в flex-row стабильным — width НЕ анимируется,
+  // layout не пересчитывается при step-change. Раньше width 8 → 22 вызывал
+  // reflow всех siblings на каждом переходе.
   &__dot {
-    width: 8px;
+    width: 22px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: rgba(255, 255, 255, 0.16);
-    transition: all var(--dur-fast) var(--ease-out);
+    transform-origin: left center;
+    transform: scaleX(0.36);
+    transition:
+      transform var(--trans-transform),
+      background var(--trans-base),
+      box-shadow var(--trans-medium);
+    will-change: transform;
 
     &--active {
-      width: 22px;
-      border-radius: var(--radius-pill);
+      transform: scaleX(1);
       background: var(--gradient-brand);
-      box-shadow: 0 0 10px rgba(var(--color-brand-violet-rgb), 0.6);
+      box-shadow: 0 0 10px rgba(var(--color-brand-violet-rgb), 0.55);
     }
 
     &--done {

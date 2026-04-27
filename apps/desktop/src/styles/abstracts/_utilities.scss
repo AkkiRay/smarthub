@@ -50,15 +50,19 @@
   pointer-events: none;
 }
 
+// pulseGlow — мягкий «дыхательный» индикатор. Amplitude уменьшен с scale 1.05
+// до 1.025 + opacity 0.7→1 (вместо 0.6→1) — пульс остаётся читаемым, но не
+// «бьёт по глазам» в плотных гридах. Длительность задаёт callsite через
+// `animation: pulseGlow Xs ...` (см. usage'ы в HomeView, _step.scss).
 @keyframes pulseGlow {
   0%,
   100% {
-    opacity: 0.6;
+    opacity: 0.72;
     transform: scale(1);
   }
   50% {
     opacity: 1;
-    transform: scale(1.05);
+    transform: scale(1.025);
   }
 }
 @keyframes shimmer {
@@ -135,11 +139,14 @@
 
 // Performance helpers ————————————————————————————————————————————————
 
-// Auto-skip rendering off-screen children. Применяется на больших гридах
-// (devices, drivers marketplace), где элементов > 50.
+// Auto-skip rendering off-screen children. Применяется на длинных гридах
+// (devices, drivers marketplace), где элементов > 30. `auto`-keyword в
+// intrinsic-size запоминает реальную высоту после первого рендера —
+// при возврате в viewport layout не прыгает (без него placeholder = 320px,
+// а real height короче → схлопывание). Не применяй на коротких списках.
 .cv-auto {
   content-visibility: auto;
-  contain-intrinsic-size: 1px 320px;
+  contain-intrinsic-size: auto 320px;
 }
 
 // Layout-isolate: отрезает children от reflow'а наружу (paint + layout).
@@ -176,43 +183,70 @@
 }
 
 // Stack-fade-in для контейнеров с children: каждый child делает float-up
-// со staggered delay через nth-child.
+// со staggered delay через nth-child. Длительность и delay'ы умножены на
+// `--motion-scale` — реагируют на смену motion-level без пересборки SCSS.
 .stack-in > * {
   opacity: 0;
-  animation: float-up 480ms var(--ease-out) forwards;
+  animation: float-up calc(420ms * var(--motion-scale, 1)) var(--ease-out) forwards;
 }
 .stack-in > :nth-child(1) {
-  animation-delay: 60ms;
+  animation-delay: calc(40ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(2) {
-  animation-delay: 120ms;
+  animation-delay: calc(90ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(3) {
-  animation-delay: 180ms;
+  animation-delay: calc(140ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(4) {
-  animation-delay: 240ms;
+  animation-delay: calc(190ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(5) {
-  animation-delay: 300ms;
+  animation-delay: calc(240ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(6) {
-  animation-delay: 360ms;
+  animation-delay: calc(290ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(7) {
-  animation-delay: 420ms;
+  animation-delay: calc(340ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(8) {
-  animation-delay: 480ms;
+  animation-delay: calc(390ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(9) {
-  animation-delay: 540ms;
+  animation-delay: calc(440ms * var(--motion-scale, 1));
 }
 .stack-in > :nth-child(10) {
-  animation-delay: 600ms;
+  animation-delay: calc(490ms * var(--motion-scale, 1));
 }
 
-.app--reduce-motion .stack-in > * {
+.app--reduce-motion .stack-in > *,
+[data-motion='off'] .stack-in > *,
+[data-motion='reduced'] .stack-in > * {
   opacity: 1;
   animation: none;
+}
+
+// Subtle hover-lift utility: opt-in micro-feedback для интерактивных surface'ов
+// без модификатора. Амплитуда подъёма централизована в --lift токене.
+.lift {
+  transition:
+    transform var(--trans-transform),
+    box-shadow var(--trans-medium);
+  &:hover {
+    transform: translate3d(0, var(--lift), 0);
+  }
+  &:active {
+    transform: translate3d(0, 0, 0);
+    transition-duration: var(--dur-instant);
+  }
+}
+
+// Tap-press utility: scale-down + auto-rebound. Используется на mobile-tile'ах
+// и иконочных кнопках, где hover-lift не имеет смысла.
+.tap-press {
+  transition: transform var(--trans-press);
+  &:active {
+    transform: scale(var(--press-scale));
+  }
 }

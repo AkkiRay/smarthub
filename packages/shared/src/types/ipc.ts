@@ -105,6 +105,16 @@ export interface IpcApi {
     /** Tuya apiKey, MQTT url, ... — параметризовано по DriverId через DriverCredentialsMap. */
     setCredentials: <D extends DriverId>(driverId: D, creds: DriverCredentials<D>) => Promise<void>;
     getCredentials: <D extends DriverId>(driverId: D) => Promise<DriverCredentials<D>>;
+    /**
+     * Light-probe текущих form-values без сохранения. Возвращает {ok, message}.
+     * UI вызывает с кнопки «Проверить подключение» — юзер видит результат до save.
+     */
+    testCredentials: (
+      driverId: string,
+      values: Record<string, string>,
+    ) => Promise<{ ok: boolean; message?: string }>;
+    /** Открыть deep-link на портал разработчика — `register-link` field в credentials-schema. */
+    openExternal: (url: string) => Promise<void>;
   };
   yandexStation: {
     /** mDNS-сканер на N секунд. */

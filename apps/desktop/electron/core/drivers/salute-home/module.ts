@@ -1,5 +1,6 @@
 import type { DriverModule } from '../driver-module.js';
 import { SaluteHomeDriver } from './salute-home-driver.js';
+import { probeViaDiscover } from '../_shared/probe-via-discover.js';
 
 export const saluteHomeModule: DriverModule = {
   descriptor: {
@@ -16,10 +17,18 @@ export const saluteHomeModule: DriverModule = {
     docsUrl: 'https://developers.sber.ru/portal/products/salute-home',
     credentialsSchema: [
       {
+        key: '__register',
+        kind: 'register-link',
+        label: 'Открыть портал «Sber Developer»',
+        hint: 'Workspace → Salute / IoT product → Access token + Refresh token. Тот же Sber ID, что и Сбер Дом.',
+        url: 'https://developers.sber.ru/studio/workspaces',
+      },
+      {
         key: 'accessToken',
         label: 'Sber ID Access token',
         kind: 'password',
         required: true,
+        hint: 'OAuth-токен Sber ID. Один Sber ID может покрывать сразу Sber Smart Home и SaluteHome.',
       },
       { key: 'refreshToken', label: 'Refresh token', kind: 'password' },
       {
@@ -32,6 +41,7 @@ export const saluteHomeModule: DriverModule = {
           { value: 'COMPANION', label: 'COMPANION (Салют-ассистенты)' },
         ],
       },
+      { key: '__test', kind: 'test-button', label: 'Проверить' },
     ],
   },
   async create({ settings }) {
@@ -46,5 +56,19 @@ export const saluteHomeModule: DriverModule = {
       refreshToken: c.refreshToken,
       scope: c.scope ?? 'IOT',
     });
+  },
+  async probe(values) {
+    if (!values['accessToken']) {
+      return { ok: false, message: 'Введите Access token' };
+    }
+    const scope = (values['scope'] as 'IOT' | 'COMPANION' | undefined) ?? 'IOT';
+    return probeViaDiscover(
+      async () =>
+        new SaluteHomeDriver({
+          accessToken: values['accessToken']!,
+          refreshToken: values['refreshToken'] || undefined,
+          scope,
+        }),
+    );
   },
 };

@@ -17,6 +17,12 @@
   isolation: isolate;
   @include glass(var(--glass-alpha-soft), var(--glass-blur-medium));
   box-shadow: var(--depth-2);
+  // Smooth transition только глубины — для плавной смены state (loading/empty/
+  // ready). Hero сам не интерактивен, но дочерние state-changes часто меняют
+  // shadow / border, иначе они «прыгают».
+  transition:
+    box-shadow var(--trans-medium),
+    border-color var(--trans-base);
 
   // Aurora background-glow: violet (top-left) → pink (bottom-right) → yellow
   // (top-right hot-spot, Alice-canon). Yellow stop — отличающий signature от

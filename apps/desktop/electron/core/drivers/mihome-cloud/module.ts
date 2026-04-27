@@ -1,5 +1,7 @@
 import type { DriverModule } from '../driver-module.js';
 import { MiHomeCloudDriver } from './mihome-cloud-driver.js';
+import { probeViaDiscover } from '../_shared/probe-via-discover.js';
+import { defaultRegion } from '../_shared/region-detect.js';
 
 export const mihomeCloudModule: DriverModule = {
   descriptor: {
@@ -23,13 +25,20 @@ export const mihomeCloudModule: DriverModule = {
     maturity: 'beta',
     docsUrl: 'https://github.com/Maxmudjon/com.mihome',
     credentialsSchema: [
+      {
+        key: '__register',
+        kind: 'register-link',
+        label: 'Открыть Mi Account',
+        hint: 'Логин/пароль — те же, что в приложении Mi Home. Регион выберите тот же, что и в Mi Home (Settings → Region).',
+        url: 'https://account.xiaomi.com/',
+      },
       { key: 'username', label: 'Mi ID (email или phone)', kind: 'text', required: true },
       { key: 'password', label: 'Пароль', kind: 'password', required: true },
       {
         key: 'region',
         label: 'Регион сервера',
         kind: 'select',
-        defaultValue: 'cn',
+        defaultValue: defaultRegion('mihome'),
         options: [
           { value: 'cn', label: 'China (cn)' },
           { value: 'de', label: 'Europe (de)' },
@@ -39,6 +48,7 @@ export const mihomeCloudModule: DriverModule = {
           { value: 'us', label: 'United States (us)' },
         ],
       },
+      { key: '__test', kind: 'test-button', label: 'Проверить' },
     ],
   },
   async create({ settings }) {
@@ -53,5 +63,18 @@ export const mihomeCloudModule: DriverModule = {
       password: c.password,
       region: c.region ?? 'cn',
     });
+  },
+  async probe(values) {
+    if (!values['username'] || !values['password']) {
+      return { ok: false, message: 'Введите Mi ID и пароль' };
+    }
+    return probeViaDiscover(
+      async () =>
+        new MiHomeCloudDriver({
+          username: values['username']!,
+          password: values['password']!,
+          region: (values['region'] as 'cn' | 'de' | 'i2' | 'ru' | 'sg' | 'us' | undefined) ?? 'cn',
+        }),
+    );
   },
 };

@@ -17,10 +17,16 @@ const toPlain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 export const useRoomsStore = defineStore('rooms', () => {
   const rooms = ref<Room[]>([]);
+  const isLoading = ref(false);
   let subscribed = false;
 
   async function bootstrap() {
-    rooms.value = await window.smarthome.rooms.list();
+    isLoading.value = true;
+    try {
+      rooms.value = await window.smarthome.rooms.list();
+    } finally {
+      isLoading.value = false;
+    }
     if (subscribed) return;
     subscribed = true;
     window.smarthome.events.on('room:upserted', (room) => {
@@ -58,7 +64,7 @@ export const useRoomsStore = defineStore('rooms', () => {
     rooms.value = next;
   }
 
-  return { rooms, bootstrap, create, update, remove, setRooms };
+  return { rooms, isLoading, bootstrap, create, update, remove, setRooms };
 });
 
 if (import.meta.hot) {

@@ -20,8 +20,14 @@
  *   создаёт новый с обновлёнными creds, эмитит событие в event bus.
  */
 
+import { EventEmitter } from 'node:events';
 import log from 'electron-log/main.js';
-import type { DeviceDriver, DriverDescriptor, DriverId } from '@smarthome/shared';
+import type {
+  DeviceDriver,
+  DriverDescriptor,
+  DriverId,
+  DriverProbeResult,
+} from '@smarthome/shared';
 import type { SettingsStore } from '../storage/settings-store.js';
 import type { DriverModule } from './driver-module.js';
 
@@ -98,8 +104,15 @@ const DRIVER_MODULES: readonly DriverModule[] = [
 
 export type DriverRegistry = ReturnType<typeof createDriverRegistry>;
 
+interface DriverRegistryEvents {
+  /** Driver instance замещён — consumers (device-registry push-wiring) должны
+   *  переподписаться на новый instance. */
+  'driver:reloaded': (driverId: DriverId) => void;
+}
+
 export function createDriverRegistry(deps: { settings: SettingsStore }) {
   const drivers = new Map<DriverId, DeviceDriver>();
+  const emitter = new EventEmitter();
   // id → module для reloadDriver(); creds-driven модули инициализируются повторно.
   const modulesById = new Map<DriverId, DriverModule>(
     DRIVER_MODULES.map((m) => [m.descriptor.id, m]),
@@ -124,7 +137,8 @@ export function createDriverRegistry(deps: { settings: SettingsStore }) {
       log.info(`DriverRegistry: ${drivers.size}/${DRIVER_MODULES.length} drivers active`);
     },
 
-    /** Re-init одного драйвера после save credentials. Старый instance shutdown-ится. */
+    /** Re-init одного драйвера после save credentials. Старый instance shutdown-ится.
+     *  Эмитит `driver:reloaded` — consumers (device-registry push-wiring) переподписываются. */
     async reloadDriver(id: string): Promise<void> {
       const driverId = id as DriverId;
       const module = modulesById.get(driverId);
@@ -143,6 +157,42 @@ export function createDriverRegistry(deps: { settings: SettingsStore }) {
       }
       await initOne(module);
       log.info(`DriverRegistry: reloaded ${id}`);
+      emitter.emit('driver:reloaded', driverId);
+    },
+
+    on<E extends keyof DriverRegistryEvents>(
+      event: E,
+      listener: DriverRegistryEvents[E],
+    ): () => void {
+      emitter.on(event, listener as never);
+      return () => emitter.off(event, listener as never);
+    },
+
+    /**
+     * Light-probe credentials без save. Делегирует в `module.probe()`. Если
+     * у модуля нет probe — возвращает «не реализовано» — UI сам решит, что
+     * показать (обычно «попробуйте сохранить и подождать первого ответа»).
+     */
+    async testCredentials(id: string, values: Record<string, string>): Promise<DriverProbeResult> {
+      const driverId = id as DriverId;
+      const module = modulesById.get(driverId);
+      if (!module) {
+        return { ok: false, message: `Драйвер «${id}» не зарегистрирован` };
+      }
+      if (typeof module.probe !== 'function') {
+        return {
+          ok: false,
+          message:
+            'У этого драйвера пока нет проверки. Сохраните и попробуйте обнаружить устройства.',
+        };
+      }
+      try {
+        return await module.probe(values, { settings: deps.settings });
+      } catch (e) {
+        const msg = (e as Error).message ?? 'Неизвестная ошибка';
+        log.warn(`testCredentials(${id}) threw: ${msg}`);
+        return { ok: false, message: msg };
+      }
     },
 
     list: (): DeviceDriver[] => Array.from(drivers.values()),

@@ -104,7 +104,11 @@ function onBack(): void {
       rgba(var(--color-brand-violet-rgb), 0) 100%
     );
     background-size: 100% 280%;
-    animation: pageHeadAccent 6s ease-in-out infinite alternate;
+    // Длительность ÷ motion-scale — реактивно к motion-level. Базовый период
+    // 6s = «дыхание» каждые 12s (alternate). На reduced 0.6× → 10s, off →
+    // kill-list в `_motion.scss`.
+    animation: pageHeadAccent calc(6s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite
+      alternate;
     pointer-events: none;
   }
 
@@ -143,25 +147,25 @@ function onBack(): void {
     margin-top: 4px;
     padding: 0;
     transition:
-      color 200ms var(--ease-out),
-      box-shadow 200ms var(--ease-out);
+      color var(--trans-base),
+      box-shadow var(--trans-base);
 
     :deep(.icon) {
       transition:
-        transform 280ms var(--ease-spring),
-        filter 240ms var(--ease-out);
+        transform var(--trans-transform),
+        filter var(--trans-medium);
     }
 
     &:hover {
       color: var(--color-brand-purple);
       :deep(.icon) {
-        transform: translateX(-4px);
+        transform: translateX(-3px);
         filter: drop-shadow(0 0 6px rgba(var(--color-brand-purple-rgb), 0.55));
       }
     }
     &:active :deep(.icon) {
-      transform: translateX(-6px) scale(0.94);
-      transition-duration: 120ms;
+      transform: translateX(-4px) scale(0.96);
+      transition-duration: var(--dur-instant);
     }
     &:focus-visible {
       outline: none;

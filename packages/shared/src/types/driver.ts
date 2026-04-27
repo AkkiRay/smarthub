@@ -110,7 +110,9 @@ export type DriverCategory =
  * - `select`         — dropdown с {@link DriverCredentialField.options};
  * - `oauth`          — кнопка «Войти через провайдера», открывает popup;
  * - `discover-host`  — input + кнопка «Найти на сети» (mDNS/SSDP scan);
- * - `pairing-code`   — 6-8 цифровое поле (HomeKit setup code).
+ * - `pairing-code`   — 6-8 цифровое поле (HomeKit setup code);
+ * - `register-link`  — deep-link tile «Открыть портал разработчика» (без input'а);
+ * - `test-button`    — кнопка «Проверить подключение» (probe текущих values).
  */
 export type DriverCredentialFieldKind =
   | 'text'
@@ -118,7 +120,9 @@ export type DriverCredentialFieldKind =
   | 'select'
   | 'oauth'
   | 'discover-host'
-  | 'pairing-code';
+  | 'pairing-code'
+  | 'register-link'
+  | 'test-button';
 
 /**
  * Описание одного поля формы credentials.
@@ -143,6 +147,19 @@ export interface DriverCredentialField {
   options?: Array<{ value: string; label: string }>;
   /** Default-значение (обычно пустая строка либо `null`). */
   defaultValue?: string;
+  /** URL для `kind: 'register-link'`. Открывается через `shell.openExternal`. */
+  url?: string;
+}
+
+/**
+ * Результат light-probe (`drivers.testCredentials`). Используется UI-кнопкой
+ * «Проверить подключение» в credentials-форме.
+ */
+export interface DriverProbeResult {
+  /** true → endpoint провайдера ответил ожидаемо, creds валидны. */
+  ok: boolean;
+  /** Краткое сообщение для тоста: либо «Найдено N устройств», либо причина ошибки. */
+  message?: string;
 }
 
 /**

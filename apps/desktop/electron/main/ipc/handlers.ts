@@ -218,6 +218,15 @@ function buildHandlers(hub: SmartHomeHub, updater: UpdaterController): Record<st
       const raw = hub.drivers.getCredentials(driverId as DriverId);
       return redactCredentials(raw as Record<string, unknown>);
     },
+    'drivers:test-credentials': (driverId, values) => {
+      const id = assertString('drivers:test-credentials', 'driverId', driverId, { maxLen: 64 });
+      const v = assertObject('drivers:test-credentials', 'values', values);
+      return hub.drivers.testCredentials(id as DriverId, v as Record<string, string>);
+    },
+    'drivers:open-external': (url) => {
+      const safe = assertString('drivers:open-external', 'url', url, { maxLen: 512 });
+      return hub.drivers.openExternal(safe);
+    },
 
     // Yandex Station
     'yandexStation:discover': (timeoutMs) =>

@@ -15,6 +15,9 @@
   background: var(--banner-bg);
   border: var(--border-thin) solid var(--banner-edge);
   color: var(--color-text-primary);
+  transition:
+    background var(--trans-base),
+    border-color var(--trans-base);
 
   &__icon {
     --icon-tone: var(--banner-tone);

@@ -276,6 +276,23 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     },
     getCredentials: <D extends DriverId>(driverId: D): Partial<DriverCredentials<D>> =>
       deps.settings.getDriverCredentials(driverId),
+    /**
+     * Probe creds без save — кнопка «Проверить подключение» в форме. Делегирует
+     * в `module.probe()`; если у модуля его нет — возвращает not-implemented stub.
+     */
+    testCredentials: (
+      driverId: DriverId,
+      values: Record<string, string>,
+    ): Promise<import('@smarthome/shared').DriverProbeResult> =>
+      deps.driverRegistry.testCredentials(driverId, values),
+    openExternal: async (url: string): Promise<void> => {
+      const { shell } = await import('electron');
+      const trimmed = url.trim();
+      if (!/^https?:\/\//i.test(trimmed)) {
+        throw new Error(`drivers.openExternal: refusing non-HTTP scheme — ${trimmed}`);
+      }
+      await shell.openExternal(trimmed);
+    },
   };
 
   // ---- Public API: Yandex Station ------------------------------------------

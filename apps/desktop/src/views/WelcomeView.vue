@@ -113,8 +113,8 @@
                 </span>
               </h2>
               <p class="welcome__lead">
-                После онбординга сразу откроем нужный экран. Передумаете — всегда можно вернуться
-                через боковое меню.
+                По умолчанию запустим LAN-сканирование — это самый быстрый старт. Любой путь
+                доступен из бокового меню в любой момент.
               </p>
               <div class="welcome__path-grid">
                 <button
@@ -140,12 +140,7 @@
               </div>
               <div class="welcome__actions">
                 <BaseButton variant="ghost" icon-left="arrow-left" @click="back">Назад</BaseButton>
-                <BaseButton
-                  variant="primary"
-                  icon-right="arrow-right"
-                  :disabled="!chosenPath"
-                  @click="next"
-                >
+                <BaseButton variant="primary" icon-right="arrow-right" @click="next">
                   Дальше
                 </BaseButton>
               </div>
@@ -260,7 +255,7 @@ type PathId = 'lan' | 'alice' | 'cloud';
 const step = ref(0);
 const totalSteps = 4;
 const motion = computed(() => !reduceMotion.value);
-const chosenPath = ref<PathId | null>(null);
+const chosenPath = ref<PathId>('lan');
 
 const root = useTemplateRef<HTMLElement>('root');
 const sceneEl = useTemplateRef<HTMLElement>('sceneEl');
@@ -481,8 +476,11 @@ function pathRoute(): string {
 function finish(startTour: boolean): void {
   ui.completeOnboarding();
   if (!startTour) ui.completeTour();
-  const target = chosenPath.value ? pathRoute() : '/home';
-  void router.replace({ path: target, query: startTour ? { tour: '1' } : {} });
+  const target = pathRoute();
+  const query: Record<string, string> = {};
+  if (startTour) query['tour'] = '1';
+  if (target === '/discovery') query['scan'] = '1';
+  void router.replace({ path: target, query });
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -702,7 +700,7 @@ onBeforeUnmount(() => {
     border-radius: 50%;
     background: var(--gradient-brand);
     box-shadow: 0 0 12px rgba(var(--color-brand-violet-rgb), 0.7);
-    animation: welcomeMarkPulse 2.4s ease-in-out infinite;
+    animation: welcomeMarkPulse calc(2.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
   }
 
   &__bar-progress {
@@ -843,7 +841,7 @@ onBeforeUnmount(() => {
     background: var(--gradient-brand);
     transform-origin: left center;
     box-shadow: 0 0 14px rgba(var(--color-brand-violet-rgb), 0.5);
-    animation: welcomeAccent 5.4s ease-in-out infinite;
+    animation: welcomeAccent calc(5.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
   }
 
   &__lead {

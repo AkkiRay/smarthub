@@ -401,7 +401,7 @@ const iconBulb =
       );
       filter: blur(12px);
       opacity: 0.7;
-      animation: pfGlow 3.6s ease-in-out infinite;
+      animation: pfGlow calc(3.6s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
       z-index: -1;
     }
 
@@ -524,10 +524,10 @@ const iconBulb =
       inset: 0;
       border-radius: 50%;
       border: 1.5px solid var(--color-brand-purple);
-      animation: pfPulse 2s ease-out infinite;
+      animation: pfPulse calc(2s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
 
       &--late {
-        animation-delay: 1s;
+        animation-delay: calc(1s * var(--motion-scale, 1));
       }
     }
 
@@ -608,7 +608,7 @@ const iconBulb =
     border-radius: 50%;
     border: 2px solid currentColor;
     border-top-color: transparent;
-    animation: pfSpin 0.8s linear infinite;
+    animation: pfSpin calc(0.8s / max(var(--motion-scale, 1), 0.001)) linear infinite;
   }
 
   &__success {
@@ -624,7 +624,7 @@ const iconBulb =
       border-radius: 50%;
       background: var(--gradient-brand);
       opacity: 0.35;
-      animation: pfDonePulse 2s ease-out infinite;
+      animation: pfDonePulse calc(2s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
 
       &--late {
         animation-delay: 1s;

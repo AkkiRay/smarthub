@@ -27,3 +27,4 @@ export * from './types/updater.js';
 export * from './utils/result.js';
 export * from './utils/capability-builders.js';
 export * from './utils/type-guards.js';
+export * from './utils/concurrency.js';

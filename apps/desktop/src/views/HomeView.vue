@@ -4,275 +4,275 @@
       <HomeSkeleton />
     </template>
     <section class="home" ref="root">
-    <!-- HERO: copy + ambient 3D scene в верхнем ряду; KPI-strip полным рядом
+      <!-- HERO: copy + ambient 3D scene в верхнем ряду; KPI-strip полным рядом
          ниже. Раздельные ряды устраняют overlap 3D-сцены с цифрами. -->
-    <header class="home__hero" data-anim="header">
-      <div class="home__hero-top">
-        <div class="home__hero-copy">
-          <span class="home__hero-eyebrow">
-            <span class="home__hero-pulse" />
-            <span>{{ contextLabel }}</span>
-          </span>
-          <h1 class="home__title">
-            {{ greeting }},<br />
-            <span class="text--alice">{{ subtitleAccent }}</span>
-          </h1>
-          <p class="home__lead">{{ contextLead }}</p>
+      <header class="home__hero" data-anim="header">
+        <div class="home__hero-top">
+          <div class="home__hero-copy">
+            <span class="home__hero-eyebrow">
+              <span class="home__hero-pulse" />
+              <span>{{ contextLabel }}</span>
+            </span>
+            <h1 class="home__title">
+              {{ greeting }},<br />
+              <span class="text--alice">{{ subtitleAccent }}</span>
+            </h1>
+            <p class="home__lead">{{ contextLead }}</p>
 
-          <!-- Action bar — не теряется на скролле -->
-          <div class="home__actions">
-            <BaseButton variant="primary" size="lg" icon-left="search" @click="runDiscovery">
-              Найти устройства
-            </BaseButton>
-            <BaseButton
-              variant="ghost"
-              size="lg"
-              icon-right="arrow-right"
-              @click="$router.push('/devices')"
-            >
-              Все устройства
-            </BaseButton>
+            <!-- Action bar — не теряется на скролле -->
+            <div class="home__actions">
+              <BaseButton variant="primary" size="lg" icon-left="search" @click="runDiscovery">
+                Найти устройства
+              </BaseButton>
+              <BaseButton
+                variant="ghost"
+                size="lg"
+                icon-right="arrow-right"
+                @click="$router.push('/devices')"
+              >
+                Все устройства
+              </BaseButton>
+            </div>
           </div>
-        </div>
 
-        <!-- Atmospheric 3D wireframe sphere + halo. Constrained right-column
+          <!-- Atmospheric 3D wireframe sphere + halo. Constrained right-column
              cell с aspect-ratio: 1/1 — не вылезает на KPI-row внизу. -->
-        <div class="home__hero-scene" aria-hidden="true">
-          <span class="home__hero-halo" />
-          <AmbientMesh class="home__hero-mesh" :detail="2" />
-        </div>
-      </div>
-
-      <!-- KPI-strip полным рядом под top-row'ом — гарантированно без overlap'а
-           с 3D-сценой. -->
-      <aside class="home__kpis" v-if="hasMetrics" data-tour="home-onboarding">
-        <button
-          type="button"
-          class="home__kpi"
-          :class="{ 'home__kpi--active': devices.onlineCount > 0 }"
-          @click="$router.push('/devices')"
-        >
-          <span class="home__kpi-label">в сети</span>
-          <span class="home__kpi-value">{{ devices.onlineCount }}</span>
-          <span class="home__kpi-hint">из {{ devices.devices.length }} устройств</span>
-        </button>
-        <button
-          type="button"
-          class="home__kpi"
-          :class="{ 'home__kpi--muted': devices.offlineCount === 0 }"
-          @click="$router.push('/devices')"
-        >
-          <span class="home__kpi-label">офлайн</span>
-          <span class="home__kpi-value">{{ devices.offlineCount }}</span>
-          <span class="home__kpi-hint">{{
-            devices.offlineCount > 0 ? 'нужно проверить' : 'всё на связи'
-          }}</span>
-        </button>
-        <button type="button" class="home__kpi" @click="$router.push('/scenes')">
-          <span class="home__kpi-label">сценарии</span>
-          <span class="home__kpi-value">{{ totalScenes }}</span>
-          <span class="home__kpi-hint">{{
-            aliceScenariosCount > 0 ? `${aliceScenariosCount} в Алисе` : 'локальные'
-          }}</span>
-        </button>
-        <button
-          type="button"
-          class="home__kpi"
-          :class="{ 'home__kpi--accent': isAliceConnected }"
-          @click="$router.push('/alice')"
-        >
-          <span class="home__kpi-label">Алиса</span>
-          <span class="home__kpi-value">
-            <span class="home__kpi-dot" :class="aliceDotClass" />
-            {{ aliceLabel }}
-          </span>
-          <span class="home__kpi-hint">{{ aliceHint }}</span>
-        </button>
-      </aside>
-    </header>
-
-    <!-- Onboarding banner — нумерованные шаги -->
-    <Transition name="home-fade">
-      <section v-if="showOnboarding" class="home__onboarding" data-anim="block">
-        <header class="home__head">
-          <div>
-            <span class="home__head-eyebrow">Начните с этого</span>
-            <h2 class="home__head-title">Подключите первый источник</h2>
+          <div class="home__hero-scene" aria-hidden="true">
+            <span class="home__hero-halo" />
+            <AmbientMesh class="home__hero-mesh" :detail="2" />
           </div>
-        </header>
-        <div class="home__onboarding-grid">
+        </div>
+
+        <!-- KPI-strip полным рядом под top-row'ом — гарантированно без overlap'а
+           с 3D-сценой. -->
+        <aside class="home__kpis" v-if="hasMetrics" data-tour="home-onboarding">
           <button
-            v-if="!devices.devices.length"
             type="button"
-            class="tile tile--interactive tile--violet"
-            data-anim="item"
-            @click="runDiscovery"
+            class="home__kpi"
+            :class="{ 'home__kpi--active': devices.onlineCount > 0 }"
+            @click="$router.push('/devices')"
           >
-            <div class="tile__icon"><BaseIcon name="search" :size="22" /></div>
-            <div class="tile__label">Найти в LAN</div>
-            <div class="tile__hint">
-              Хаб опросит локальную сеть — лампы, розетки, датчики, колонки.
-            </div>
-            <div class="tile__meta">
-              Шаг 1 / 3
-              <BaseIcon name="arrow-right" :size="12" />
-            </div>
+            <span class="home__kpi-label">в сети</span>
+            <span class="home__kpi-value">{{ devices.onlineCount }}</span>
+            <span class="home__kpi-hint">из {{ devices.devices.length }} устройств</span>
           </button>
           <button
-            v-if="!isAliceConnected"
             type="button"
-            class="tile tile--interactive tile--pink"
-            data-anim="item"
+            class="home__kpi"
+            :class="{ 'home__kpi--muted': devices.offlineCount === 0 }"
+            @click="$router.push('/devices')"
+          >
+            <span class="home__kpi-label">офлайн</span>
+            <span class="home__kpi-value">{{ devices.offlineCount }}</span>
+            <span class="home__kpi-hint">{{
+              devices.offlineCount > 0 ? 'нужно проверить' : 'всё на связи'
+            }}</span>
+          </button>
+          <button type="button" class="home__kpi" @click="$router.push('/scenes')">
+            <span class="home__kpi-label">сценарии</span>
+            <span class="home__kpi-value">{{ totalScenes }}</span>
+            <span class="home__kpi-hint">{{
+              aliceScenariosCount > 0 ? `${aliceScenariosCount} в Алисе` : 'локальные'
+            }}</span>
+          </button>
+          <button
+            type="button"
+            class="home__kpi"
+            :class="{ 'home__kpi--accent': isAliceConnected }"
             @click="$router.push('/alice')"
           >
-            <div class="tile__icon"><BaseIcon name="alice" :size="22" /></div>
-            <div class="tile__label">Подключить Алису</div>
-            <div class="tile__hint">
-              Войти через Яндекс — автоматический поиск Станций, импорт устройств.
-            </div>
-            <div class="tile__meta">
-              Шаг 2 / 3
-              <BaseIcon name="arrow-right" :size="12" />
-            </div>
+            <span class="home__kpi-label">Алиса</span>
+            <span class="home__kpi-value">
+              <span class="home__kpi-dot" :class="aliceDotClass" />
+              {{ aliceLabel }}
+            </span>
+            <span class="home__kpi-hint">{{ aliceHint }}</span>
           </button>
+        </aside>
+      </header>
+
+      <!-- Onboarding banner — нумерованные шаги -->
+      <Transition name="home-fade">
+        <section v-if="showOnboarding" class="home__onboarding" data-anim="block">
+          <header class="home__head">
+            <div>
+              <span class="home__head-eyebrow">Начните с этого</span>
+              <h2 class="home__head-title">Подключите первый источник</h2>
+            </div>
+          </header>
+          <div class="home__onboarding-grid">
+            <button
+              v-if="!devices.devices.length"
+              type="button"
+              class="tile tile--interactive tile--violet"
+              data-anim="item"
+              @click="runDiscovery"
+            >
+              <div class="tile__icon"><BaseIcon name="search" :size="22" /></div>
+              <div class="tile__label">Найти в LAN</div>
+              <div class="tile__hint">
+                Хаб опросит локальную сеть — лампы, розетки, датчики, колонки.
+              </div>
+              <div class="tile__meta">
+                Шаг 1 / 3
+                <BaseIcon name="arrow-right" :size="12" />
+              </div>
+            </button>
+            <button
+              v-if="!isAliceConnected"
+              type="button"
+              class="tile tile--interactive tile--pink"
+              data-anim="item"
+              @click="$router.push('/alice')"
+            >
+              <div class="tile__icon"><BaseIcon name="alice" :size="22" /></div>
+              <div class="tile__label">Подключить Алису</div>
+              <div class="tile__hint">
+                Войти через Яндекс — автоматический поиск Станций, импорт устройств.
+              </div>
+              <div class="tile__meta">
+                Шаг 2 / 3
+                <BaseIcon name="arrow-right" :size="12" />
+              </div>
+            </button>
+            <button
+              v-if="!hasAnyIntegration"
+              type="button"
+              class="tile tile--interactive tile--amber"
+              data-anim="item"
+              @click="$router.push('/settings')"
+            >
+              <div class="tile__icon"><BaseIcon name="settings" :size="22" /></div>
+              <div class="tile__label">Облачные интеграции</div>
+              <div class="tile__hint">
+                Сбер Дом, Tuya, Mi Home, Govee — всего 16 платформ в маркетплейсе.
+              </div>
+              <div class="tile__meta">
+                Шаг 3 / 3
+                <BaseIcon name="arrow-right" :size="12" />
+              </div>
+            </button>
+          </div>
+        </section>
+      </Transition>
+
+      <!-- Быстрые сцены: контекстуально (сейчас день — сцены подсветки/кино) -->
+      <section v-if="hasOnlineToggleable" class="home__quick" data-anim="block">
+        <header class="home__head">
+          <div>
+            <span class="home__head-eyebrow">Быстрые действия</span>
+            <h2 class="home__head-title">Управление одним кликом</h2>
+          </div>
+          <RouterLink v-if="totalScenes > 0" to="/scenes" class="home__head-link">
+            Все сценарии
+            <BaseIcon name="arrow-right" :size="12" />
+          </RouterLink>
+        </header>
+        <div class="home__quick-grid">
           <button
-            v-if="!hasAnyIntegration"
-            type="button"
-            class="tile tile--interactive tile--amber"
+            v-for="quick in quickScenes"
+            :key="quick.id"
+            class="quick-tile"
+            :class="{ 'quick-tile--running': busyQuickId === quick.id }"
+            :disabled="busyQuickId !== null && busyQuickId !== quick.id"
+            :style="{ '--accent': quick.accent }"
             data-anim="item"
-            @click="$router.push('/settings')"
+            @click="runQuick(quick)"
           >
-            <div class="tile__icon"><BaseIcon name="settings" :size="22" /></div>
-            <div class="tile__label">Облачные интеграции</div>
-            <div class="tile__hint">
-              Сбер Дом, Tuya, Mi Home, Govee — всего 16 платформ в маркетплейсе.
-            </div>
-            <div class="tile__meta">
-              Шаг 3 / 3
-              <BaseIcon name="arrow-right" :size="12" />
-            </div>
+            <span class="quick-tile__glyph">
+              <BaseIcon :name="quick.icon" :size="20" />
+            </span>
+            <span class="quick-tile__body">
+              <span class="quick-tile__name">{{ quick.name }}</span>
+              <span class="quick-tile__hint">{{ quick.hint }}</span>
+            </span>
+            <span class="quick-tile__arrow">
+              <BaseIcon name="arrow-right" :size="14" />
+            </span>
           </button>
         </div>
       </section>
-    </Transition>
 
-    <!-- Быстрые сцены: контекстуально (сейчас день — сцены подсветки/кино) -->
-    <section v-if="hasOnlineToggleable" class="home__quick" data-anim="block">
-      <header class="home__head">
-        <div>
-          <span class="home__head-eyebrow">Быстрые действия</span>
-          <h2 class="home__head-title">Управление одним кликом</h2>
+      <!-- Сценарии Алисы -->
+      <section v-if="topAliceScenarios.length" class="home__alice" data-anim="block">
+        <header class="home__head">
+          <div>
+            <span class="home__head-eyebrow">Сценарии Алисы</span>
+            <h2 class="home__head-title">Голосовые автоматизации</h2>
+          </div>
+          <RouterLink to="/scenes" class="home__head-link">
+            Все {{ aliceScenariosCount }}
+            <BaseIcon name="arrow-right" :size="12" />
+          </RouterLink>
+        </header>
+        <div class="home__alice-grid">
+          <button
+            v-for="s in topAliceScenarios"
+            :key="s.id"
+            type="button"
+            class="alice-tile"
+            :class="{ 'alice-tile--running': runningScenarioId === s.id }"
+            :disabled="runningScenarioId !== null"
+            :title="s.triggers[0]?.summary ?? 'Запустить сценарий'"
+            data-anim="item"
+            @click="runAliceScenario(s.id, s.name)"
+          >
+            <span class="alice-tile__glyph">
+              <BaseIcon name="alice" :size="20" />
+            </span>
+            <span class="alice-tile__body">
+              <span class="alice-tile__name">{{ s.name }}</span>
+              <span class="alice-tile__hint">{{ s.triggers[0]?.summary ?? 'Запуск вручную' }}</span>
+            </span>
+            <span class="alice-tile__action">
+              <BaseIcon
+                :name="runningScenarioId === s.id ? 'refresh' : 'arrow-right'"
+                :size="14"
+                :spin="runningScenarioId === s.id"
+              />
+            </span>
+          </button>
         </div>
-        <RouterLink v-if="totalScenes > 0" to="/scenes" class="home__head-link">
-          Все сценарии
-          <BaseIcon name="arrow-right" :size="12" />
-        </RouterLink>
-      </header>
-      <div class="home__quick-grid">
-        <button
-          v-for="quick in quickScenes"
-          :key="quick.id"
-          class="quick-tile"
-          :class="{ 'quick-tile--running': busyQuickId === quick.id }"
-          :disabled="busyQuickId !== null && busyQuickId !== quick.id"
-          :style="{ '--accent': quick.accent }"
-          data-anim="item"
-          @click="runQuick(quick)"
-        >
-          <span class="quick-tile__glyph">
-            <BaseIcon :name="quick.icon" :size="20" />
-          </span>
-          <span class="quick-tile__body">
-            <span class="quick-tile__name">{{ quick.name }}</span>
-            <span class="quick-tile__hint">{{ quick.hint }}</span>
-          </span>
-          <span class="quick-tile__arrow">
-            <BaseIcon name="arrow-right" :size="14" />
-          </span>
-        </button>
-      </div>
-    </section>
+      </section>
 
-    <!-- Сценарии Алисы -->
-    <section v-if="topAliceScenarios.length" class="home__alice" data-anim="block">
-      <header class="home__head">
-        <div>
-          <span class="home__head-eyebrow">Сценарии Алисы</span>
-          <h2 class="home__head-title">Голосовые автоматизации</h2>
+      <!-- Устройства -->
+      <section v-if="topDevices.length" class="home__rooms" data-anim="block">
+        <header class="home__head">
+          <div>
+            <span class="home__head-eyebrow">Устройства</span>
+            <h2 class="home__head-title">Недавние и часто используемые</h2>
+          </div>
+          <RouterLink to="/devices" class="home__head-link">
+            Все {{ devices.devices.length }}
+            <BaseIcon name="arrow-right" :size="12" />
+          </RouterLink>
+        </header>
+        <div class="home__device-grid">
+          <DeviceCard
+            v-for="d in topDevices"
+            :key="d.id"
+            :device="d"
+            data-anim="item"
+            @click="$router.push(`/devices/${d.id}`)"
+          />
         </div>
-        <RouterLink to="/scenes" class="home__head-link">
-          Все {{ aliceScenariosCount }}
-          <BaseIcon name="arrow-right" :size="12" />
-        </RouterLink>
-      </header>
-      <div class="home__alice-grid">
-        <button
-          v-for="s in topAliceScenarios"
-          :key="s.id"
-          type="button"
-          class="alice-tile"
-          :class="{ 'alice-tile--running': runningScenarioId === s.id }"
-          :disabled="runningScenarioId !== null"
-          :title="s.triggers[0]?.summary ?? 'Запустить сценарий'"
-          data-anim="item"
-          @click="runAliceScenario(s.id, s.name)"
-        >
-          <span class="alice-tile__glyph">
-            <BaseIcon name="alice" :size="20" />
-          </span>
-          <span class="alice-tile__body">
-            <span class="alice-tile__name">{{ s.name }}</span>
-            <span class="alice-tile__hint">{{ s.triggers[0]?.summary ?? 'Запуск вручную' }}</span>
-          </span>
-          <span class="alice-tile__action">
-            <BaseIcon
-              :name="runningScenarioId === s.id ? 'refresh' : 'arrow-right'"
-              :size="14"
-              :spin="runningScenarioId === s.id"
-            />
-          </span>
-        </button>
-      </div>
-    </section>
+      </section>
 
-    <!-- Устройства -->
-    <section v-if="topDevices.length" class="home__rooms" data-anim="block">
-      <header class="home__head">
-        <div>
-          <span class="home__head-eyebrow">Устройства</span>
-          <h2 class="home__head-title">Недавние и часто используемые</h2>
-        </div>
-        <RouterLink to="/devices" class="home__head-link">
-          Все {{ devices.devices.length }}
-          <BaseIcon name="arrow-right" :size="12" />
-        </RouterLink>
-      </header>
-      <div class="home__device-grid">
-        <DeviceCard
-          v-for="d in topDevices"
-          :key="d.id"
-          :device="d"
-          data-anim="item"
-          @click="$router.push(`/devices/${d.id}`)"
-        />
-      </div>
-    </section>
-
-    <BaseEmpty
-      v-else-if="!showOnboarding"
-      data-anim="block"
-      title="Устройств пока нет"
-      text="Запустите сканирование локальной сети — хаб найдёт лампы, розетки и колонку Алисы."
-    >
-      <template #glyph>
-        <BaseIcon name="devices" :size="48" />
-      </template>
-      <template #actions>
-        <BaseButton variant="primary" icon-left="search" @click="runDiscovery">
-          Запустить сканирование
-        </BaseButton>
-      </template>
-    </BaseEmpty>
+      <BaseEmpty
+        v-else-if="!showOnboarding"
+        data-anim="block"
+        title="Устройств пока нет"
+        text="Запустите сканирование локальной сети — хаб найдёт лампы, розетки и колонку Алисы."
+      >
+        <template #glyph>
+          <BaseIcon name="devices" :size="48" />
+        </template>
+        <template #actions>
+          <BaseButton variant="primary" icon-left="search" @click="runDiscovery">
+            Запустить сканирование
+          </BaseButton>
+        </template>
+      </BaseEmpty>
     </section>
   </RevealStage>
 </template>
@@ -625,13 +625,12 @@ async function runQuick(quick: QuickScene): Promise<void> {
   position: absolute;
   inset: 8%;
   border-radius: 50%;
-  background:
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(var(--color-brand-violet-rgb), 0.32) 0%,
-      rgba(var(--color-brand-pink-rgb), 0.18) 40%,
-      transparent 70%
-    );
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(var(--color-brand-violet-rgb), 0.32) 0%,
+    rgba(var(--color-brand-pink-rgb), 0.18) 40%,
+    transparent 70%
+  );
   filter: blur(28px);
   animation: drift-slow calc(8s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
   z-index: 0;

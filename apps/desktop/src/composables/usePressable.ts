@@ -13,7 +13,7 @@ import { gsap } from 'gsap';
 import { useUiStore } from '@/stores/ui';
 import type { MotionLevel } from '@/stores/ui';
 
-export function usePressable(scale = 0.96) {
+export function usePressable(scale = 0.985) {
   const cleanups: Array<() => void> = [];
 
   let getLevel: () => MotionLevel = () => 'standard';
@@ -29,7 +29,7 @@ export function usePressable(scale = 0.96) {
     const onDown = (): gsap.core.Tween | void => {
       const lvl = getLevel();
       if (lvl === 'off') return;
-      return gsap.to(el, { scale, duration: 0.12, ease: 'power2.out', force3D: true });
+      return gsap.to(el, { scale, duration: 0.1, ease: 'power2.out', force3D: true });
     };
     const onUp = (): gsap.core.Tween | void => {
       const lvl = getLevel();
@@ -37,9 +37,11 @@ export function usePressable(scale = 0.96) {
         gsap.set(el, { scale: 1 });
         return;
       }
-      // На `reduced` — `power2.out` без overshoot.
-      const ease = lvl === 'reduced' ? 'power2.out' : 'elastic.out(1.1, 0.6)';
-      const duration = lvl === 'reduced' ? 0.18 : 0.32;
+      // На `reduced` — `power2.out` без overshoot. На standard/full — мягкий
+      // elastic с малой amplitude (1.04, 0.55) — почти-незаметный rebound,
+      // не «бьёт пружиной» при быстрых кликах.
+      const ease = lvl === 'reduced' ? 'power2.out' : 'elastic.out(1.04, 0.55)';
+      const duration = lvl === 'reduced' ? 0.16 : 0.26;
       return gsap.to(el, { scale: 1, duration, ease, force3D: true });
     };
 

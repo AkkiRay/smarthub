@@ -663,8 +663,7 @@ onBeforeUnmount(() => {
 
 // home: тёплый pop с yellow-glow — «дом просыпается».
 .sidebar__item[data-icon-anim='home'].is-active .sidebar__icon {
-  animation: sidebar-icon-home calc(620ms / max(var(--motion-scale, 1), 0.001))
-    var(--ease-spring) 1;
+  animation: sidebar-icon-home calc(620ms / max(var(--motion-scale, 1), 0.001)) var(--ease-spring) 1;
 }
 @keyframes sidebar-icon-home {
   0% {
@@ -726,8 +725,8 @@ onBeforeUnmount(() => {
 
 // rooms: door-open (skewY + scale) — «дверь приоткрывается».
 .sidebar__item[data-icon-anim='rooms'].is-active .sidebar__icon {
-  animation: sidebar-icon-rooms calc(540ms / max(var(--motion-scale, 1), 0.001))
-    var(--ease-spring) 1;
+  animation: sidebar-icon-rooms calc(540ms / max(var(--motion-scale, 1), 0.001)) var(--ease-spring)
+    1;
   transform-origin: 30% 100%;
 }
 @keyframes sidebar-icon-rooms {
@@ -744,8 +743,7 @@ onBeforeUnmount(() => {
 
 // scenes: spotlight reveal — clip-path circle расширяется + scale-pop.
 .sidebar__item[data-icon-anim='scenes'].is-active .sidebar__icon {
-  animation: sidebar-icon-scenes calc(620ms / max(var(--motion-scale, 1), 0.001))
-    var(--ease-out) 1;
+  animation: sidebar-icon-scenes calc(620ms / max(var(--motion-scale, 1), 0.001)) var(--ease-out) 1;
 }
 @keyframes sidebar-icon-scenes {
   0% {
@@ -816,8 +814,8 @@ onBeforeUnmount(() => {
 
 // settings: cog-rotation полу-оборот + slight scale.
 .sidebar__item[data-icon-anim='settings'].is-active .sidebar__icon {
-  animation: sidebar-icon-settings calc(680ms / max(var(--motion-scale, 1), 0.001))
-    var(--ease-out) 1;
+  animation: sidebar-icon-settings calc(680ms / max(var(--motion-scale, 1), 0.001)) var(--ease-out)
+    1;
 }
 @keyframes sidebar-icon-settings {
   0% {

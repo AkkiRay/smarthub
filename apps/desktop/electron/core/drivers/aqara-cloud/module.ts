@@ -1,5 +1,7 @@
 import type { DriverModule } from '../driver-module.js';
 import { AqaraCloudDriver } from './aqara-cloud-driver.js';
+import { probeViaDiscover } from '../_shared/probe-via-discover.js';
+import { defaultRegion } from '../_shared/region-detect.js';
 
 export const aqaraCloudModule: DriverModule = {
   descriptor: {
@@ -14,6 +16,13 @@ export const aqaraCloudModule: DriverModule = {
     maturity: 'beta',
     docsUrl: 'https://opendoc.aqara.com/',
     credentialsSchema: [
+      {
+        key: '__register',
+        kind: 'register-link',
+        label: 'Открыть Aqara Open Console',
+        hint: 'Console → Project → Add. После одобрения (1–2 дня) — Auth → Generate auth code → Get token. Скопируйте App ID / App Key / Key ID / Access Token / Refresh Token сюда.',
+        url: 'https://developer.aqara.com/console',
+      },
       { key: 'appId', label: 'App ID', kind: 'text', required: true },
       { key: 'appKey', label: 'App Key', kind: 'password', required: true },
       { key: 'keyId', label: 'Key ID', kind: 'text', required: true },
@@ -23,7 +32,7 @@ export const aqaraCloudModule: DriverModule = {
         key: 'region',
         label: 'Регион',
         kind: 'select',
-        defaultValue: 'eu',
+        defaultValue: defaultRegion('aqara'),
         options: [
           { value: 'cn', label: 'China' },
           { value: 'usa', label: 'USA' },
@@ -33,6 +42,7 @@ export const aqaraCloudModule: DriverModule = {
           { value: 'ru', label: 'Russia' },
         ],
       },
+      { key: '__test', kind: 'test-button', label: 'Проверить' },
     ],
   },
   async create({ settings }) {
@@ -54,7 +64,6 @@ export const aqaraCloudModule: DriverModule = {
         refreshToken: c.refreshToken,
         region: c.region ?? 'eu',
       },
-      // Persist refreshed tokens — Aqara open-api ротирует и at, и rt на каждый refresh.
       ({ accessToken, refreshToken }) => {
         const existing = settings.getDriverCredentials('aqara-cloud');
         settings.setDriverCredentials('aqara-cloud', {
@@ -63,6 +72,23 @@ export const aqaraCloudModule: DriverModule = {
           ...(refreshToken ? { refreshToken } : {}),
         } as never);
       },
+    );
+  },
+  async probe(values) {
+    if (!values['appId'] || !values['appKey'] || !values['keyId'] || !values['accessToken']) {
+      return { ok: false, message: 'Заполните App ID, App Key, Key ID и Access token' };
+    }
+    return probeViaDiscover(
+      async () =>
+        new AqaraCloudDriver({
+          appId: values['appId']!,
+          appKey: values['appKey']!,
+          keyId: values['keyId']!,
+          accessToken: values['accessToken']!,
+          refreshToken: values['refreshToken'] || undefined,
+          region:
+            (values['region'] as 'cn' | 'usa' | 'eu' | 'sg' | 'kr' | 'ru' | undefined) ?? 'eu',
+        }),
     );
   },
 };

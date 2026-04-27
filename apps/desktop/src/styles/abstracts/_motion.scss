@@ -22,23 +22,59 @@
 }
 
 // ---- REDUCED: безопасное движение ----
-// Останавливает декоративные infinite loop'ы (pulseGlow, pageHeadAccent,
-// aura-blob drift). Translate / scale для interactive feedback сохраняются.
+// Останавливает декоративные infinite loop'ы (pulseGlow, accent drift, dot pulse).
+// Translate / scale для interactive feedback сохраняются. Селекторы
+// перечислены явно — generic `*[style*='infinite']` не срабатывает на
+// selector-уровне (style-attr контейнер, animation в shorthand).
 [data-motion='reduced'] {
-  // Infinite keyframes: ambient drift отключён.
-  *[style*='infinite'],
+  // Декоративные ambient-keyframes view-level: pulseGlow / accent / breath.
   .home__hero-pulse,
   .home__kpi-dot--pending,
   .page-head::before,
-  .aura__blob {
+  .panel::before,
+  .aura__blob,
+  .alice__status-pulse,
+  .alice__connected-dot,
+  .alice__scan-pip,
+  .device__hero-dot,
+  .room__toggle-pulse,
+  .speaker__hero-scan,
+  .speaker__hero-chip-pulse,
+  .speaker__badge-pulse,
+  .monitor__chip-pulse,
+  .station__playing-pulse,
+  .station__vol-wave,
+  .station__vol-speak,
+  .station__vol-glow,
+  .pf__glow,
+  .pf__pulse,
+  .pf__done-pulse,
+  .mf__pulse,
+  .sidebar__pip-pulse,
+  .titlebar__dot-pulse,
+  .skill-bridge__install,
+  .welcome__mark-pulse,
+  .welcome__accent,
+  .scan__indicator,
+  .scan__bar,
+  .empty-state__pulse,
+  .tour__halo {
     animation: none !important;
   }
 
   // backdrop-filter fallback: прозрачность через rgba(), без runtime blur.
+  // Освобождает GPU для остальных tween'ов когда motion-level снижен.
   .glass,
   [class*='--glass'] {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+  }
+
+  // Soft pulse: класс для view-level декораций которые не killed выше —
+  // снижает amplitude вместо полной остановки.
+  [data-pulse-soft] {
+    animation-duration: 3.6s !important;
+    animation-iteration-count: 1 !important;
   }
 }
 

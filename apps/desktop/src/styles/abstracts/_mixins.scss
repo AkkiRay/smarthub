@@ -60,16 +60,35 @@
   }
 }
 
+// Subtle hover-lift: 1px (через --lift токен), reactive на motion-scale.
+// Active возвращает в 0 за --dur-instant — тактильное «прижатие».
 @mixin hover-lift {
   transition:
-    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 220ms ease;
+    transform var(--trans-transform),
+    box-shadow var(--trans-medium);
   &:hover {
-    transform: translateY(-2px);
+    transform: translate3d(0, var(--lift), 0);
+  }
+  &:active {
+    transform: translate3d(0, 0, 0);
+    transition-duration: var(--dur-instant);
   }
 }
 
+// Tap-feedback: scale-down на active без hover-shift'а. Применяется на mobile
+// и для иконочных кнопок без vertical-lift'а.
+@mixin tap-feedback($scale: var(--press-scale)) {
+  transition: transform var(--trans-press);
+  &:active {
+    transform: scale(#{$scale});
+  }
+}
+
+// Focus-ring: 3px brand-tinted glow с плавным fade-in. opacity-only transition
+// исключает «прыжок» outline-offset'а на focus.
 @mixin focus-ring {
+  outline: none;
+  transition: box-shadow var(--trans-base);
   &:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px rgba(var(--color-brand-violet-rgb), 0.4);
@@ -96,8 +115,10 @@
   background: var(--color-bg-surface);
   border: var(--border-thin) solid var(--color-border-subtle);
   transition:
-    background var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
+    background var(--trans-base),
+    border-color var(--trans-base),
+    box-shadow var(--trans-medium),
+    transform var(--trans-transform);
 }
 
 // Icon-box: квадратный контейнер для иконки с tone-background. Управляется
