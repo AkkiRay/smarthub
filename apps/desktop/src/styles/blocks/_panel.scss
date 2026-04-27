@@ -46,7 +46,11 @@
       rgba(var(--panel-tone-rgb), 0) 100%
     );
     background-size: 100% 280%;
-    animation: panelAccent 8s ease-in-out infinite alternate;
+    // Длительность ÷ motion-scale: на off motion-scale → 0 → animation-duration
+    // → ∞, fallback'нется в kill-list `_motion.scss`. На reduced 0.6× → 13.3s
+    // (тише), full 1.15× → 6.95s (живее). max() защищает от деления на 0.
+    animation: panelAccent calc(8s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite
+      alternate;
     pointer-events: none;
     z-index: 0;
   }
@@ -63,11 +67,7 @@
       position: absolute;
       inset: 0;
       background:
-        radial-gradient(
-          60% 80% at 0% 0%,
-          rgba(var(--panel-tone-rgb), 0.28) 0%,
-          transparent 60%
-        ),
+        radial-gradient(60% 80% at 0% 0%, rgba(var(--panel-tone-rgb), 0.28) 0%, transparent 60%),
         radial-gradient(
           50% 60% at 100% 100%,
           rgba(var(--color-brand-pink-rgb), 0.18) 0%,
@@ -97,15 +97,20 @@
     }
   }
 
-  // .panel--raised — depth-2 c hover-glow.
+  // .panel--raised — depth-2 c hover-glow + 1px lift.
   &--raised {
     box-shadow: var(--depth-2);
 
     &:hover {
       border-color: rgba(var(--panel-tone-rgb), 0.18);
+      transform: translate3d(0, var(--lift), 0);
       box-shadow:
         var(--depth-2),
         0 0 32px rgba(var(--panel-tone-rgb), 0.18);
+    }
+    &:active {
+      transform: translate3d(0, 0, 0);
+      transition-duration: var(--dur-instant);
     }
   }
 

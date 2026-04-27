@@ -12,21 +12,17 @@
       </template>
     </BasePageHeader>
 
-    <Transition name="list-fade" mode="out-in">
-      <SkeletonGrid
-        v-if="showSkeleton"
-        key="skeleton"
-        :count="6"
-        cell-min="220px"
-        cell-height="180px"
-        class="scenes__grid"
-      />
+    <RevealStage :ready="!showSkeleton" @reveal-done="reveal.onRevealDone">
+      <template #skeleton>
+        <SkeletonGrid :count="6" cell-min="220px" cell-height="180px" class="scenes__grid" />
+      </template>
 
-      <div v-else-if="scenes.scenes.length" key="grid" class="scenes__grid bento-grid">
+      <div v-if="scenes.scenes.length" class="scenes__grid bento-grid">
         <article
           v-for="s in scenes.scenes"
           :key="s.id"
           class="card card--interactive scene"
+          data-anim="item"
           :style="{ '--accent': s.accent }"
         >
         <div class="scene__head">
@@ -70,7 +66,7 @@
         </div>
       </article>
 
-        <button class="card scene__create" @click="openCreate">
+        <button class="card scene__create" data-anim="item" @click="openCreate">
           <BaseIcon name="plus" :size="32" />
           <span class="text--body">Создать сценарий</span>
         </button>
@@ -78,7 +74,6 @@
 
       <BaseEmpty
         v-else
-        key="empty"
         title="Сценарии не созданы"
         text="Создайте «Доброе утро», «Кино», «Сон» — и запускайте всё одним тапом."
         data-anim="block"
@@ -92,7 +87,7 @@
           </BaseButton>
         </template>
       </BaseEmpty>
-    </Transition>
+    </RevealStage>
 
     <!-- ===================== Сценарии Алисы ===================== -->
     <section v-if="alicesScenarios.length" class="scenes__alice" data-anim="block">
@@ -107,6 +102,7 @@
           v-for="s in alicesScenarios"
           :key="s.id"
           class="card scene scene--alice"
+          data-anim="item"
           :class="{
             'is-running': runningId === s.id,
             'is-inactive': s.isActive === false,
@@ -284,8 +280,7 @@ import { useScenesStore } from '@/stores/scenes';
 import { useDevicesStore } from '@/stores/devices';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useToasterStore } from '@/stores/toaster';
-import { useViewMount } from '@/composables/useViewMount';
-import { useBootstrapGate } from '@/composables/useBootstrapGate';
+import { useSeamlessReveal } from '@/composables/useSeamlessReveal';
 import SceneEditor from '@/components/scenes/SceneEditor.vue';
 import {
   BaseButton,
@@ -296,6 +291,7 @@ import {
   BaseEmpty,
   ConfirmDialog,
   SkeletonGrid,
+  RevealStage,
   type IconName,
 } from '@/components/base';
 
@@ -305,7 +301,8 @@ const station = useYandexStationStore();
 const toaster = useToasterStore();
 const root = useTemplateRef<HTMLElement>('root');
 
-const gate = useBootstrapGate({
+const reveal = useSeamlessReveal({
+  scope: root,
   minDuration: 600,
   tasks: [
     () => (scenes.scenes.length ? Promise.resolve() : scenes.bootstrap()),
@@ -314,7 +311,7 @@ const gate = useBootstrapGate({
 });
 
 const showSkeleton = computed(
-  () => !gate.ready.value || (scenes.isLoading && scenes.scenes.length === 0),
+  () => !reveal.ready.value || (scenes.isLoading && scenes.scenes.length === 0),
 );
 
 // Используем homeFiltered, не home: при нескольких household'ах home содержит
@@ -595,24 +592,10 @@ onMounted(async () => {
   }
 });
 
-useViewMount({
-  scope: root,
-  itemsSelector: '.scenes__grid > .scene',
-  defer: gate.whenReady(),
-});
 </script>
 
 <style scoped lang="scss">
 @use '@/styles/abstracts/mixins' as *;
-
-.list-fade-enter-active,
-.list-fade-leave-active {
-  transition: opacity 220ms var(--ease-out);
-}
-.list-fade-enter-from,
-.list-fade-leave-to {
-  opacity: 0;
-}
 
 .scenes {
   display: flex;

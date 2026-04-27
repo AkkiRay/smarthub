@@ -63,19 +63,13 @@
       data-anim="block"
     />
 
-    <Transition name="list-fade" mode="out-in">
-      <SkeletonGrid
-        v-if="showSkeleton"
-        key="skeleton"
-        :count="6"
-        cell-min="220px"
-        cell-height="140px"
-        class="devices__grid"
-      />
+    <RevealStage :ready="!showSkeleton" @reveal-done="reveal.onRevealDone">
+      <template #skeleton>
+        <SkeletonGrid :count="6" cell-min="220px" cell-height="140px" class="devices__grid" />
+      </template>
 
       <BaseEmpty
-        v-else-if="!filtered.length"
-        key="empty"
+        v-if="!filtered.length"
         data-anim="block"
         :title="devices.devices.length === 0 ? 'Устройств пока нет' : 'Нет устройств в выборке'"
         :text="
@@ -109,15 +103,16 @@
         </template>
       </BaseEmpty>
 
-      <div v-else key="grid" class="devices__grid bento-grid">
+      <div v-else class="devices__grid bento-grid">
         <DeviceCard
           v-for="d in filtered"
           :key="d.id"
           :device="d"
+          data-anim="item"
           @click="$router.push(`/devices/${d.id}`)"
         />
       </div>
-    </Transition>
+    </RevealStage>
   </section>
 </template>
 
@@ -127,8 +122,7 @@ import { useRouter } from 'vue-router';
 import type { Device } from '@smarthome/shared';
 import { useDevicesStore } from '@/stores/devices';
 import { useRoomsStore } from '@/stores/rooms';
-import { useViewMount } from '@/composables/useViewMount';
-import { useBootstrapGate } from '@/composables/useBootstrapGate';
+import { useSeamlessReveal } from '@/composables/useSeamlessReveal';
 import DeviceCard from '@/components/devices/DeviceCard.vue';
 import {
   BaseButton,
@@ -137,6 +131,7 @@ import {
   BaseSegmented,
   BaseEmpty,
   SkeletonGrid,
+  RevealStage,
   type SegmentedOption,
 } from '@/components/base';
 
@@ -165,16 +160,18 @@ const roomFilter = ref<RoomFilterId>('__all');
 const yandexAuthorized = ref(false);
 const syncing = ref(false);
 
-// Bootstrap-gate с min-duration 500ms: гарантирует видимый shimmer даже когда
-// devices/rooms резолвятся за 50-100ms (App.vue их уже bootstrap'нул).
-const gate = useBootstrapGate({
+// Seamless reveal: bootstrap-gate (min 500ms) + header-волна на mount +
+// внутренний stagger child'ов делегирован <RevealStage> (один проход).
+// Раньше было `useBootstrapGate + useViewMount(defer)` — useViewMount хитил
+// `[data-anim="item"]` ещё раз поверх RevealStage.onContentEnter → дубль.
+const reveal = useSeamlessReveal({
+  scope: root,
   minDuration: 500,
   tasks: [() => (rooms.rooms.length ? Promise.resolve() : rooms.bootstrap())],
 });
 
-/** Skeleton-grid: пока gate не открыт ИЛИ store-loading + empty list. */
 const showSkeleton = computed(
-  () => !gate.ready.value || (devices.isLoading && devices.devices.length === 0),
+  () => !reveal.ready.value || (devices.isLoading && devices.devices.length === 0),
 );
 
 // Backfill yandex-rooms — once per session.
@@ -296,26 +293,12 @@ function onAdd(): void {
   void router.push('/discovery');
 }
 
-useViewMount({
-  scope: root,
-  itemsSelector: '.devices__grid > *',
-  defer: gate.whenReady(),
-});
+// Header + outer blocks (data-anim) анимируются внутри useSeamlessReveal
+// сразу на mount'е, content внутри RevealStage — после gate.ready.
 </script>
 
 <style scoped lang="scss">
 @use '@/styles/abstracts/mixins' as *;
-
-// Skeleton ↔ empty ↔ grid: opacity-only crossfade. Без translate/scale —
-// иначе grid скачет при switch'е states.
-.list-fade-enter-active,
-.list-fade-leave-active {
-  transition: opacity 220ms var(--ease-out);
-}
-.list-fade-enter-from,
-.list-fade-leave-to {
-  opacity: 0;
-}
 
 .devices {
   display: flex;

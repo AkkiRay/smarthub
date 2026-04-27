@@ -1,15 +1,18 @@
 <template>
   <section class="home home--skeleton" aria-busy="true" aria-label="Загрузка панели">
-    <header class="home__hero home__hero--skeleton">
-      <div class="home__hero-copy">
-        <span class="skeleton skeleton--pill home__sk-pill" />
-        <span class="skeleton skeleton--line home__sk-title" />
-        <span class="skeleton skeleton--line home__sk-title home__sk-title--narrow" />
-        <span class="skeleton skeleton--line home__sk-lead" />
-        <div class="home__sk-actions">
-          <span class="skeleton skeleton--rounded-pill home__sk-btn" />
-          <span class="skeleton skeleton--rounded-pill home__sk-btn home__sk-btn--ghost" />
+    <header class="home__hero home__hero--skeleton shine-load">
+      <div class="home__hero-top">
+        <div class="home__hero-copy">
+          <span class="skeleton skeleton--pill home__sk-pill" />
+          <span class="skeleton skeleton--line home__sk-title" />
+          <span class="skeleton skeleton--line home__sk-title home__sk-title--narrow" />
+          <span class="skeleton skeleton--line home__sk-lead" />
+          <div class="home__sk-actions">
+            <span class="skeleton skeleton--rounded-pill home__sk-btn" />
+            <span class="skeleton skeleton--rounded-pill home__sk-btn home__sk-btn--ghost" />
+          </div>
         </div>
+        <span class="skeleton home__sk-scene" />
       </div>
       <aside class="home__kpis home__kpis--skeleton">
         <div v-for="n in 4" :key="n" class="home__kpi home__kpi--skeleton">
@@ -20,7 +23,7 @@
       </aside>
     </header>
 
-    <section v-for="n in 2" :key="n" class="home__sk-section">
+    <section v-for="n in 2" :key="n" class="home__sk-section shine-load">
       <header class="home__head">
         <div class="home__sk-head-copy">
           <span class="skeleton skeleton--line home__sk-eyebrow" />
@@ -61,20 +64,15 @@
 
 .home__hero--skeleton {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) auto;
-  gap: var(--space-7);
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
   padding: var(--pad-roomy);
   border-radius: var(--radius-xl);
   overflow: hidden;
   isolation: isolate;
   @include glass(var(--glass-alpha-soft), var(--glass-blur-medium));
   box-shadow: var(--depth-2);
-
-  @media (max-width: 1080px) {
-    grid-template-columns: minmax(0, 1fr);
-  }
 
   @media (max-width: 720px) {
     padding: var(--pad-comfort);
@@ -83,11 +81,51 @@
   }
 }
 
+.home__hero-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: var(--space-7);
+  align-items: center;
+
+  @media (max-width: 1080px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .home__hero-copy {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   min-width: 0;
+}
+
+// Skeleton-placeholder для 3D-сцены: aspect-ratio 1/1 матчит реальную сцену.
+.home__sk-scene {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 360px;
+  border-radius: 50%;
+  justify-self: end;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(var(--color-brand-violet-rgb), 0.18) 0%,
+      rgba(var(--color-brand-pink-rgb), 0.08) 40%,
+      transparent 70%
+    ),
+    rgba(255, 255, 255, 0.03);
+
+  @media (max-width: 1280px) {
+    max-height: 320px;
+  }
+  @media (max-width: 1080px) {
+    max-height: 240px;
+    justify-self: center;
+    width: min(100%, 320px);
+  }
+  @media (max-width: 760px) {
+    display: none;
+  }
 }
 
 .home__sk-pill {
@@ -128,16 +166,13 @@
 
 .home__kpis--skeleton {
   display: grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   background: var(--color-border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: var(--border-thin) solid var(--color-border-subtle);
 
-  @media (max-width: 1080px) {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
   @media (max-width: 720px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -147,7 +182,7 @@
 }
 
 .home__kpi--skeleton {
-  background: rgba(var(--glass-tint), 0.4);
+  background: rgba(var(--glass-tint), 0.72);
   padding: var(--space-4) var(--space-5);
   display: flex;
   flex-direction: column;

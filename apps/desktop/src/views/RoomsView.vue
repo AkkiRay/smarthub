@@ -12,21 +12,17 @@
       </template>
     </BasePageHeader>
 
-    <Transition name="list-fade" mode="out-in">
-      <SkeletonGrid
-        v-if="showSkeleton"
-        key="skeleton"
-        :count="4"
-        cell-min="280px"
-        cell-height="200px"
-        class="rooms__grid"
-      />
+    <RevealStage :ready="!showSkeleton" @reveal-done="reveal.onRevealDone">
+      <template #skeleton>
+        <SkeletonGrid :count="4" cell-min="280px" cell-height="200px" class="rooms__grid" />
+      </template>
 
-      <div v-else-if="rooms.rooms.length" key="grid" class="rooms__grid bento-grid">
+      <div v-if="rooms.rooms.length" class="rooms__grid bento-grid">
         <article
         v-for="room in roomsWithStats"
         :key="room.id"
         class="room"
+        data-anim="item"
         :class="{
           'room--yandex': room.origin === 'yandex',
           'room--active': room.activeCount > 0,
@@ -227,7 +223,6 @@
 
       <BaseEmpty
         v-else
-        key="empty"
         title="У вас ещё нет комнат"
         text="Добавьте «Гостиную», «Спальню», «Кухню» — и закрепите за ними устройства."
         data-anim="block"
@@ -241,7 +236,7 @@
           </BaseButton>
         </template>
       </BaseEmpty>
-    </Transition>
+    </RevealStage>
 
     <BaseModal
       :model-value="creating"
@@ -294,8 +289,7 @@ import type { Device, DeviceCommand, Room } from '@smarthome/shared';
 import { useRoomsStore } from '@/stores/rooms';
 import { useDevicesStore } from '@/stores/devices';
 import { useToasterStore } from '@/stores/toaster';
-import { useViewMount } from '@/composables/useViewMount';
-import { useBootstrapGate } from '@/composables/useBootstrapGate';
+import { useSeamlessReveal } from '@/composables/useSeamlessReveal';
 import {
   BaseButton,
   BaseInput,
@@ -305,6 +299,7 @@ import {
   BaseEmpty,
   ConfirmDialog,
   SkeletonGrid,
+  RevealStage,
 } from '@/components/base';
 
 const rooms = useRoomsStore();
@@ -312,14 +307,15 @@ const devices = useDevicesStore();
 const toaster = useToasterStore();
 const root = useTemplateRef<HTMLElement>('root');
 
-/** Skeleton, пока rooms-store впервые грузится. */
-const gate = useBootstrapGate({
+/** Bootstrap-gate (min 500ms) + page-header волна. Stagger room-tiles делегирован <RevealStage>. */
+const reveal = useSeamlessReveal({
+  scope: root,
   minDuration: 500,
   tasks: [() => (rooms.rooms.length ? Promise.resolve() : rooms.bootstrap())],
 });
 
 const showSkeleton = computed(
-  () => !gate.ready.value || (rooms.isLoading && rooms.rooms.length === 0),
+  () => !reveal.ready.value || (rooms.isLoading && rooms.rooms.length === 0),
 );
 
 const creating = ref(false);
@@ -831,20 +827,10 @@ onMounted(async () => {
   }
 });
 
-useViewMount({ scope: root, itemsSelector: '.room', defer: gate.whenReady() });
 </script>
 
 <style scoped lang="scss">
 @use '@/styles/abstracts/mixins' as *;
-
-.list-fade-enter-active,
-.list-fade-leave-active {
-  transition: opacity 220ms var(--ease-out);
-}
-.list-fade-enter-from,
-.list-fade-leave-to {
-  opacity: 0;
-}
 
 .rooms {
   display: flex;

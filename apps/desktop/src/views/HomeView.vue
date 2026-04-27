@@ -1,44 +1,50 @@
 <template>
-  <Transition name="home-bootstrap" mode="out-in">
-    <HomeSkeleton v-if="!bootstrapped" key="skeleton" />
-    <section v-else key="ready" class="home" ref="root">
-    <!-- HERO: главный заголовок + статус-strip + ambient 3D scene -->
-    <header class="home__hero">
-      <!-- Centered atmospheric 3D wireframe sphere + radial glow halo за hero
-           gradient'ом. Низкая opacity, blurred — служит визуальным «дыханием»
-           вместо угловой иконки. -->
-      <div class="home__hero-scene" aria-hidden="true">
-        <span class="home__hero-halo" />
-        <AmbientMesh class="home__hero-mesh" :detail="2" />
-      </div>
-      <div class="home__hero-copy">
-        <span class="home__hero-eyebrow">
-          <span class="home__hero-pulse" />
-          <span>{{ contextLabel }}</span>
-        </span>
-        <h1 class="home__title">
-          {{ greeting }},<br />
-          <span class="text--alice">{{ subtitleAccent }}</span>
-        </h1>
-        <p class="home__lead">{{ contextLead }}</p>
+  <RevealStage :ready="bootstrapped" @reveal-done="reveal.onRevealDone">
+    <template #skeleton>
+      <HomeSkeleton />
+    </template>
+    <section class="home" ref="root">
+    <!-- HERO: copy + ambient 3D scene в верхнем ряду; KPI-strip полным рядом
+         ниже. Раздельные ряды устраняют overlap 3D-сцены с цифрами. -->
+    <header class="home__hero" data-anim="header">
+      <div class="home__hero-top">
+        <div class="home__hero-copy">
+          <span class="home__hero-eyebrow">
+            <span class="home__hero-pulse" />
+            <span>{{ contextLabel }}</span>
+          </span>
+          <h1 class="home__title">
+            {{ greeting }},<br />
+            <span class="text--alice">{{ subtitleAccent }}</span>
+          </h1>
+          <p class="home__lead">{{ contextLead }}</p>
 
-        <!-- Action bar — не теряется на скролле -->
-        <div class="home__actions">
-          <BaseButton variant="primary" size="lg" icon-left="search" @click="runDiscovery">
-            Найти устройства
-          </BaseButton>
-          <BaseButton
-            variant="ghost"
-            size="lg"
-            icon-right="arrow-right"
-            @click="$router.push('/devices')"
-          >
-            Все устройства
-          </BaseButton>
+          <!-- Action bar — не теряется на скролле -->
+          <div class="home__actions">
+            <BaseButton variant="primary" size="lg" icon-left="search" @click="runDiscovery">
+              Найти устройства
+            </BaseButton>
+            <BaseButton
+              variant="ghost"
+              size="lg"
+              icon-right="arrow-right"
+              @click="$router.push('/devices')"
+            >
+              Все устройства
+            </BaseButton>
+          </div>
+        </div>
+
+        <!-- Atmospheric 3D wireframe sphere + halo. Constrained right-column
+             cell с aspect-ratio: 1/1 — не вылезает на KPI-row внизу. -->
+        <div class="home__hero-scene" aria-hidden="true">
+          <span class="home__hero-halo" />
+          <AmbientMesh class="home__hero-mesh" :detail="2" />
         </div>
       </div>
 
-      <!-- Status-strip справа: 4 KPI с разделителями -->
+      <!-- KPI-strip полным рядом под top-row'ом — гарантированно без overlap'а
+           с 3D-сценой. -->
       <aside class="home__kpis" v-if="hasMetrics" data-tour="home-onboarding">
         <button
           type="button"
@@ -87,7 +93,7 @@
 
     <!-- Onboarding banner — нумерованные шаги -->
     <Transition name="home-fade">
-      <section v-if="showOnboarding" class="home__onboarding">
+      <section v-if="showOnboarding" class="home__onboarding" data-anim="block">
         <header class="home__head">
           <div>
             <span class="home__head-eyebrow">Начните с этого</span>
@@ -99,6 +105,7 @@
             v-if="!devices.devices.length"
             type="button"
             class="tile tile--interactive tile--violet"
+            data-anim="item"
             @click="runDiscovery"
           >
             <div class="tile__icon"><BaseIcon name="search" :size="22" /></div>
@@ -115,6 +122,7 @@
             v-if="!isAliceConnected"
             type="button"
             class="tile tile--interactive tile--pink"
+            data-anim="item"
             @click="$router.push('/alice')"
           >
             <div class="tile__icon"><BaseIcon name="alice" :size="22" /></div>
@@ -131,6 +139,7 @@
             v-if="!hasAnyIntegration"
             type="button"
             class="tile tile--interactive tile--amber"
+            data-anim="item"
             @click="$router.push('/settings')"
           >
             <div class="tile__icon"><BaseIcon name="settings" :size="22" /></div>
@@ -148,7 +157,7 @@
     </Transition>
 
     <!-- Быстрые сцены: контекстуально (сейчас день — сцены подсветки/кино) -->
-    <section v-if="hasOnlineToggleable" class="home__quick">
+    <section v-if="hasOnlineToggleable" class="home__quick" data-anim="block">
       <header class="home__head">
         <div>
           <span class="home__head-eyebrow">Быстрые действия</span>
@@ -167,6 +176,7 @@
           :class="{ 'quick-tile--running': busyQuickId === quick.id }"
           :disabled="busyQuickId !== null && busyQuickId !== quick.id"
           :style="{ '--accent': quick.accent }"
+          data-anim="item"
           @click="runQuick(quick)"
         >
           <span class="quick-tile__glyph">
@@ -184,7 +194,7 @@
     </section>
 
     <!-- Сценарии Алисы -->
-    <section v-if="topAliceScenarios.length" class="home__alice">
+    <section v-if="topAliceScenarios.length" class="home__alice" data-anim="block">
       <header class="home__head">
         <div>
           <span class="home__head-eyebrow">Сценарии Алисы</span>
@@ -204,6 +214,7 @@
           :class="{ 'alice-tile--running': runningScenarioId === s.id }"
           :disabled="runningScenarioId !== null"
           :title="s.triggers[0]?.summary ?? 'Запустить сценарий'"
+          data-anim="item"
           @click="runAliceScenario(s.id, s.name)"
         >
           <span class="alice-tile__glyph">
@@ -225,7 +236,7 @@
     </section>
 
     <!-- Устройства -->
-    <section v-if="topDevices.length" class="home__rooms">
+    <section v-if="topDevices.length" class="home__rooms" data-anim="block">
       <header class="home__head">
         <div>
           <span class="home__head-eyebrow">Устройства</span>
@@ -241,6 +252,7 @@
           v-for="d in topDevices"
           :key="d.id"
           :device="d"
+          data-anim="item"
           @click="$router.push(`/devices/${d.id}`)"
         />
       </div>
@@ -248,6 +260,7 @@
 
     <BaseEmpty
       v-else-if="!showOnboarding"
+      data-anim="block"
       title="Устройств пока нет"
       text="Запустите сканирование локальной сети — хаб найдёт лампы, розетки и колонку Алисы."
     >
@@ -261,7 +274,7 @@
       </template>
     </BaseEmpty>
     </section>
-  </Transition>
+  </RevealStage>
 </template>
 
 <script setup lang="ts">
@@ -270,13 +283,12 @@ import { useDevicesStore } from '@/stores/devices';
 import { useScenesStore } from '@/stores/scenes';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useToasterStore } from '@/stores/toaster';
-import { useGsap } from '@/composables/useGsap';
-import { useBootstrapGate } from '@/composables/useBootstrapGate';
+import { useSeamlessReveal } from '@/composables/useSeamlessReveal';
 import { useRouter } from 'vue-router';
 import DeviceCard from '@/components/devices/DeviceCard.vue';
 import AmbientMesh from '@/components/visuals/AmbientMesh.vue';
 import HomeSkeleton from './HomeSkeleton.vue';
-import { BaseButton, BaseEmpty, BaseIcon } from '@/components/base';
+import { BaseButton, BaseEmpty, BaseIcon, RevealStage } from '@/components/base';
 import { QUICK_SCENES, type QuickScene } from '@/constants/quickScenes';
 
 const devices = useDevicesStore();
@@ -287,15 +299,14 @@ const router = useRouter();
 const root = useTemplateRef<HTMLElement>('root');
 
 /**
- * Bootstrap-gate: остаётся `false` пока не закончится bootstrap-волна.
- * Min-duration 700ms гарантирует что shimmer-skeleton точно успеет показаться,
- * даже если все store-источники резолвятся за 50-100ms (App.vue уже
- * bootstrap'нул devices/yandex/alice). Без min-duration shimmer мелькал на
- * 1-2 кадра и казался отсутствующим.
+ * Seamless-reveal: bootstrap-gate (min 700ms) + header-волна на mount +
+ * cascade child'ов (header → block → item) делегирован <RevealStage> —
+ * тот же паттерн, что в DevicesView/RoomsView/ScenesView.
+ * Min-duration 700ms гарантирует что shimmer успеет показаться, даже если
+ * все store-источники резолвятся за 50-100ms.
  */
-// Lazy-thunk tasks: фактический вызов async-функций отложен до onMounted внутри
-// composable'а, чтобы хук не требовал hoist'а локальных ref'ов и функций.
-const gate = useBootstrapGate({
+const reveal = useSeamlessReveal({
+  scope: root,
   minDuration: 700,
   tasks: [
     () => (scenes.scenes.length ? Promise.resolve() : scenes.bootstrap()),
@@ -303,7 +314,7 @@ const gate = useBootstrapGate({
     () => loadDriversList(),
   ],
 });
-const bootstrapped = gate.ready;
+const bootstrapped = reveal.ready;
 
 function waitDevicesReady(): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -496,28 +507,10 @@ async function runQuick(quick: QuickScene): Promise<void> {
   }
 }
 
-const { timeline } = useGsap(root);
-
-/**
- * Запускает mount-stagger на real-content. Вызывается nextTick после
- * `bootstrapped = true`, когда `root` уже указывает на `<section class="home">`.
- */
-function runEntryAnimation(): void {
-  if (!root.value) return;
-  const tl = timeline({
-    defaults: { ease: 'power3.out', force3D: true, clearProps: 'opacity,transform' },
-  });
-  tl.from('.home__hero-copy > *', { opacity: 0, x: -16, stagger: 0.06, duration: 0.5 }, 0)
-    .from('.home__kpi', { opacity: 0, y: 14, stagger: 0.04, duration: 0.45 }, 0.12)
-    .from(
-      '.quick-tile, .alice-tile, .home__device-grid > *',
-      { opacity: 0, y: 12, stagger: { each: 0.04, amount: 0.42, from: 'start' }, duration: 0.42 },
-      0.22,
-    );
-}
-
-// Запуск entry-animation после flip'а bootstrapped → real-content смонтирован.
-gate.whenReady().then(runEntryAnimation);
+// Cascade-reveal делегирован <RevealStage>.onContentEnter:
+//  header (`[data-anim="header"]`) → blocks (`[data-anim="block"]`) →
+//  items (`[data-anim="item"]`). Тот же контракт, что в Devices/Rooms/Scenes —
+//  unified phased reveal без дубля кастомной timeline.
 </script>
 
 <style scoped lang="scss">
@@ -535,20 +528,18 @@ gate.whenReady().then(runEntryAnimation);
   }
 }
 
-// HERO: glass-карточка с двумя колонками — copy слева, KPI strip справа.
-// AmbientMesh висит абсолютным слоем за gradient'ом, под содержимым.
+// HERO: vertical stack — top-row (copy + 3D scene) и KPI-strip полным рядом.
+// Раздельные ряды → 3D-сцена не пересекается с цифрами KPI.
 .home__hero {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) auto;
-  gap: var(--space-7);
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
   padding: var(--pad-roomy);
   border-radius: var(--radius-xl);
   overflow: hidden;
   isolation: isolate;
   @include glass(var(--glass-alpha-soft), var(--glass-blur-medium));
-  // Layered depth + Alice-yellow tint в gradient'е.
   box-shadow: var(--depth-2);
   contain: layout style;
 
@@ -581,11 +572,6 @@ gate.whenReady().then(runEntryAnimation);
     z-index: 1;
   }
 
-  @media (max-width: 1080px) {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-  }
-
   @media (max-width: 720px) {
     padding: var(--pad-comfort);
     border-radius: var(--radius-lg);
@@ -593,33 +579,41 @@ gate.whenReady().then(runEntryAnimation);
   }
 }
 
+// Top-row: copy слева, 3D-сцена справа отдельной колонкой.
+.home__hero-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: var(--space-7);
+  align-items: center;
+
+  @media (max-width: 1080px) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+}
+
 // Hero-scene — атмосферный 3D-визуал: wireframe-сфера + radial halo за ней.
-// Position absolute, занимает правую половину hero, центрирована по высоте.
-// pointer-events:none — сцена декоративная, не блокирует клики на KPI strip.
+// Теперь grid-cell с aspect-ratio: 1/1 — никогда не пересекает KPI-row снизу.
 .home__hero-scene {
-  position: absolute;
-  top: 50%;
-  right: -8%;
-  transform: translateY(-50%);
-  width: 540px;
-  height: 540px;
-  z-index: 0;
-  pointer-events: none;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 360px;
   display: grid;
   place-items: center;
+  pointer-events: none;
   isolation: isolate;
+  justify-self: end;
 
   @media (max-width: 1280px) {
-    width: 460px;
-    height: 460px;
-    right: -12%;
+    max-height: 320px;
   }
 
   @media (max-width: 1080px) {
-    width: 320px;
-    height: 320px;
-    right: -16%;
-    opacity: 0.7;
+    max-height: 240px;
+    opacity: 0.85;
+    justify-self: center;
+    width: min(100%, 320px);
   }
 
   @media (max-width: 760px) {
@@ -629,7 +623,7 @@ gate.whenReady().then(runEntryAnimation);
 
 .home__hero-halo {
   position: absolute;
-  inset: 12%;
+  inset: 8%;
   border-radius: 50%;
   background:
     radial-gradient(
@@ -644,15 +638,16 @@ gate.whenReady().then(runEntryAnimation);
 }
 
 .home__hero-mesh {
-  position: relative;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   z-index: 1;
-  opacity: 0.85;
+  opacity: 0.92;
   mix-blend-mode: screen;
 
   @media (max-width: 1080px) {
-    opacity: 0.6;
+    opacity: 0.7;
   }
 }
 
@@ -733,19 +728,16 @@ gate.whenReady().then(runEntryAnimation);
   }
 }
 
-// KPI strip — 4 метрики с pixel-thin разделителями.
+// KPI strip — 4 метрики полным рядом под top-row'ом. Никогда не пересекается
+// с 3D-сценой → цифры читаемы без визуального шума.
 .home__kpis {
   display: grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   background: var(--color-border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: var(--border-thin) solid var(--color-border-subtle);
-
-  @media (max-width: 1080px) {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
 
   @media (max-width: 720px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -758,7 +750,8 @@ gate.whenReady().then(runEntryAnimation);
 }
 
 .home__kpi {
-  background: rgba(var(--glass-tint), 0.4);
+  // Opaque-background — KPI читается даже на самом ярком gradient'е hero.
+  background: rgba(var(--glass-tint), 0.72);
   border: 0;
   padding: var(--space-4) var(--space-5);
   display: flex;
@@ -784,7 +777,7 @@ gate.whenReady().then(runEntryAnimation);
   }
 
   &:hover {
-    background: rgba(var(--glass-tint), 0.6);
+    background: rgba(var(--glass-tint), 0.86);
   }
 
   &-label {
@@ -1136,18 +1129,6 @@ gate.whenReady().then(runEntryAnimation);
 // видится как «прыжок». Для длинных листов (DevicesView) есть utility .cv-auto.
 .home__device-grid {
   @include auto-grid(var(--cell-md), var(--space-3));
-}
-
-// Bootstrap-gate Transition: skeleton ↔ real-content crossfade. Out-in mode
-// гарантирует что skeleton полностью fade-out'ит до начала fade-in'а content'а
-// — без двойного DOM в один момент и без прыжков layout'а.
-.home-bootstrap-enter-active,
-.home-bootstrap-leave-active {
-  transition: opacity var(--dur-slow) var(--ease-out);
-}
-.home-bootstrap-enter-from,
-.home-bootstrap-leave-to {
-  opacity: 0;
 }
 
 // Внутри-сессионная conditional section transition (onboarding hides когда
