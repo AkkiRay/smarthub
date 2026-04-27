@@ -128,10 +128,81 @@
         </dl>
       </article>
 
+      <!-- ============ Обновления ============ -->
+      <article id="updates" class="settings__group" data-anim="block">
+        <header class="settings__group-head">
+          <span class="settings__group-num">03</span>
+          <div>
+            <h2 class="settings__group-title">Обновления</h2>
+            <p class="settings__group-desc">
+              Хаб сам проверяет GitHub Releases каждые 6 часов и сообщает о новой версии. Здесь
+              можно проверить вручную и применить уже скачанное обновление.
+            </p>
+          </div>
+        </header>
+
+        <div class="settings__rows">
+          <div class="settings__row">
+            <div class="settings__row-copy">
+              <span class="settings__row-title">Текущая версия</span>
+              <span class="settings__row-hint">{{ updateHint }}</span>
+            </div>
+            <div class="settings__update-actions">
+              <BaseButton
+                v-if="updater.isAvailable"
+                variant="primary"
+                size="sm"
+                @click="onDownload"
+              >
+                Скачать {{ updater.newVersion }}
+              </BaseButton>
+              <BaseButton
+                v-else-if="updater.isDownloaded"
+                variant="primary"
+                size="sm"
+                icon-left="refresh"
+                @click="onInstall"
+              >
+                Перезапустить
+              </BaseButton>
+              <BaseButton
+                v-else
+                variant="ghost"
+                size="sm"
+                icon-left="refresh"
+                :disabled="updater.state === 'checking' || updater.state === 'downloading'"
+                @click="onCheckUpdate"
+              >
+                {{ updater.state === 'checking' ? 'Проверяем…' : 'Проверить' }}
+              </BaseButton>
+            </div>
+          </div>
+
+          <div v-if="updater.isDownloading" class="settings__row settings__row--stack">
+            <div class="settings__row-copy">
+              <span class="settings__row-title">Загрузка обновления</span>
+              <span class="settings__row-hint">{{ updater.downloadPercent }}%</span>
+            </div>
+            <div
+              class="settings__progress"
+              role="progressbar"
+              :aria-valuenow="updater.downloadPercent"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span
+                class="settings__progress-bar"
+                :style="{ width: `${updater.downloadPercent}%` }"
+              />
+            </div>
+          </div>
+        </div>
+      </article>
+
       <!-- ============ Интеграции ============ -->
       <article class="settings__group" data-anim="block" data-tour="settings-integrations">
         <header class="settings__group-head">
-          <span class="settings__group-num">03</span>
+          <span class="settings__group-num">04</span>
           <div>
             <h2 class="settings__group-title">Интеграции</h2>
             <p class="settings__group-desc">
@@ -157,6 +228,7 @@ import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import type { HubInfo } from '@smarthome/shared';
 import { useUiStore, type MotionLevel } from '@/stores/ui';
+import { useUpdaterStore } from '@/stores/updater';
 import { useViewMount } from '@/composables/useViewMount';
 import { useDeferredMount } from '@/composables/useDeferredMount';
 import {
@@ -171,8 +243,43 @@ import {
 import DriversMarketplace from '@/components/drivers/DriversMarketplace.vue';
 
 const ui = useUiStore();
+const updater = useUpdaterStore();
 const router = useRouter();
 const root = useTemplateRef<HTMLElement>('root');
+
+const updateHint = computed<string>(() => {
+  const s = updater.status;
+  const v = updater.currentVersion || ui.version || '';
+  if (!s || s.state === 'disabled') return `v${v} — авто-обновление недоступно (dev / portable)`;
+  switch (s.state) {
+    case 'idle':
+      return `v${v} — нажмите «Проверить», чтобы запросить новую версию`;
+    case 'checking':
+      return `v${v} — проверяем GitHub Releases…`;
+    case 'up-to-date':
+      return `v${v} — это последняя версия`;
+    case 'available':
+      return `v${v} — доступно ${s.version}`;
+    case 'downloading':
+      return `Скачиваем ${s.version ?? 'обновление'}…`;
+    case 'downloaded':
+      return `${s.version} скачано — перезапустите, чтобы применить`;
+    case 'error':
+      return `v${v} — ${s.error}`;
+    default:
+      return `v${v}`;
+  }
+});
+
+function onCheckUpdate(): void {
+  void updater.check();
+}
+function onDownload(): void {
+  void updater.download();
+}
+function onInstall(): void {
+  void updater.install();
+}
 
 const hubInfo = ref<HubInfo | null>(null);
 const copied = ref(false);
@@ -409,6 +516,29 @@ const marketplaceReady = useDeferredMount({ mode: 'idle', delayMs: 250 });
 
   &__hub-id {
     font-family: var(--font-family-mono);
+  }
+
+  &__update-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__progress {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+    position: relative;
+
+    &-bar {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--gradient-brand);
+      transition: width 200ms var(--ease-out);
+    }
   }
 
   &__copy {

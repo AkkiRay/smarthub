@@ -50,12 +50,39 @@ import type { SettingsStore } from '../../storage/settings-store.js';
 import { isYandexWebhookSource, noteWebhookRequestId } from './webhook-trust.js';
 
 const RESPONSE_BUDGET_MS = 2_500; // Алиса даёт 3с total → оставляем 500мс на сеть
+/** Cap на concurrent executeCommand'ы — защита от device-spam'а при action-batch на 50+ устройств. */
+const ACTION_CONCURRENCY_LIMIT = 8;
+/** Жёсткий таймаут на чтение тела запроса — защита от slow-loris. */
+const BODY_READ_TIMEOUT_MS = 8_000;
 
-/** Allow-list redirect_uri для /authorize — open-redirect защита. */
+/** Pool-сериализация: max N concurrent. Возвращает результат в порядке входа. */
+async function mapWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      out[idx] = await fn(items[idx]!, idx);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/**
+ * Allow-list redirect_uri для /authorize — open-redirect защита.
+ * Актуально на 2026: Yandex документирует ровно один redirect_uri —
+ * `https://social.yandex.net/broker/redirect`. Старые `.ru/` и `dialogs.yandex.ru/`
+ * оставлены как fallback на случай, если sandbox / regional flows используют их.
+ */
 const ALLOWED_REDIRECT_PREFIXES = [
-  'https://social.yandex.net/',
-  'https://social.yandex.ru/',
-  'https://dialogs.yandex.ru/',
+  'https://social.yandex.net/broker/redirect',
+  'https://social.yandex.ru/broker/redirect',
+  'https://dialogs.yandex.ru/oauth/',
 ];
 
 /** TTL HTML-формы /oauth/authorize (CSRF-nonce живёт ровно столько). */
@@ -71,26 +98,26 @@ const AUTHORIZE_FORM_TTL_MS = 10 * 60 * 1000;
  */
 const YANDEX_ERROR_CODES = new Set([
   'DOOR_OPEN',
-  'HOOD_OPEN',
+  'LID_OPEN',
   'REMOTE_CONTROL_DISABLED',
-  'NOT_ENOUGH_FUEL_LEVEL',
   'LOW_CHARGE_LEVEL',
+  'NOT_ENOUGH_WATER',
+  'NOT_ENOUGH_DETERGENT',
   'CONTAINER_FULL',
   'CONTAINER_EMPTY',
   'DRIP_TRAY_FULL',
-  'WATER_TANK_EMPTY',
-  'ALREADY_IN_USE',
+  'DEVICE_STUCK',
+  'DEVICE_OFF',
+  'DEVICE_BUSY',
+  'FIRMWARE_OUT_OF_DATE',
+  'HUMAN_INVOLVEMENT_NEEDED',
   'INVALID_ACTION',
   'INVALID_VALUE',
   'NOT_SUPPORTED_IN_CURRENT_MODE',
-  'DEVICE_OFF',
-  'DEVICE_BUSY',
-  'HUB_NOT_AVAILABLE',
   'ACCOUNT_LINKING_ERROR',
   'INTERNAL_ERROR',
   'DEVICE_NOT_FOUND',
   'DEVICE_UNREACHABLE',
-  'SECURITY_VIOLATION',
 ]);
 
 /**
@@ -118,11 +145,11 @@ function mapToYandexErrorCode(driverCode: string | undefined): string {
       return 'DEVICE_UNREACHABLE';
     case 'NOT_PAIRED':
     case 'BRIDGE_OFFLINE':
-      return 'HUB_NOT_AVAILABLE';
+      return 'DEVICE_UNREACHABLE';
     case 'BUSY':
       return 'DEVICE_BUSY';
     case 'POLICY_VIOLATION':
-      return 'SECURITY_VIOLATION';
+      return 'INVALID_ACTION';
     default:
       return 'INTERNAL_ERROR';
   }
@@ -665,87 +692,112 @@ export class SkillWebhookServer {
 
     const result = await this.withBudget(
       async () => {
-        const responses = await Promise.all(
-          requested.map(async (deviceReq) => {
-            // Сценарий → запуск scene; one virtual on_off-instance.
-            if (isSceneYandexId(deviceReq.id)) {
-              const sceneId = sceneIdFromYandexId(deviceReq.id);
-              try {
-                await this.deps.runScene(sceneId);
-                return {
-                  id: deviceReq.id,
-                  capabilities: (deviceReq.capabilities ?? []).map((c) => ({
-                    type: c.type,
-                    state: {
-                      instance: c.state.instance,
-                      action_result: { status: 'DONE' as const },
+        return mapWithLimit(requested, ACTION_CONCURRENCY_LIMIT, async (deviceReq) => {
+          const reqCaps = deviceReq.capabilities ?? [];
+          // Device-level fallback — Алиса прислала action на устройство без capabilities
+          // (теоретически invalid request, но spec разрешает device-level action_result).
+          if (reqCaps.length === 0) {
+            return {
+              id: deviceReq.id,
+              action_result: {
+                status: 'ERROR' as const,
+                error_code: 'INVALID_ACTION',
+                error_message: 'Empty capabilities array',
+              },
+            };
+          }
+
+          // Сценарий → запуск scene; one virtual on_off-instance.
+          if (isSceneYandexId(deviceReq.id)) {
+            const sceneId = sceneIdFromYandexId(deviceReq.id);
+            try {
+              await this.deps.runScene(sceneId);
+              return {
+                id: deviceReq.id,
+                capabilities: reqCaps.map((c) => ({
+                  type: c.type,
+                  state: {
+                    instance: c.state.instance,
+                    action_result: { status: 'DONE' as const },
+                  },
+                })),
+              };
+            } catch (e) {
+              return {
+                id: deviceReq.id,
+                capabilities: reqCaps.map((c) => ({
+                  type: c.type,
+                  state: {
+                    instance: c.state.instance,
+                    action_result: {
+                      status: 'ERROR' as const,
+                      error_code: 'INTERNAL_ERROR',
+                      error_message: (e as Error).message,
                     },
-                  })),
+                  },
+                })),
+              };
+            }
+          }
+
+          // Реальное устройство — capabilities внутри одного устройства паралл-сериализуем
+          // нерезаное (внутри уже Promise.all), но cap внешний пул на устройства.
+          const capabilityResponses = await Promise.all(
+            reqCaps.map(async (capReq) => {
+              const instance = typeof capReq?.state?.instance === 'string' ? capReq.state.instance : '';
+              if (!instance.trim()) {
+                return {
+                  type: capReq.type,
+                  state: {
+                    instance,
+                    action_result: {
+                      status: 'ERROR' as const,
+                      error_code: 'INVALID_ACTION',
+                      error_message: 'Missing capability instance',
+                    },
+                  },
+                };
+              }
+              try {
+                const r = await this.deps.executeCommand({
+                  deviceId: deviceReq.id,
+                  capability: capReq.type as DeviceCommand['capability'],
+                  instance,
+                  value: capReq.state.value,
+                });
+                return {
+                  type: capReq.type,
+                  state: {
+                    instance,
+                    action_result:
+                      r.status === 'DONE'
+                        ? { status: 'DONE' as const }
+                        : {
+                            status: 'ERROR' as const,
+                            // Yandex принимает ТОЛЬКО whitelisted error_code'ы;
+                            // driver-defined codes переводятся в spec-форму.
+                            error_code: mapToYandexErrorCode(r.errorCode),
+                            error_message: r.errorMessage,
+                          },
+                  },
                 };
               } catch (e) {
                 return {
-                  id: deviceReq.id,
-                  capabilities: (deviceReq.capabilities ?? []).map((c) => ({
-                    type: c.type,
-                    state: {
-                      instance: c.state.instance,
-                      action_result: {
-                        status: 'ERROR' as const,
-                        error_code: 'INTERNAL_ERROR',
-                        error_message: (e as Error).message,
-                      },
+                  type: capReq.type,
+                  state: {
+                    instance,
+                    action_result: {
+                      status: 'ERROR' as const,
+                      error_code: 'INTERNAL_ERROR',
+                      error_message: (e as Error).message,
                     },
-                  })),
+                  },
                 };
               }
-            }
-
-            // Реальное устройство
-            const capabilityResponses = await Promise.all(
-              (deviceReq.capabilities ?? []).map(async (capReq) => {
-                try {
-                  const r = await this.deps.executeCommand({
-                    deviceId: deviceReq.id,
-                    capability: capReq.type as DeviceCommand['capability'],
-                    instance: capReq.state.instance,
-                    value: capReq.state.value,
-                  });
-                  return {
-                    type: capReq.type,
-                    state: {
-                      instance: capReq.state.instance,
-                      action_result:
-                        r.status === 'DONE'
-                          ? { status: 'DONE' as const }
-                          : {
-                              status: 'ERROR' as const,
-                              // Yandex принимает ТОЛЬКО whitelisted error_code'ы;
-                              // driver-defined codes (UNSUPPORTED_CAPABILITY и т.п.)
-                              // переводятся в spec-форму.
-                              error_code: mapToYandexErrorCode(r.errorCode),
-                              error_message: r.errorMessage,
-                            },
-                    },
-                  };
-                } catch (e) {
-                  return {
-                    type: capReq.type,
-                    state: {
-                      instance: capReq.state.instance,
-                      action_result: {
-                        status: 'ERROR' as const,
-                        error_code: 'INTERNAL_ERROR',
-                        error_message: (e as Error).message,
-                      },
-                    },
-                  };
-                }
-              }),
-            );
-            return { id: deviceReq.id, capabilities: capabilityResponses };
-          }),
-        );
-        return responses;
+            }),
+          );
+          return { id: deviceReq.id, capabilities: capabilityResponses };
+        });
       },
       // Fallback: всё, что не успели — DEVICE_UNREACHABLE с пометкой timeout.
       requested.map((d) => ({
@@ -779,23 +831,30 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
     const chunks: Buffer[] = [];
     let total = 0;
     let settled = false;
-    const fail = (err: Error): void => {
+    const destroyAndFail = (err: Error): void => {
       if (settled) return;
       settled = true;
+      try {
+        req.destroy(err);
+      } catch {
+        /* socket already gone */
+      }
       reject(err);
     };
+    // Slow-loris: хард-таймаут на чтение всего тела. Без него атакующий шлёт
+    // по 1 байту с длинными паузами и держит сокет открытым часами, занимая
+    // file-descriptor'ы. 256KiB-кэп помогает только если злодей быстрый.
+    const timer = setTimeout(
+      () => destroyAndFail(new Error('body read timeout')),
+      BODY_READ_TIMEOUT_MS,
+    );
     req.on('data', (chunk: Buffer) => {
       if (settled) return;
       total += chunk.length;
-      // 256KiB — Алиса сама не шлёт больше; защита от случайного flood и slow-loris.
+      // 256KiB — Алиса сама не шлёт больше; защита от случайного flood.
       if (total > 256 * 1024) {
-        const err = new Error('payload too large');
-        try {
-          req.destroy(err);
-        } catch {
-          /* socket already gone */
-        }
-        fail(err);
+        clearTimeout(timer);
+        destroyAndFail(new Error('payload too large'));
         return;
       }
       chunks.push(chunk);
@@ -803,10 +862,17 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
     req.on('end', () => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       resolve(Buffer.concat(chunks));
     });
-    req.on('error', fail);
-    req.on('close', () => fail(new Error('socket closed before body completed')));
+    req.on('error', (e) => {
+      clearTimeout(timer);
+      destroyAndFail(e);
+    });
+    req.on('close', () => {
+      clearTimeout(timer);
+      destroyAndFail(new Error('socket closed before body completed'));
+    });
   });
 }
 

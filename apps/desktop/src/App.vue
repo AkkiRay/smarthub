@@ -47,6 +47,7 @@ import { useDevicesStore } from '@/stores/devices';
 import { useUiStore } from '@/stores/ui';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useAliceStore } from '@/stores/alice';
+import { useUpdaterStore } from '@/stores/updater';
 import { useTourStore } from '@/stores/tour';
 import { useBreakpoint } from '@/composables/useBreakpoint';
 import AppTitleBar from '@/components/chrome/AppTitleBar.vue';
@@ -59,6 +60,7 @@ import TourOverlay from '@/components/tour/TourOverlay.vue';
 const ui = useUiStore();
 const devices = useDevicesStore();
 const station = useYandexStationStore();
+const updater = useUpdaterStore();
 const alice = useAliceStore();
 const tour = useTourStore();
 const route = useRoute();
@@ -122,6 +124,9 @@ onMounted(async () => {
     alice.bootstrap().catch(() => {
       /* idle */
     }),
+    updater.bootstrap().catch(() => {
+      /* disabled / dev */
+    }),
   ]);
   devices.subscribeRealtime();
 
@@ -133,6 +138,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   unsubscribeTrayNav?.();
+  updater.dispose();
 });
 </script>
 

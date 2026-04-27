@@ -401,8 +401,6 @@ import { useToasterStore } from '@/stores/toaster';
 const alice = useAliceStore();
 const toaster = useToasterStore();
 
-const dialogsOwnerError = ref<string | null>(null);
-
 const isInstalling = computed(() => alice.cloudflaredInstall.kind === 'downloading');
 const installRatio = computed(() => {
   const s = alice.cloudflaredInstall;
@@ -463,8 +461,14 @@ watch(
   { immediate: true },
 );
 
+// Yandex skill_id — UUID v4. Если юзер вбил случайную строку, save заблокируется
+// и хаб не отправит мусор в `/callback/state` (где skillId идёт в URL-path).
+const SKILL_ID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const skillIdLooksValid = computed(() => SKILL_ID_REGEX.test(form.skillId.trim()));
+
 const canSave = computed(
-  () => !!form.skillId.trim() && !!form.oauthClientId.trim() && !!form.oauthClientSecret.trim(),
+  () => skillIdLooksValid.value && !!form.oauthClientId.trim() && !!form.oauthClientSecret.trim(),
 );
 
 const stage = computed(() => alice.stage);

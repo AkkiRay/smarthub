@@ -106,9 +106,12 @@ export class AliceBridge extends EventEmitter {
     });
 
     this.tunnel = new TunnelManager();
-    this.tunnel.on('status', (status: { running: boolean }) => {
-      if (status.running) {
-        this.scheduleReachabilityProbe(0);
+    this.tunnel.on('status', (status) => {
+      if (status.running && status.publicUrl) {
+        // Cold-start window: cloudflared edge регистрирует connection несколько
+        // секунд после `Your tunnel URL is ...` в stderr. Первая проба, дёрнутая
+        // мгновенно, падает с 502/timeout. Ждём 3с — баланс отзывчивости и accuracy.
+        this.scheduleReachabilityProbe(3_000);
       } else {
         this.lastReachability = null;
         this.clearReachabilityTimer();
@@ -305,6 +308,11 @@ export class AliceBridge extends EventEmitter {
       config: null,
       issuedTokens: {},
     });
+    // Сброс in-memory state — иначе при переподключении другого юзера
+    // UI покажет display_name предыдущего владельца и старую достижимость.
+    this.dialogsTokenOwner = null;
+    this.lastReachability = null;
+    this.activityLog = [];
     void this.tunnel.stop();
     this.emitStatus();
     return this.getStatus();
