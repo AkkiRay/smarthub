@@ -12,13 +12,23 @@
       </template>
     </BasePageHeader>
 
-    <div v-if="scenes.scenes.length" class="scenes__grid bento-grid">
-      <article
-        v-for="s in scenes.scenes"
-        :key="s.id"
-        class="card card--interactive scene"
-        :style="{ '--accent': s.accent }"
-      >
+    <Transition name="list-fade" mode="out-in">
+      <SkeletonGrid
+        v-if="showSkeleton"
+        key="skeleton"
+        :count="6"
+        cell-min="220px"
+        cell-height="180px"
+        class="scenes__grid"
+      />
+
+      <div v-else-if="scenes.scenes.length" key="grid" class="scenes__grid bento-grid">
+        <article
+          v-for="s in scenes.scenes"
+          :key="s.id"
+          class="card card--interactive scene"
+          :style="{ '--accent': s.accent }"
+        >
         <div class="scene__head">
           <span class="scene__icon" v-safe-html="s.icon" />
           <BaseButton
@@ -60,27 +70,29 @@
         </div>
       </article>
 
-      <button class="card scene__create" @click="openCreate">
-        <BaseIcon name="plus" :size="32" />
-        <span class="text--body">Создать сценарий</span>
-      </button>
-    </div>
+        <button class="card scene__create" @click="openCreate">
+          <BaseIcon name="plus" :size="32" />
+          <span class="text--body">Создать сценарий</span>
+        </button>
+      </div>
 
-    <BaseEmpty
-      v-else
-      title="Сценарии не созданы"
-      text="Создайте «Доброе утро», «Кино», «Сон» — и запускайте всё одним тапом."
-      data-anim="block"
-    >
-      <template #glyph>
-        <BaseIcon name="scenes" :size="64" />
-      </template>
-      <template #actions>
-        <BaseButton variant="primary" icon-left="plus" @click="openCreate">
-          Создать первый сценарий
-        </BaseButton>
-      </template>
-    </BaseEmpty>
+      <BaseEmpty
+        v-else
+        key="empty"
+        title="Сценарии не созданы"
+        text="Создайте «Доброе утро», «Кино», «Сон» — и запускайте всё одним тапом."
+        data-anim="block"
+      >
+        <template #glyph>
+          <BaseIcon name="scenes" :size="64" />
+        </template>
+        <template #actions>
+          <BaseButton variant="primary" icon-left="plus" @click="openCreate">
+            Создать первый сценарий
+          </BaseButton>
+        </template>
+      </BaseEmpty>
+    </Transition>
 
     <!-- ===================== Сценарии Алисы ===================== -->
     <section v-if="alicesScenarios.length" class="scenes__alice" data-anim="block">
@@ -273,6 +285,7 @@ import { useDevicesStore } from '@/stores/devices';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useToasterStore } from '@/stores/toaster';
 import { useViewMount } from '@/composables/useViewMount';
+import { useBootstrapGate } from '@/composables/useBootstrapGate';
 import SceneEditor from '@/components/scenes/SceneEditor.vue';
 import {
   BaseButton,
@@ -282,6 +295,7 @@ import {
   BasePageHeader,
   BaseEmpty,
   ConfirmDialog,
+  SkeletonGrid,
   type IconName,
 } from '@/components/base';
 
@@ -290,6 +304,18 @@ const devices = useDevicesStore();
 const station = useYandexStationStore();
 const toaster = useToasterStore();
 const root = useTemplateRef<HTMLElement>('root');
+
+const gate = useBootstrapGate({
+  minDuration: 600,
+  tasks: [
+    () => (scenes.scenes.length ? Promise.resolve() : scenes.bootstrap()),
+    () => (devices.devices.length ? Promise.resolve() : devices.bootstrap()),
+  ],
+});
+
+const showSkeleton = computed(
+  () => !gate.ready.value || (scenes.isLoading && scenes.scenes.length === 0),
+);
 
 // Используем homeFiltered, не home: при нескольких household'ах home содержит
 // сценарии всех домов, кнопка «Запустить» из одного household'а на сценарий
@@ -557,11 +583,8 @@ function pluralize(n: number, forms: [string, string, string]): string {
 }
 
 onMounted(async () => {
-  await Promise.all([
-    !scenes.scenes.length ? scenes.bootstrap() : Promise.resolve(),
-    !devices.devices.length ? devices.bootstrap() : Promise.resolve(),
-  ]);
   // Подтягиваем snapshot «Дома с Алисой» — нужен для блока «Сценарии Алисы».
+  // scenes/devices bootstrap'ятся через gate.tasks выше.
   if (!station.home && !station.isLoadingHome) {
     try {
       const auth = await window.smarthome.yandexStation.getAuthStatus();
@@ -572,11 +595,24 @@ onMounted(async () => {
   }
 });
 
-useViewMount({ scope: root, itemsSelector: '.scenes__grid > .scene' });
+useViewMount({
+  scope: root,
+  itemsSelector: '.scenes__grid > .scene',
+  defer: gate.whenReady(),
+});
 </script>
 
 <style scoped lang="scss">
 @use '@/styles/abstracts/mixins' as *;
+
+.list-fade-enter-active,
+.list-fade-leave-active {
+  transition: opacity 220ms var(--ease-out);
+}
+.list-fade-enter-from,
+.list-fade-leave-to {
+  opacity: 0;
+}
 
 .scenes {
   display: flex;

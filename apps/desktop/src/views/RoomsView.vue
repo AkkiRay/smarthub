@@ -12,8 +12,18 @@
       </template>
     </BasePageHeader>
 
-    <div v-if="rooms.rooms.length" class="rooms__grid bento-grid">
-      <article
+    <Transition name="list-fade" mode="out-in">
+      <SkeletonGrid
+        v-if="showSkeleton"
+        key="skeleton"
+        :count="4"
+        cell-min="280px"
+        cell-height="200px"
+        class="rooms__grid"
+      />
+
+      <div v-else-if="rooms.rooms.length" key="grid" class="rooms__grid bento-grid">
+        <article
         v-for="room in roomsWithStats"
         :key="room.id"
         class="room"
@@ -213,23 +223,25 @@
           Управляется «Домом с Алисой» — изменяйте в приложении Яндекс
         </p>
       </article>
-    </div>
+      </div>
 
-    <BaseEmpty
-      v-else
-      title="У вас ещё нет комнат"
-      text="Добавьте «Гостиную», «Спальню», «Кухню» — и закрепите за ними устройства."
-      data-anim="block"
-    >
-      <template #glyph>
-        <BaseIcon name="rooms" :size="64" />
-      </template>
-      <template #actions>
-        <BaseButton variant="primary" icon-left="plus" @click="creating = true">
-          Создать первую комнату
-        </BaseButton>
-      </template>
-    </BaseEmpty>
+      <BaseEmpty
+        v-else
+        key="empty"
+        title="У вас ещё нет комнат"
+        text="Добавьте «Гостиную», «Спальню», «Кухню» — и закрепите за ними устройства."
+        data-anim="block"
+      >
+        <template #glyph>
+          <BaseIcon name="rooms" :size="64" />
+        </template>
+        <template #actions>
+          <BaseButton variant="primary" icon-left="plus" @click="creating = true">
+            Создать первую комнату
+          </BaseButton>
+        </template>
+      </BaseEmpty>
+    </Transition>
 
     <BaseModal
       :model-value="creating"
@@ -283,6 +295,7 @@ import { useRoomsStore } from '@/stores/rooms';
 import { useDevicesStore } from '@/stores/devices';
 import { useToasterStore } from '@/stores/toaster';
 import { useViewMount } from '@/composables/useViewMount';
+import { useBootstrapGate } from '@/composables/useBootstrapGate';
 import {
   BaseButton,
   BaseInput,
@@ -291,12 +304,23 @@ import {
   BasePageHeader,
   BaseEmpty,
   ConfirmDialog,
+  SkeletonGrid,
 } from '@/components/base';
 
 const rooms = useRoomsStore();
 const devices = useDevicesStore();
 const toaster = useToasterStore();
 const root = useTemplateRef<HTMLElement>('root');
+
+/** Skeleton, пока rooms-store впервые грузится. */
+const gate = useBootstrapGate({
+  minDuration: 500,
+  tasks: [() => (rooms.rooms.length ? Promise.resolve() : rooms.bootstrap())],
+});
+
+const showSkeleton = computed(
+  () => !gate.ready.value || (rooms.isLoading && rooms.rooms.length === 0),
+);
 
 const creating = ref(false);
 const editingId = ref<string | null>(null);
@@ -797,7 +821,6 @@ async function performRemove(): Promise<void> {
 }
 
 onMounted(async () => {
-  if (!rooms.rooms.length) await rooms.bootstrap();
   // Auto-import yandex-комнат, если юзер залогинен в Яндексе. Ничего не упадёт,
   // если auth отсутствует — backend кинет понятный Error, мы его проглотим.
   try {
@@ -808,11 +831,20 @@ onMounted(async () => {
   }
 });
 
-useViewMount({ scope: root, itemsSelector: '.room' });
+useViewMount({ scope: root, itemsSelector: '.room', defer: gate.whenReady() });
 </script>
 
 <style scoped lang="scss">
 @use '@/styles/abstracts/mixins' as *;
+
+.list-fade-enter-active,
+.list-fade-leave-active {
+  transition: opacity 220ms var(--ease-out);
+}
+.list-fade-enter-from,
+.list-fade-leave-to {
+  opacity: 0;
+}
 
 .rooms {
   display: flex;
@@ -1024,7 +1056,7 @@ useViewMount({ scope: root, itemsSelector: '.room' });
       transform 220ms var(--ease-out);
 
     &:hover:not(:disabled) {
-      transform: translateY(-1px);
+      transform: translate3d(0, var(--lift), 0);
       border-color: rgba(255, 255, 255, 0.1);
     }
     &:disabled,
@@ -1032,7 +1064,8 @@ useViewMount({ scope: root, itemsSelector: '.room' });
       cursor: progress;
     }
     &[data-loading='true'] .room__toggle-icon {
-      animation: roomTogglePulse 0.9s ease-in-out infinite;
+      animation: roomTogglePulse calc(0.9s / max(var(--motion-scale, 1), 0.001)) ease-in-out
+        infinite;
     }
 
     // ON-state: brand glow + filled icon

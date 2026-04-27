@@ -253,6 +253,7 @@ import { useDevicesStore } from '@/stores/devices';
 import { useToasterStore } from '@/stores/toaster';
 import { useGsap } from '@/composables/useGsap';
 import { useViewMount } from '@/composables/useViewMount';
+import { useBootstrapGate } from '@/composables/useBootstrapGate';
 import PairDeviceFlow from '@/components/devices/PairDeviceFlow.vue';
 import ManualDeviceFlow from '@/components/devices/ManualDeviceFlow.vue';
 import DriverIcon from '@/components/visuals/DriverIcon.vue';
@@ -502,8 +503,13 @@ watch(continuousMode, (next) => {
   }
 });
 
-// Cascade-mount: scan-driver + candidate stagger одной волной (comma-selector).
-useViewMount({ scope: root, itemsSelector: '.scan-driver, .candidate' });
+const gate = useBootstrapGate({ minDuration: 350 });
+
+useViewMount({
+  scope: root,
+  itemsSelector: '.scan-driver, .candidate',
+  defer: gate.whenReady(),
+});
 
 // Re-stagger при смене filter'а.
 const { from } = useGsap(root);
@@ -522,13 +528,19 @@ onMounted(() => {
     now.value = Date.now();
   }, 250);
 
-  // Auto-scan по `?scan=1` из tray; query чистится после старта.
-  if (route.query['scan'] === '1' && !discoveryProgress.value.cycleActive) {
+  // Auto-scan: запуск, если на странице ещё не сканировали этим заходом
+  // и в фоне сейчас тоже нет цикла. Query `?scan=1` остаётся как явный
+  // trigger из tray/Welcome, но больше не обязателен.
+  const explicitScan = route.query['scan'] === '1';
+  const shouldAutoScan = !hasEverScanned.value && !discoveryProgress.value.cycleActive;
+  if (explicitScan || shouldAutoScan) {
     void devices.startDiscovery({
       mode: continuousMode.value ? 'continuous' : 'once',
     });
-    const { scan: _scan, ...rest } = route.query;
-    void router.replace({ path: route.path, query: rest });
+    if (explicitScan) {
+      const { scan: _scan, ...rest } = route.query;
+      void router.replace({ path: route.path, query: rest });
+    }
   }
 });
 
@@ -773,7 +785,8 @@ onBeforeUnmount(() => {
     &.is-pulsing {
       background: var(--color-brand-purple);
       box-shadow: 0 0 0 0 rgba(var(--color-brand-purple-rgb), 0.6);
-      animation: scanIndicatorPulse 1.4s ease-out infinite;
+      animation: scanIndicatorPulse calc(1.4s / max(var(--motion-scale, 1), 0.001)) ease-out
+        infinite;
     }
 
     &.is-done {
@@ -987,7 +1000,7 @@ onBeforeUnmount(() => {
 
     .scan-driver__bar-fill {
       transform: scaleX(0.65);
-      animation: scanBarSweep 1.4s ease-in-out infinite;
+      animation: scanBarSweep calc(1.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
     }
     .scan-driver__phase {
       color: var(--color-brand-purple);

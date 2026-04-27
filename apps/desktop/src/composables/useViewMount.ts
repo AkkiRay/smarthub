@@ -22,6 +22,14 @@ export interface ViewMountOptions {
   itemsSelector?: string;
   /** Дополнительная задержка — для views с async-bootstrap. */
   delay?: number;
+  /**
+   * Promise, после resolve'а которого запускается mount-волна. Используется
+   * вместе с `useBootstrapGate.whenReady()` — анимация ждёт когда skeleton
+   * сменится на real-content и `scope` указывает на смонтированный DOM.
+   * `nextTick` уже выполнен внутри `useBootstrapGate`, дополнительный
+   * `await` не нужен.
+   */
+  defer?: Promise<void>;
 }
 
 function resolveScope(scope: ViewMountOptions['scope']): Element | null {
@@ -37,13 +45,7 @@ function pickAll(scope: Element | null, selector: string): Element[] {
 export function useViewMount(opts: ViewMountOptions = {}): void {
   const { from } = useGsap(null);
 
-  onMounted(() => {
-    // СИНХРОННО в onMounted: gsap.from с immediateRender:true (default) ставит
-    // FROM-state inline ДО browser-paint frame'а 0 → opacity:0 видно сразу,
-    // никаких flash'ей natural-state'а. RAF-defer возвращал лаг, потому что
-    // frame 0 успевал отрендериться с opacity:1, а на frame'е 1 GSAP снапил
-    // в 0 → визуально казалось, что fade'а нет. clearProps вычищает inline
-    // после tween'а, чтобы не оставлять opacity / transform в final-DOM.
+  function runWave(): void {
     const scope = resolveScope(opts.scope);
     const CLEAR = 'opacity,transform';
 
@@ -51,8 +53,8 @@ export function useViewMount(opts: ViewMountOptions = {}): void {
     if (headers.length) {
       from(headers, {
         opacity: 0,
-        y: 8,
-        duration: 0.4,
+        y: 6,
+        duration: 0.36,
         delay: opts.delay ?? 0,
         ease: 'power2.out',
         clearProps: CLEAR,
@@ -63,10 +65,10 @@ export function useViewMount(opts: ViewMountOptions = {}): void {
     if (blocks.length) {
       from(blocks, {
         opacity: 0,
-        y: 12,
-        stagger: { each: 0.05, amount: 0.3, from: 'start' },
-        duration: 0.45,
-        delay: (opts.delay ?? 0) + 0.08,
+        y: 8,
+        stagger: { each: 0.04, amount: 0.26, from: 'start' },
+        duration: 0.4,
+        delay: (opts.delay ?? 0) + 0.06,
         ease: 'power2.out',
         clearProps: CLEAR,
       });
@@ -76,13 +78,21 @@ export function useViewMount(opts: ViewMountOptions = {}): void {
     if (items.length) {
       from(items, {
         opacity: 0,
-        y: 10,
-        stagger: { each: 0.04, amount: 0.45, from: 'start' },
-        duration: 0.36,
-        delay: (opts.delay ?? 0) + 0.14,
+        y: 6,
+        stagger: { each: 0.035, amount: 0.36, from: 'start' },
+        duration: 0.32,
+        delay: (opts.delay ?? 0) + 0.12,
         ease: 'power2.out',
         clearProps: CLEAR,
       });
     }
+  }
+
+  onMounted(() => {
+    if (opts.defer) {
+      void opts.defer.then(runWave);
+      return;
+    }
+    runWave();
   });
 }

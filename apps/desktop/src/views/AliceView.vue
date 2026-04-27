@@ -334,6 +334,7 @@ import { useYandexStationStore } from '@/stores/yandexStation';
 import { useAliceStore } from '@/stores/alice';
 import { useUiStore } from '@/stores/ui';
 import { useViewMount } from '@/composables/useViewMount';
+import { useBootstrapGate } from '@/composables/useBootstrapGate';
 import { useSpeakerNavigation } from '@/composables/useSpeakerNavigation';
 import AliceAutoPair from '@/components/alice/AliceAutoPair.vue';
 import AliceSkillBridge from '@/components/alice/AliceSkillBridge.vue';
@@ -433,13 +434,9 @@ function onOrbClick(): void {
   void speakerNav.openSpeaker();
 }
 
-onMounted(async () => {
-  // Bootstrap optional — backend без creds → store остаётся в idle.
-  try {
-    await alice.bootstrap();
-  } catch {
-    /* idle */
-  }
+const gate = useBootstrapGate({
+  minDuration: 600,
+  tasks: [() => alice.bootstrap().catch(() => undefined)],
 });
 
 const form = reactive({
@@ -606,7 +603,7 @@ function openTokenGuide(): void {
   );
 }
 
-useViewMount({ scope: root, itemsSelector: '.alice__card' });
+useViewMount({ scope: root, itemsSelector: '.alice__card', defer: gate.whenReady() });
 </script>
 
 <style scoped lang="scss">
@@ -867,7 +864,7 @@ useViewMount({ scope: root, itemsSelector: '.alice__card' });
     .alice__scan--scanning & {
       background: var(--color-brand-purple);
       box-shadow: 0 0 0 0 rgba(var(--color-brand-purple-rgb), 0.5);
-      animation: aliceScanPipPulse 1.6s ease-out infinite;
+      animation: aliceScanPipPulse calc(1.6s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
     }
     .alice__scan--done & {
       background: var(--color-success);
@@ -938,8 +935,8 @@ useViewMount({ scope: root, itemsSelector: '.alice__card' });
     width: var(--scan-progress, 0%);
     background: var(--color-brand-purple);
     transition:
-      width 200ms linear,
-      background 240ms var(--ease-out);
+      width var(--trans-base),
+      background var(--trans-base);
 
     .alice__scan--done & {
       background: var(--color-success);
@@ -1024,7 +1021,8 @@ useViewMount({ scope: root, itemsSelector: '.alice__card' });
   &__status--authenticating {
     .alice__status-dot {
       background: var(--color-warning);
-      animation: aliceStatusPulse 1.6s ease-in-out infinite;
+      animation: aliceStatusPulse calc(1.6s / max(var(--motion-scale, 1), 0.001)) ease-in-out
+        infinite;
     }
   }
   &__status--error .alice__status-dot {
@@ -1134,7 +1132,7 @@ useViewMount({ scope: root, itemsSelector: '.alice__card' });
     height: 12px;
     border-radius: 50%;
     background: var(--color-success, #2dd89a);
-    animation: aliceConnectedPulse 2.4s ease-out infinite;
+    animation: aliceConnectedPulse calc(2.4s / max(var(--motion-scale, 1), 0.001)) ease-out infinite;
   }
 
   &-title {

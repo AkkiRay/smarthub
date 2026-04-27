@@ -230,6 +230,7 @@ import type { HubInfo } from '@smarthome/shared';
 import { useUiStore, type MotionLevel } from '@/stores/ui';
 import { useUpdaterStore } from '@/stores/updater';
 import { useViewMount } from '@/composables/useViewMount';
+import { useBootstrapGate } from '@/composables/useBootstrapGate';
 import { useDeferredMount } from '@/composables/useDeferredMount';
 import {
   BaseButton,
@@ -320,11 +321,16 @@ async function copyHubId(): Promise<void> {
   }
 }
 
-onMounted(async () => {
-  hubInfo.value = await window.smarthome.app.getHubInfo();
+const gate = useBootstrapGate({
+  minDuration: 450,
+  tasks: [
+    async () => {
+      hubInfo.value = await window.smarthome.app.getHubInfo();
+    },
+  ],
 });
 
-useViewMount({ scope: root });
+useViewMount({ scope: root, defer: gate.whenReady() });
 
 // Marketplace монтируется во второй task'е (`requestIdleCallback`); skeleton
 // фиксированной высоты держит layout до swap'а.
@@ -785,22 +791,23 @@ const marketplaceReady = useDeferredMount({ mode: 'idle', delayMs: 250 });
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid rgba(255, 255, 255, 0.04);
-  animation: settingsSkeletonPulse 1.4s ease-in-out infinite;
+  animation: settingsSkeletonPulse calc(1.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out
+    infinite;
 }
 .settings__skeleton-row:nth-child(2) {
-  animation-delay: 0.08s;
+  animation-delay: calc(0.08s * var(--motion-scale, 1));
 }
 .settings__skeleton-row:nth-child(3) {
-  animation-delay: 0.16s;
+  animation-delay: calc(0.16s * var(--motion-scale, 1));
 }
 .settings__skeleton-row:nth-child(4) {
-  animation-delay: 0.24s;
+  animation-delay: calc(0.24s * var(--motion-scale, 1));
 }
 .settings__skeleton-row:nth-child(5) {
-  animation-delay: 0.32s;
+  animation-delay: calc(0.32s * var(--motion-scale, 1));
 }
 .settings__skeleton-row:nth-child(6) {
-  animation-delay: 0.4s;
+  animation-delay: calc(0.4s * var(--motion-scale, 1));
 }
 @keyframes settingsSkeletonPulse {
   0%,

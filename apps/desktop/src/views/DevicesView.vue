@@ -299,6 +299,7 @@ function onAdd(): void {
 useViewMount({
   scope: root,
   itemsSelector: '.devices__grid > *',
+  defer: gate.whenReady(),
 });
 </script>
 
