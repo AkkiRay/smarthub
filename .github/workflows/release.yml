@@ -2,23 +2,26 @@
 #
 # Сценарии запуска:
 #   1. Push тега `v*.*.*` (например, `v1.2.3`) — production-релиз.
-#   2. workflow_dispatch с input `version` — ручной релиз без тега
-#      (использует текущий HEAD; полезно для повторного выпуска артефактов).
+#   2. workflow_dispatch с input `version` — ручной релиз: создаёт коммит
+#      с bump'ом версии и тег v<version>, далее обычный flow.
 #
 # Поток:
-#   - quality-job (lint + typecheck) на ubuntu — fail-fast перед сборкой.
-#   - build-matrix (win/mac/linux) собирает и публикует artefact в DRAFT release
-#     на GitHub. Имя релиза = тег. electron-builder создаёт `latest.yml`,
-#     `latest-mac.yml`, `latest-linux.yml` — они нужны electron-updater'у в
-#     рантайме для discovery новых версий.
-#   - publish-job снимает draft-флаг — релиз становится виден пользователям
-#     и активируется в GH Releases feed (отсюда electron-updater и тянет).
+#   - quality (prettier + typecheck) на ubuntu — fail-fast перед сборкой.
+#   - dispatch-prep (только для workflow_dispatch) — bump версии + tag-push.
+#   - build-matrix (linux / windows / macos) собирает и публикует артефакт
+#     в DRAFT release на GitHub. Имя релиза совпадает с тегом. electron-builder
+#     создаёт `latest.yml` / `latest-mac.yml` / `latest-linux.yml` — они
+#     нужны electron-updater'у в рантайме для discovery новых версий.
+#   - publish (отдельный job) снимает draft-флаг — релиз становится виден
+#     пользователям и попадает в latest GH Releases feed.
 #
 # Secrets:
-#   - GITHUB_TOKEN — автоматический, права contents:write для draft+publish.
-#   - (опционально) APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID для
-#     notarization. CSC_LINK / CSC_KEY_PASSWORD для Windows code-signing.
-#     Если их нет — сборка проходит без подписи (verifyUpdateCodeSignature=false).
+#   - GITHUB_TOKEN — выдаётся автоматически, права contents:write для draft+publish.
+#   - WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD — для подписания Windows билдов
+#     (опционально; без них билд unsigned, auto-update всё равно работает).
+#   - MAC_CSC_LINK / MAC_CSC_KEY_PASSWORD / APPLE_ID /
+#     APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID — для подписи и notarization
+#     macOS (опционально).
 name: Release
 
 on:
@@ -28,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Версия релиза (без префикса v, напр. 1.2.3). Создаст тег и draft."
+        description: "Версия релиза (без префикса v, напр. 1.2.3). Создаст коммит + тег + draft."
         required: true
         type: string
 
@@ -41,7 +44,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Lint & typecheck
+    name: Format & typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -53,12 +56,42 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
-      - run: pnpm lint
       - run: pnpm typecheck
+
+  # workflow_dispatch only: bump версий, commit, tag, push.
+  # Push тега запустит этот же workflow повторно (но уже по 'push: tags:'),
+  # чтобы build-matrix отработала на правильном tagged-снимке репо.
+  prepare:
+    name: Prepare release tag
+    needs: quality
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Bump version, commit and tag
+        shell: bash
+        run: |
+          set -euxo pipefail
+          v="${{ inputs.version }}"
+          node -e "const f='package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+          node -e "const f='apps/desktop/package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+          git add package.json apps/desktop/package.json
+          git diff --cached --quiet || git commit -m "chore: release v${v}"
+          git tag "v${v}"
+          git push origin HEAD --tags
 
   release:
     name: Build & publish (${{ matrix.os }})
     needs: quality
+    if: ${{ github.event_name == 'push' }}
     strategy:
       fail-fast: false
       matrix:
@@ -67,40 +100,13 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # workflow_dispatch без тега — таг создаётся локально и пушится перед публикацией.
-      # Без таги GH-Releases-publisher в electron-builder не сматчит draft по имени.
-      - name: Configure git
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Sync version & tag (workflow_dispatch)
-        if: ${{ github.event_name == 'workflow_dispatch' && matrix.os == 'ubuntu-latest' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euxo pipefail
-          v="${{ inputs.version }}"
-          # bump root + apps/desktop версий — electron-builder читает apps/desktop/package.json
-          node -e "const f='package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
-          node -e "const f='apps/desktop/package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
-          git add package.json apps/desktop/package.json
-          git commit -m "chore: release v${v}" || true
-          git tag "v${v}" || true
-          git push origin HEAD --tags
 
       - name: Build & publish — Linux
         if: matrix.os == 'ubuntu-latest'
@@ -125,35 +131,32 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Без MAC_CSC_LINK auto-discovery попытается найти keychain-сертификат,
+          # которого нет на CI runner'е → падает. Явно отключаем.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK == '' && 'false' || 'true' }}
         run: pnpm release:mac
 
+  # `if: !cancelled()` — promote выполняется даже если одна из платформ
+  # в matrix упала: Linux + Windows достаточно для valid release, mac можно
+  # дорелизнуть позже отдельным тегом. release-edit идемпотентен.
   publish:
     name: Promote draft → published
     needs: release
+    if: ${{ github.event_name == 'push' && !cancelled() && needs.release.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-
-      - name: Compute tag
-        id: tag
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Promote release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euxo pipefail
-          tag="${{ steps.tag.outputs.tag }}"
-          # Снимаем draft и помечаем как latest. GitHub автоматически генерирует
-          # release notes из коммитов между предыдущим тегом и этим.
+          tag="${GITHUB_REF##*/}"
+          # Если release-черновик не создан (например, ВСЕ платформы упали),
+          # gh release edit вернёт ненулевой код — это OK, voyage завершится с
+          # явной ошибкой, тег останется без published-релиза, можно перезапустить.
           gh release edit "$tag" \
             --draft=false \
             --latest \

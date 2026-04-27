@@ -113,7 +113,7 @@
         "provider": "github",
         "owner": "AkkiRay",
         "repo": "smarthub",
-        "releaseType": "release",
+        "releaseType": "draft",
         "vPrefixedTagName": true
       }
     ],
