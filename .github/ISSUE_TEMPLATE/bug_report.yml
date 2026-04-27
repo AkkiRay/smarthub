@@ -1,0 +1,75 @@
+name: 🐛 Bug report
+description: Сообщить о сбое или неожиданном поведении
+title: '[bug] '
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за репорт! Чтобы мы могли быстро разобраться, заполните форму ниже.
+        Особенно важны: ОС, версия хаба и логи (`Help → Show logs`).
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия SmartHome Hub
+      placeholder: 'например, 1.2.0'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Платформа
+      options:
+        - Windows 10/11
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Linux (AppImage)
+        - Linux (deb)
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      placeholder: |
+        1. Открыть «Дискавери»…
+        2. Нажать…
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что ожидалось
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Что фактически произошло
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи (фрагмент main.log)
+      description: |
+        Откройте `Help → Show logs` и приложите релевантный фрагмент.
+        Удалите токены, пароли и публичные URL'ы туннеля перед публикацией.
+      render: text
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Чек-лист
+      options:
+        - label: Я искал issue с похожим названием и не нашёл
+          required: true
+        - label: Я удалил из логов чувствительные данные (токены, пароли)
+          required: true

@@ -20,6 +20,7 @@
         'scan-panel--active': discoveryProgress.cycleActive,
         'scan-panel--done': hasEverScanned && !discoveryProgress.cycleActive,
       }"
+      data-anim="block"
     >
       <header class="scan-panel__head">
         <div class="scan-panel__title-row">

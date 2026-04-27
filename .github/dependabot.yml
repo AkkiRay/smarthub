@@ -1,0 +1,57 @@
+# Dependabot configuration.
+#
+# Стратегия:
+#   - npm: weekly grouped PR — `production`, `development`, `electron`. Разделяем
+#     electron + electron-builder + electron-updater отдельно — они идут в lock-step
+#     и обновляются с особой осторожностью (новый Chromium → CSP/security regressions).
+#   - github-actions: weekly group — pin'ы action-версий.
+#   - Limit: 5 open PR на ecosystem, чтобы не утопить ревью-очередь.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: 'Europe/Moscow'
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    commit-message:
+      prefix: 'deps'
+      prefix-development: 'deps-dev'
+      include: scope
+    groups:
+      electron:
+        patterns:
+          - 'electron'
+          - 'electron-*'
+          - '@electron/*'
+      production:
+        dependency-type: production
+        exclude-patterns:
+          - 'electron'
+          - 'electron-*'
+          - '@electron/*'
+      development:
+        dependency-type: development
+        exclude-patterns:
+          - 'electron'
+          - 'electron-*'
+          - '@electron/*'
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: 'Europe/Moscow'
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: 'ci'
+      include: scope
+    groups:
+      actions:
+        patterns:
+          - '*'

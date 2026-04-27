@@ -125,8 +125,11 @@ onBeforeUnmount(() => {
   color: var(--color-text-primary);
   isolation: isolate;
   overflow: hidden;
-  // Will-change для smooth opacity / transform — GPU-layer на время animation.
-  will-change: opacity, transform;
+  // contain: paint — repaint от toast не инвалидирует backdrop-filter других
+  // overlay'ев и фон под ним. `will-change` намеренно опущен: Vue Transition
+  // ставит transition-active классы на ~420ms enter / ~260ms leave, дольше
+  // держать GPU-layer permanent дороже, чем кратковременный promote браузером.
+  contain: paint;
 
   // Tone accent bar слева — brand-tinted vertical stripe.
   &::before {

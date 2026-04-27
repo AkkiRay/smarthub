@@ -60,6 +60,73 @@ const ALLOWED_REDIRECT_PREFIXES = [
 
 /** TTL HTML-формы /oauth/authorize (CSRF-nonce живёт ровно столько). */
 const AUTHORIZE_FORM_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Допустимые error_code в Yandex Smart Home v1.0 (актуально на 2026-04).
+ * Прислать что-то вне списка → Алиса логирует «invalid response» в skill-debug
+ * и шлёт юзеру generic «временная ошибка».
+ *
+ * Полный список:
+ * https://yandex.ru/dev/dialogs/smart-home/doc/concepts/response-codes.html
+ */
+const YANDEX_ERROR_CODES = new Set([
+  'DOOR_OPEN',
+  'HOOD_OPEN',
+  'REMOTE_CONTROL_DISABLED',
+  'NOT_ENOUGH_FUEL_LEVEL',
+  'LOW_CHARGE_LEVEL',
+  'CONTAINER_FULL',
+  'CONTAINER_EMPTY',
+  'DRIP_TRAY_FULL',
+  'WATER_TANK_EMPTY',
+  'ALREADY_IN_USE',
+  'INVALID_ACTION',
+  'INVALID_VALUE',
+  'NOT_SUPPORTED_IN_CURRENT_MODE',
+  'DEVICE_OFF',
+  'DEVICE_BUSY',
+  'HUB_NOT_AVAILABLE',
+  'ACCOUNT_LINKING_ERROR',
+  'INTERNAL_ERROR',
+  'DEVICE_NOT_FOUND',
+  'DEVICE_UNREACHABLE',
+  'SECURITY_VIOLATION',
+]);
+
+/**
+ * Маппинг внутренних driver error-codes (`UNSUPPORTED_CAPABILITY`,
+ * `AUTH_REQUIRED`, `YANDEX_HTTP_ERROR`, `TIMEOUT`, …) → Yandex spec.
+ * Без него непрошедшие spec'у коды вылетают сырыми и Алиса жалуется на
+ * формат payload'а в skill-debug'е.
+ */
+function mapToYandexErrorCode(driverCode: string | undefined): string {
+  if (!driverCode) return 'INTERNAL_ERROR';
+  if (YANDEX_ERROR_CODES.has(driverCode)) return driverCode;
+  switch (driverCode) {
+    case 'UNSUPPORTED_CAPABILITY':
+    case 'INVALID_INSTANCE':
+      return 'INVALID_ACTION';
+    case 'INVALID_VALUE':
+    case 'OUT_OF_RANGE':
+      return 'INVALID_VALUE';
+    case 'AUTH_REQUIRED':
+    case 'TOKEN_EXPIRED':
+      return 'ACCOUNT_LINKING_ERROR';
+    case 'TIMEOUT':
+    case 'NETWORK_ERROR':
+    case 'YANDEX_HTTP_ERROR':
+      return 'DEVICE_UNREACHABLE';
+    case 'NOT_PAIRED':
+    case 'BRIDGE_OFFLINE':
+      return 'HUB_NOT_AVAILABLE';
+    case 'BUSY':
+      return 'DEVICE_BUSY';
+    case 'POLICY_VIOLATION':
+      return 'SECURITY_VIOLATION';
+    default:
+      return 'INTERNAL_ERROR';
+  }
+}
 /** Максимум одновременно «висящих» CSRF-nonce'ов. */
 const AUTHORIZE_FORM_MAX = 64;
 
@@ -652,7 +719,10 @@ export class SkillWebhookServer {
                           ? { status: 'DONE' as const }
                           : {
                               status: 'ERROR' as const,
-                              error_code: r.errorCode ?? 'INTERNAL_ERROR',
+                              // Yandex принимает ТОЛЬКО whitelisted error_code'ы;
+                              // driver-defined codes (UNSUPPORTED_CAPABILITY и т.п.)
+                              // переводятся в spec-форму.
+                              error_code: mapToYandexErrorCode(r.errorCode),
                               error_message: r.errorMessage,
                             },
                     },

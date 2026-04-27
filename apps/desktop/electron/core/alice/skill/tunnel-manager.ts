@@ -131,7 +131,7 @@ export class TunnelManager extends EventEmitter {
         running: false,
         publicUrl: null,
         kind: null,
-        lastError: `cloudflared не найден (${binary}). Установите с https://github.com/cloudflare/cloudflared/releases или укажите путь в настройках.`,
+        lastError: `cloudflared не найден (${binary}). Перезапустите туннель — хаб скачает бинарник автоматически.`,
       };
       this.emit('status', this.status);
       return this.getStatus();

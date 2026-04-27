@@ -133,11 +133,15 @@ function onBlur(): void {
 
 onMounted(() => {
   if (!ui.reduceMotion) {
+    // СИНХРОННО: immediateRender (default для from()) ставит FROM-state
+    // sync'но ДО первого browser-paint'а — fade-in полностью видим.
     gsap.from('.title-bar__mark', {
       scale: 0.5,
       opacity: 0,
       duration: 0.4,
       ease: 'power2.out',
+      force3D: true,
+      clearProps: 'scale,opacity',
     });
     gsap.from('.title-bar__wordmark > *', {
       x: -6,
@@ -145,6 +149,8 @@ onMounted(() => {
       stagger: 0.05,
       duration: 0.32,
       delay: 0.08,
+      force3D: true,
+      clearProps: 'x,opacity',
     });
   }
 

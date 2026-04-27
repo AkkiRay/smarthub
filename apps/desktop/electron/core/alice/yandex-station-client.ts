@@ -79,10 +79,25 @@ interface GlagolState {
 interface GlagolVinsResponse {
   errorCode?: string;
   errorText?: string;
-  /** Алиса отвечает текстом — собираем из cards[].text. */
-  cards?: Array<{ type?: string; text?: string }>;
+  /**
+   * Алиса отвечает текстом — собираем из cards[].text.
+   * cards[].buttons (с 2025) — массив кнопок-предложений; для UI rendered как
+   * suggestion chips. cards[].type = 'text' | 'div_card' | 'simple_image' и т.п.
+   */
+  cards?: Array<{
+    type?: string;
+    text?: string;
+    buttons?: Array<{ title?: string; payload?: unknown; url?: string }>;
+  }>;
   /** Что услышала Алиса от пользователя. */
   voice_response?: { output_speech?: { text?: string } };
+  /** Сырая транскрипция запроса юзера (новое v4 поле glagol). */
+  requestText?: string;
+  /**
+   * v4 envelope (2025+): структурированные suggestions для UI отображения.
+   * Соответствует Алисиным «карточкам действий».
+   */
+  suggestions?: Array<{ title?: string; payload?: unknown }>;
   [key: string]: unknown;
 }
 

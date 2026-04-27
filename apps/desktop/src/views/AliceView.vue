@@ -39,6 +39,7 @@
       :options="sectionOptions"
       class="alice__nav"
       data-tour="alice-section-nav"
+      data-anim="block"
     />
 
     <!-- Tab-stage: relative-якорь для cross-fade сегментов. -->

@@ -52,6 +52,10 @@ export class SaluteHomeDriver extends BaseCloudDriver {
   protected applyAuth(config: AxiosRequestConfig): AxiosRequestConfig {
     config.headers = {
       ...(config.headers as Record<string, unknown>),
+      // Авторизация — Bearer (стандартный header). X-AUTH-jwt был в legacy-API
+      // SberDevices до перехода на standard OAuth (2024). На новых endpoint'ах
+      // он игнорируется, оставляем для backward-compat если кто-то подключал
+      // через старые curl-скрипты.
       Authorization: `Bearer ${this.creds.accessToken}`,
       'X-AUTH-jwt': this.creds.accessToken,
     };
@@ -60,14 +64,39 @@ export class SaluteHomeDriver extends BaseCloudDriver {
 
   protected async refreshToken(): Promise<void> {
     if (!this.creds.refreshToken) throw new Error('SaluteHome: no refresh_token');
-    const r = await axios.post<{ access_token: string; refresh_token?: string }>(
-      'https://salute.online.sberbank.ru/api/v1/oauth/token',
-      new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: this.creds.refreshToken,
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 5000 },
-    );
+    let r;
+    try {
+      r = await axios.post<{
+        access_token: string;
+        refresh_token?: string;
+        error?: string;
+        error_description?: string;
+      }>(
+        'https://salute.online.sberbank.ru/api/v1/oauth/token',
+        new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: this.creds.refreshToken,
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 5000 },
+      );
+    } catch (e) {
+      // Без normalize'а юзер видел generic axios-сообщение «Request failed
+      // with status code 400» вместо понятной причины ('invalid_grant' и т.п.).
+      const ax = e as { response?: { status?: number; data?: { error?: string; error_description?: string } } };
+      const code = ax.response?.status;
+      const detail = ax.response?.data?.error_description ?? ax.response?.data?.error;
+      throw new Error(
+        `SaluteHome refresh failed (HTTP ${code ?? '?'}): ${detail ?? (e as Error).message}`,
+      );
+    }
+    if (r.data.error) {
+      throw new Error(
+        `SaluteHome refresh declined: ${r.data.error_description ?? r.data.error}`,
+      );
+    }
+    if (!r.data.access_token) {
+      throw new Error('SaluteHome refresh: cloud вернул пустой access_token');
+    }
     this.creds.accessToken = r.data.access_token;
     if (r.data.refresh_token) this.creds.refreshToken = r.data.refresh_token;
   }

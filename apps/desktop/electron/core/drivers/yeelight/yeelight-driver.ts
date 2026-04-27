@@ -245,32 +245,54 @@ function parseAdvert(text: string): YeelightAdvert | null {
   const lines = text.split(/\r?\n/);
   const obj: Record<string, string> = {};
   for (const line of lines) {
+    // Skip status-line ("HTTP/1.1 200 OK", "M-SEARCH...") и другие без ':'.
     const idx = line.indexOf(':');
-    if (idx > 0) {
-      const key = line.slice(0, idx).trim().toLowerCase();
-      const value = line.slice(idx + 1).trim();
-      obj[key] = value;
+    if (idx <= 0) continue;
+    const key = line.slice(0, idx).trim().toLowerCase();
+    let value = line.slice(idx + 1).trim();
+    // Yeelight name бывает hex-encoded (lampname=`74657374` для `test`) если
+    // пользователь установил кириллический name через приложение. Detect:
+    // только hex-chars, чётная длина, > 4. Decode best-effort, на failure
+    // — оставляем raw.
+    if (key === 'name' && value && /^[0-9a-f]+$/i.test(value) && value.length % 2 === 0 && value.length >= 4) {
+      try {
+        const decoded = Buffer.from(value, 'hex').toString('utf8');
+        if (!decoded.includes(' ') && decoded.length > 0) value = decoded;
+      } catch {
+        /* keep raw value */
+      }
     }
+    obj[key] = value;
   }
   if (!obj['id'] || !obj['location']) return null;
   return obj as unknown as YeelightAdvert;
 }
 
 function toCandidate(a: YeelightAdvert): DiscoveredDevice {
-  const url = a.location.replace(/^yeelight:\/\//, '');
+  // Yeelight LOCATION = `yeelight://<host>:<port>`. validate port присутствует,
+  // иначе sendCommand упадёт на parseInt(undefined).
+  const stripped = a.location.replace(/^yeelight:\/\//, '');
+  const url = stripped.includes(':') ? stripped : `${stripped}:${YEELIGHT_DEFAULT_PORT}`;
+  // model fallback — старые firmware (<2018) не присылают `model`, шлют `model_id`.
+  const model = a.model || ((a as unknown as { model_id?: string }).model_id ?? 'unknown');
+  // brightness/rgb/ct могут быть пустой строкой → NaN, fallback на дефолты.
+  const numOr = (v: unknown, def: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : def;
+  };
   return {
     driver: 'yeelight',
     externalId: a.id,
     type: DEVICE_TYPE.LIGHT,
-    name: a.name || `Yeelight ${a.model}`,
+    name: a.name || `Yeelight ${model}`,
     address: url,
     meta: {
-      model: a.model,
-      power: a.power,
-      bright: Number(a.bright),
-      rgb: Number(a.rgb),
-      ct: Number(a.ct),
-      support: a.support?.split(' ') ?? [],
+      model,
+      power: a.power || 'off',
+      bright: numOr(a.bright, 100),
+      rgb: numOr(a.rgb, 0xffffff),
+      ct: numOr(a.ct, 4000),
+      support: a.support?.split(/\s+/).filter(Boolean) ?? [],
     } satisfies YeelightMeta,
   };
 }

@@ -266,11 +266,20 @@ export class TPLinkKasaDriver extends BaseDriver {
       sock.setTimeout(KASA_TCP_TIMEOUT_MS);
       sock.on('timeout', () => fail(new Error('Kasa timeout')));
       sock.on('error', fail);
+      // Если remote закрывает connection до того как мы получили полный пакет —
+      // Promise висел бы до setTimeout. Reject с явным сообщением.
+      sock.on('close', () => fail(new Error('Kasa connection closed before full response')));
       sock.connect(port, host!, () => sock.write(data));
       sock.on('data', (chunk) => {
         buf = Buffer.concat([buf, chunk]);
         if (buf.length < 4) return;
         const len = buf.readUInt32BE(0);
+        // DoS-guard: malicious/buggy device может декларировать огромный length
+        // и заставить нас аллоцировать GB. 64KiB достаточно для любого Kasa-ответа.
+        if (len > 64 * 1024) {
+          fail(new Error(`Kasa response length implausibly large: ${len}`));
+          return;
+        }
         if (buf.length >= 4 + len) {
           try {
             const decoded = decrypt(buf.subarray(4, 4 + len));

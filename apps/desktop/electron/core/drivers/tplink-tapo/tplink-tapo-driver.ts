@@ -547,10 +547,19 @@ function buildTapoCaps(type: DeviceType, meta: TapoMeta, info: TapoDeviceInfo): 
 }
 
 function inferMeta(info: TapoDeviceInfo): TapoMeta {
+  // Modern (2025-2026) Tapo lineup:
+  //   L510/L530/L535/L630 — bulbs (L5xx variable temp; L530/L535/L6xx full color RGBWW)
+  //   L900/L920/L930      — light strips (color)
+  //   P100/P105/P110/P115 — plugs (P11x — energy monitoring)
+  //   P300/P304            — power strips (multi-outlet)
+  //   H100                 — hub
+  // На firmware ≥1.1.0 все используют KLAP v2 (см. handshakeKlap).
   const m = info.model.toUpperCase();
-  const isBulb = m.startsWith('L') || /BULB|STRIP/.test(info.type);
-  const isColor = /^L5[0-9]0|^L6/.test(m);
-  const isVariableTemp = isColor || /^L5[1-2]0/.test(m);
+  const isBulb = /^L[5-9]/.test(m) || /BULB|STRIP|LIGHT/.test(info.type);
+  // Color = full RGB. L530/L535/L630 + все L9xx (light strips).
+  const isColor = /^L530|^L535|^L630|^L6[3-9]\d|^L9/.test(m);
+  // Variable temp без RGB = L510/L520; color-bulbs тоже умеют CT.
+  const isVariableTemp = isColor || /^L5[12]0/.test(m);
   return { model: info.model, isBulb, isColor, isVariableTemp, isDimmable: isBulb };
 }
 

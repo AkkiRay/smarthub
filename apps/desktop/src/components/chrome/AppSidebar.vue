@@ -173,12 +173,15 @@ onMounted(() => {
     });
     railResize.observe(navEl.value);
   }
+  // СИНХРОННО: gsap.from(immediateRender:true) ставит FROM-state ДО paint'а
+  // первого фрейма — sidebar items видно с opacity:0 без flash'а.
   from('.sidebar__item', {
     opacity: 0,
     x: -16,
     stagger: 0.05,
     duration: 0.5,
     ease: 'power3.out',
+    clearProps: 'opacity,transform',
   });
 });
 
@@ -351,6 +354,8 @@ onBeforeUnmount(() => {
 
   // Sliding rail: один pill, top / height inline через JS, transition по ним.
   // `left: -14px` компенсирует sidebar padding и кладёт rail на внешнюю кромку.
+  // `will-change` намеренно опущен: top/height — layout-свойства, GPU-hint
+  // на них не помогает, только поддерживает лишний composite-layer постоянно.
   &__rail {
     position: absolute;
     left: -14px;
@@ -361,7 +366,6 @@ onBeforeUnmount(() => {
     opacity: 0;
     pointer-events: none;
     transform: scaleX(1);
-    will-change: top, height, opacity;
 
     // is-ready: включает transition после первого позиционирования.
     &.is-ready {

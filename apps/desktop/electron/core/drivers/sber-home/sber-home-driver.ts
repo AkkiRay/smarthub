@@ -73,11 +73,33 @@ export class SberHomeDriver extends BaseCloudDriver {
 
   protected async refreshToken(): Promise<void> {
     if (!this.creds.refreshToken) throw new Error('Sber: no refresh_token');
-    const r = await axios.post<{ access_token: string; refresh_token?: string }>(
-      'https://salute.online.sberbank.ru/api/v1/oauth/token',
-      new URLSearchParams({ grant_type: 'refresh_token', refresh_token: this.creds.refreshToken }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 5000 },
-    );
+    let r;
+    try {
+      r = await axios.post<{
+        access_token: string;
+        refresh_token?: string;
+        error?: string;
+        error_description?: string;
+      }>(
+        'https://salute.online.sberbank.ru/api/v1/oauth/token',
+        new URLSearchParams({ grant_type: 'refresh_token', refresh_token: this.creds.refreshToken }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 5000 },
+      );
+    } catch (e) {
+      // Normalize: без этого юзер видит generic «Request failed with status code 400».
+      const ax = e as { response?: { status?: number; data?: { error?: string; error_description?: string } } };
+      const code = ax.response?.status;
+      const detail = ax.response?.data?.error_description ?? ax.response?.data?.error;
+      throw new Error(
+        `Sber refresh failed (HTTP ${code ?? '?'}): ${detail ?? (e as Error).message}`,
+      );
+    }
+    if (r.data.error) {
+      throw new Error(`Sber refresh declined: ${r.data.error_description ?? r.data.error}`);
+    }
+    if (!r.data.access_token) {
+      throw new Error('Sber refresh: cloud вернул пустой access_token');
+    }
     this.creds.accessToken = r.data.access_token;
     if (r.data.refresh_token) this.creds.refreshToken = r.data.refresh_token;
   }

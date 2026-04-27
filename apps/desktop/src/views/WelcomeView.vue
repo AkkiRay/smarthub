@@ -416,6 +416,7 @@ const orbitalChips = [
 // Никаких translateY / scale → grid-row статична → orb-стейдж не дёргается.
 // =====================================================================
 let activeTl: gsap.core.Timeline | null = null;
+let entranceTl: gsap.core.Timeline | null = null;
 
 function applyStepInstantly(idx: number): void {
   if (!cards.value) return;
@@ -564,16 +565,29 @@ onMounted(async () => {
   // (см. .fade-slide / .fade в App.vue). Двойной fade давал «вспышку» — Vue
   // фейдит, GSAP сразу snap'ит обратно в opacity:0 и фейдит ещё раз.
   // Анимируем только внутренние элементы поверх Vue-fade'а: bar → visual → cards.
-  const tl = gsap.timeline({ defaults: { ease: 'power3.out', force3D: true } });
+  // СИНХРОННО в onMounted: immediateRender ставит FROM-state ДО paint'а — fade
+  // видно с opacity:0, без flash'а на frame'е 0.
+  entranceTl?.kill();
+  const tl = gsap.timeline({
+    defaults: { ease: 'power3.out', force3D: true },
+  });
+  entranceTl = tl;
   tl.from('.welcome__bar > *', {
       opacity: 0,
       y: -6,
       duration: 0.4,
       stagger: 0.05,
+      clearProps: 'opacity,transform',
     })
     .from(
       '.welcome__pane--visual',
-      { opacity: 0, scale: 0.96, duration: 0.55, ease: 'power2.out' },
+      {
+        opacity: 0,
+        scale: 0.96,
+        duration: 0.55,
+        ease: 'power2.out',
+        clearProps: 'opacity,transform',
+      },
       '-=0.25',
     );
 
@@ -582,7 +596,13 @@ onMounted(async () => {
     tl.fromTo(
       active.children,
       { opacity: 0, y: 10 },
-      { opacity: 1, y: 0, duration: 0.45, stagger: 0.05 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.45,
+        stagger: 0.05,
+        clearProps: 'opacity,transform',
+      },
       '-=0.35',
     );
   }
@@ -591,6 +611,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   activeTl?.kill();
   activeTl = null;
+  entranceTl?.kill();
+  entranceTl = null;
   root.value?.removeEventListener('touchstart', onTouchStart);
   root.value?.removeEventListener('touchend', onTouchEnd);
 });

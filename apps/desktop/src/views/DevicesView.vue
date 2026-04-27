@@ -1,7 +1,7 @@
 <template>
   <section class="devices" ref="root">
     <!-- Hero header с stat-strip -->
-    <header class="devices__hero">
+    <header class="devices__hero" data-anim="header">
       <div class="devices__hero-copy">
         <span class="devices__eyebrow">
           <span class="devices__eyebrow-dot" />
@@ -62,6 +62,7 @@
 
     <BaseEmpty
       v-if="!filtered.length"
+      data-anim="block"
       :title="devices.devices.length === 0 ? 'Устройств пока нет' : 'Нет устройств в выборке'"
       :text="devices.devices.length === 0
         ? 'Импортируйте всё из «Дома с Алисой» одним нажатием — или найдите локально через сканер.'

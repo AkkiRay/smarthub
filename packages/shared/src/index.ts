@@ -23,6 +23,7 @@ export * from './types/yandex-station.js';
 export * from './types/alice.js';
 export * from './types/ipc.js';
 export * from './types/scene.js';
+export * from './types/updater.js';
 export * from './utils/result.js';
 export * from './utils/capability-builders.js';
 export * from './utils/type-guards.js';

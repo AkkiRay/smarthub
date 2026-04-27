@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Вопрос или обсуждение
+    url: https://github.com/AkkiRay/smarthub/discussions
+    about: Не уверены, что это баг? Откройте Discussion вместо Issue.
+  - name: 🔒 Уязвимость
+    url: https://github.com/AkkiRay/smarthub/security/advisories/new
+    about: НЕ публикуйте проблемы безопасности в Issues. Используйте приватный security advisory.

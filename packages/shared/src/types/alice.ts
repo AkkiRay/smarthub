@@ -21,8 +21,11 @@ import type { YandexStationStatus } from './yandex-station.js';
 export type AliceSkillStage =
   | 'idle' // не настроен
   | 'configured' // ID/secret введены, но туннель не запущен
-  | 'tunnel-up' // публичный URL получен, ожидаем привязку аккаунта в Я.приложении
-  | 'linked' // Алиса хотя бы раз дёрнула /devices с валидным bearer
+  | 'tunnel-up' // cloudflared subprocess живой, но достижимость снаружи ещё не подтверждена
+  | 'reachable' // публичный URL отвечает на HEAD /v1.0 — Алиса физически может постучаться
+  | 'awaiting-link' // достижимы, но Алиса ещё ни разу не дёргала webhook (юзер не закончил привязку)
+  | 'linked' // webhook от Алисы был ≤ 7 дней назад
+  | 'linked-stale' // токен есть, но webhook'ов нет > 7 дней — привязка скорее всего отозвана
   | 'error';
 
 /** То, что юзер вводит из dialogs.yandex.ru → ему достаточно. */
@@ -54,6 +57,46 @@ export interface AliceTunnelStatus {
   lastError?: string;
   /** ISO timestamp последней успешной выдачи публичного URL. */
   lastUpAt?: string;
+  /** Результат последней внешней пробы достижимости публичного URL. */
+  reachability?: AliceReachabilityResult;
+}
+
+/** Snapshot последней проверки достижимости webhook'а из внешнего интернета. */
+export interface AliceReachabilityResult {
+  /** ISO timestamp пробы. */
+  at: string;
+  /** true — HEAD /v1.0 ответил 2xx; false — таймаут / 4xx / 5xx. */
+  ok: boolean;
+  /** HTTP-код, который вернулся. 0 если соединение не установилось. */
+  status: number;
+  /** Round-trip ms. */
+  latencyMs: number;
+  /** Человекочитаемая ошибка для UI. */
+  error?: string;
+}
+
+/** Состояние управляемого хабом бинарника cloudflared. */
+export type AliceCloudflaredInstall =
+  | { kind: 'missing' }
+  | { kind: 'managed'; path: string; sizeKb?: number }
+  | {
+      kind: 'downloading';
+      ratio: number | null;
+      bytesDone: number;
+      bytesTotal: number | null;
+    }
+  | { kind: 'error'; error: string };
+
+/** Информация о владельце dialogsOauthToken — анти-foot-gun для callback API. */
+export interface AliceDialogsTokenOwner {
+  /** display_name из login.yandex.ru/info — UI показывает «токен принадлежит Х». */
+  displayName?: string;
+  /** Логин аккаунта (login). */
+  login?: string;
+  /** ISO timestamp последней успешной валидации (или попытки). */
+  checkedAt: string;
+  /** true если последний state-callback вернул 401 — токен отозван/не от того аккаунта. */
+  rejected?: boolean;
 }
 
 /** Срез последней активности skill webhook'а — для status-панели в UI. */
@@ -77,9 +120,13 @@ export interface AliceStatus {
     /** true если AliceSkillConfig сохранён (даже если туннель не запущен). */
     configured: boolean;
     lastError?: string;
+    /** Информация о владельце push-токена — UI показывает «выдан для Х». */
+    dialogsTokenOwner?: AliceDialogsTokenOwner;
   };
   tunnel: AliceTunnelStatus;
   activity: AliceSkillActivity;
+  /** Состояние managed-бинарника cloudflared — UI рендерит прогресс при `downloading`. */
+  cloudflared: AliceCloudflaredInstall;
   /** Кол-во устройств, которые сейчас экспонированы в Алису. */
   exposedDeviceCount: number;
   /** Кол-во сценариев, экспонированных в Алису. */

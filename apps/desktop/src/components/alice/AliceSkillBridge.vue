@@ -1,6 +1,6 @@
 <template>
   <section class="skill-bridge">
-    <!-- Hero: где сейчас находимся в 4-фазовом флоу. -->
+    <!-- Hero: 5 stage'й + честный сигнал по достижимости. -->
     <article class="skill-bridge__hero" :class="`skill-bridge__hero--${stage}`">
       <div class="skill-bridge__hero-icon" aria-hidden="true">
         <BaseIcon :name="stageIcon" :size="22" />
@@ -10,15 +10,68 @@
         <p class="skill-bridge__hero-sub">{{ stageSubtitle }}</p>
       </div>
       <div class="skill-bridge__hero-meta">
-        <span class="skill-bridge__hero-step" :class="{ 'is-done': isStepDone(1) }">1 · Skill</span>
-        <span class="skill-bridge__hero-step" :class="{ 'is-done': isStepDone(2) }">
+        <span
+          class="skill-bridge__hero-step"
+          :class="{ 'is-done': isStepDone(1), 'is-active': stage === 'idle' }"
+        >
+          1 · Skill
+        </span>
+        <span
+          class="skill-bridge__hero-step"
+          :class="{ 'is-done': isStepDone(2), 'is-active': stage === 'configured' }"
+        >
           2 · Туннель
         </span>
-        <span class="skill-bridge__hero-step" :class="{ 'is-done': isStepDone(3) }">
-          3 · Привязка
+        <span
+          class="skill-bridge__hero-step"
+          :class="{
+            'is-done': isStepDone(3),
+            'is-active': stage === 'tunnel-up',
+            'is-warn': stage === 'tunnel-up' && reachabilityChecked && !alice.isReachable,
+          }"
+        >
+          3 · Достижимость
+        </span>
+        <span
+          class="skill-bridge__hero-step"
+          :class="{
+            'is-done': isStepDone(4),
+            'is-active': stage === 'awaiting-link',
+            'is-warn': stage === 'linked-stale',
+          }"
+        >
+          4 · Привязка
         </span>
       </div>
     </article>
+
+    <!-- One-click автомат: открывает консоль навыка + кладёт endpoint+OAuth URL'ы в clipboard. -->
+    <button
+      v-if="alice.publicUrl && alice.isConfigured"
+      class="skill-bridge__quick-action"
+      type="button"
+      @click="alice.copyConsoleConfig()"
+    >
+      <BaseIcon name="arrow-right" :size="14" />
+      <div class="skill-bridge__quick-copy">
+        <strong>Открыть консоль навыка с готовой конфигурацией</strong>
+        <span>4 URL'а + client_id/secret скопируются в буфер — вставьте по одному кликом</span>
+      </div>
+    </button>
+
+    <!-- Dev-гайд: для тех, кто хочет понять «что под капотом». -->
+    <button
+      class="skill-bridge__guide-link"
+      type="button"
+      @click="
+        openExternal(
+          'https://github.com/AkkiRay/smarthub/blob/main/docs/ALICE-SKILL-SETUP.md',
+        )
+      "
+    >
+      <BaseIcon name="alice" :size="12" />
+      <span>Полный гайд: как создать навык в `dialogs.yandex.ru` за 5 минут</span>
+    </button>
 
     <!-- Шаг 1: креды skill-а из dialogs.yandex.ru. -->
     <article class="skill-bridge__card" data-tour="alice-skill-config">
@@ -136,11 +189,7 @@
             <span class="skill-bridge__field-label">
               Push-обновления через Я.Диалоги
               <span class="skill-bridge__field-hint">
-                {{
-                  form.dialogsOauthToken
-                    ? 'Токен получен — состояние обновляется в Алисе мгновенно'
-                    : 'Без токена Алиса узнаёт об изменениях только при следующем запросе'
-                }}
+                {{ dialogsTokenHint }}
               </span>
             </span>
             <BaseButton
@@ -150,7 +199,22 @@
               :loading="dialogsTokenFetching"
               @click="onFetchDialogsToken"
             >
-              {{ form.dialogsOauthToken ? 'Обновить токен' : 'Получить через Яндекс ID' }}
+              {{ form.dialogsOauthToken ? 'Сменить токен' : 'Получить через Яндекс ID' }}
+            </BaseButton>
+          </div>
+          <!-- Owner-info: защита от типичной ошибки «вошёл не тем аккаунтом». -->
+          <div
+            v-if="form.dialogsOauthToken && (alice.dialogsTokenOwner || dialogsOwnerError)"
+            class="skill-bridge__owner"
+            :class="ownerClass"
+          >
+            <BaseIcon :name="ownerIcon" :size="14" />
+            <div class="skill-bridge__owner-copy">
+              <strong>{{ ownerTitle }}</strong>
+              <span>{{ ownerSub }}</span>
+            </div>
+            <BaseButton variant="ghost" size="sm" icon-left="refresh" @click="onVerifyToken">
+              Проверить
             </BaseButton>
           </div>
         </div>
@@ -186,60 +250,44 @@
           <h3 class="skill-bridge__card-title">Запустите публичный туннель</h3>
           <p class="skill-bridge__card-desc">
             Хаб поднимает <code>cloudflared tunnel</code> и получает HTTPS-URL, доступный из
-            интернета. Локальный webhook остаётся на <code>127.0.0.1</code> — туннель только
-            проксирует.
+            интернета. Если бинарника нет — скачается автоматически (~25 МБ).
           </p>
         </div>
         <BaseButton
           v-if="!alice.tunnelRunning"
           variant="primary"
           icon-left="alice"
-          :disabled="!alice.isConfigured || cloudflaredMissing"
-          :loading="alice.tunnelStarting"
+          :disabled="!alice.isConfigured || isInstalling"
+          :loading="alice.tunnelStarting || isInstalling"
           @click="onStartTunnel"
         >
-          Запустить туннель
+          {{ tunnelButtonLabel }}
         </BaseButton>
         <BaseButton v-else variant="ghost" size="sm" icon-left="close" @click="onStopTunnel">
           Остановить
         </BaseButton>
       </header>
 
-      <!-- Cloudflared probe: показываем upfront-баннер, не дожидаясь упавшей попытки. -->
-      <aside
-        v-if="alice.cloudflaredStatus"
-        class="skill-bridge__probe"
-        :class="cloudflaredMissing ? 'skill-bridge__probe--missing' : 'skill-bridge__probe--ok'"
-      >
-        <BaseIcon :name="cloudflaredMissing ? 'close' : 'check'" :size="14" />
-        <div class="skill-bridge__probe-copy">
-          <strong>
-            {{
-              cloudflaredMissing
-                ? 'cloudflared не найден в PATH'
-                : `cloudflared ${alice.cloudflaredStatus.version ?? 'установлен'}`
-            }}
-          </strong>
-          <span v-if="cloudflaredMissing">
-            Скачайте релиз для вашей ОС, добавьте в PATH и нажмите «Проверить».
-          </span>
-          <span v-else>Готов поднимать туннель.</span>
+      <!-- Inline-прогресс установки cloudflared — единственный сигнал, без отдельных кнопок. -->
+      <div v-if="isInstalling" class="skill-bridge__install">
+        <div class="skill-bridge__install-head">
+          <strong>Скачиваю cloudflared…</strong>
+          <span>{{ installProgressLabel }}</span>
         </div>
-        <div class="skill-bridge__probe-actions">
-          <BaseButton
-            v-if="cloudflaredMissing"
-            variant="primary"
-            size="sm"
-            icon-right="arrow-right"
-            @click="openExternal('https://github.com/cloudflare/cloudflared/releases/latest')"
-          >
-            Скачать
-          </BaseButton>
-          <BaseButton variant="ghost" size="sm" icon-left="refresh" @click="onProbeCloudflared">
-            Проверить
-          </BaseButton>
+        <div
+          class="skill-bridge__install-bar"
+          role="progressbar"
+          :aria-valuemin="0"
+          :aria-valuemax="100"
+          :aria-valuenow="installRatio !== null ? Math.round(installRatio * 100) : undefined"
+        >
+          <span
+            class="skill-bridge__install-bar-fill"
+            :class="{ 'is-indeterminate': installRatio === null }"
+            :style="installRatio !== null ? { '--w': `${installRatio * 100}%` } : undefined"
+          />
         </div>
-      </aside>
+      </div>
 
       <!-- Public URL: copy + endpoint suggestions для вставки в консоль навыка. -->
       <div v-if="alice.publicUrl" class="skill-bridge__urls">
@@ -270,6 +318,19 @@
         </div>
       </div>
 
+      <!-- Honest reachability — авто-проба после tunnel-up + раз в 90с. -->
+      <div
+        v-if="alice.publicUrl"
+        class="skill-bridge__reach"
+        :class="reachabilityClass"
+      >
+        <BaseIcon :name="reachabilityIcon" :size="14" />
+        <div class="skill-bridge__reach-copy">
+          <strong>{{ reachabilityTitle }}</strong>
+          <span>{{ reachabilitySub }}</span>
+        </div>
+      </div>
+
       <p v-else-if="alice.status?.tunnel.lastError" class="skill-bridge__error">
         ⚠ {{ alice.status.tunnel.lastError }}
       </p>
@@ -288,15 +349,26 @@
           <p class="skill-bridge__card-desc">
             В приложении Яндекса:
             <strong>Устройства → Добавить → По производителю → ваш skill → Привязать аккаунт</strong
-            >. Алиса откроет страницу подтверждения, нажмите «Привязать» — ваши устройства появятся
-            в доме мгновенно.
+            >. Алиса откроет страницу подтверждения, нажмите «Привязать» — устройства появятся в
+            доме мгновенно.
           </p>
         </div>
-        <span class="skill-bridge__chip" :class="{ 'is-success': alice.isLinked }">
+        <span class="skill-bridge__chip" :class="linkChipClass">
           <span class="skill-bridge__chip-dot" />
-          {{ alice.isLinked ? 'Привязано' : 'Ожидает привязки' }}
+          {{ linkChipLabel }}
         </span>
       </header>
+
+      <!-- Прямая ссылка на страницу привязки конкретного скилла — экономит юзеру 4 клика. -->
+      <BaseButton
+        v-if="form.skillId.trim()"
+        variant="primary"
+        icon-right="arrow-right"
+        :disabled="!alice.tunnelRunning || (reachabilityChecked && !alice.isReachable)"
+        @click="openSkillBindPage"
+      >
+        Открыть страницу привязки в «Дом с Алисой»
+      </BaseButton>
 
       <div v-if="activity" class="skill-bridge__activity">
         <div class="skill-bridge__activity-row">
@@ -329,6 +401,34 @@ import { useToasterStore } from '@/stores/toaster';
 const alice = useAliceStore();
 const toaster = useToasterStore();
 
+const dialogsOwnerError = ref<string | null>(null);
+
+const isInstalling = computed(() => alice.cloudflaredInstall.kind === 'downloading');
+const installRatio = computed(() => {
+  const s = alice.cloudflaredInstall;
+  return s.kind === 'downloading' ? s.ratio : null;
+});
+const tunnelButtonLabel = computed(() => {
+  if (isInstalling.value) {
+    return installRatio.value !== null
+      ? `Скачиваю · ${Math.round(installRatio.value * 100)}%`
+      : 'Скачиваю cloudflared…';
+  }
+  if (alice.cloudflaredInstall.kind === 'managed') return 'Запустить туннель';
+  // 'missing' | 'error' — кликом запустим скачивание + старт.
+  return 'Подключить (скачать cloudflared)';
+});
+
+const installProgressLabel = computed(() => {
+  const s = alice.cloudflaredInstall;
+  if (s.kind !== 'downloading') return '';
+  const mb = (b: number): string => `${(b / (1024 * 1024)).toFixed(1)} МБ`;
+  if (s.bytesTotal && s.ratio !== null) {
+    return `${mb(s.bytesDone)} из ${mb(s.bytesTotal)} · ${Math.round(s.ratio * 100)}%`;
+  }
+  return `${mb(s.bytesDone)} скачано`;
+});
+
 // Локальная form-копия. Store пишем только по save'у — иначе race с alice:status push'ами.
 const form = reactive<AliceSkillConfig>({
   skillId: '',
@@ -344,13 +444,10 @@ const revealSecret = ref(false);
 /** «Креды есть», если оба поля заполнены — неважно как (save / manual / generate). */
 const hasGenerated = computed(() => !!form.oauthClientId.trim() && !!form.oauthClientSecret.trim());
 
-const cloudflaredMissing = computed(
-  () => alice.cloudflaredStatus !== null && alice.cloudflaredStatus.installed === false,
-);
-
-onMounted(async () => {
-  // Probe на mount — баннер «нет cloudflared» должен висеть до первой попытки запуска.
-  await alice.probeCloudflared();
+onMounted(() => {
+  // Авто-проба cloudflared в PATH — install-state из bootstrap уже показывает
+  // managed-бинарник, если он скачан раньше.
+  void alice.probeCloudflared();
 });
 
 watch(
@@ -370,16 +467,18 @@ const canSave = computed(
   () => !!form.skillId.trim() && !!form.oauthClientId.trim() && !!form.oauthClientSecret.trim(),
 );
 
-const stage = computed(() => alice.status?.skill.stage ?? 'idle');
+const stage = computed(() => alice.stage);
 const stageIcon = computed<IconName>(() => {
   switch (stage.value) {
     case 'linked':
       return 'check';
+    case 'awaiting-link':
     case 'tunnel-up':
       return 'arrow-right';
     case 'configured':
       return 'edit';
     case 'error':
+    case 'linked-stale':
       return 'close';
     default:
       return 'alice';
@@ -389,8 +488,12 @@ const stageTitle = computed(() => {
   switch (stage.value) {
     case 'linked':
       return 'Алиса видит ваш хаб';
+    case 'linked-stale':
+      return 'Привязка подвисла — Алиса не дёргала хаб > 7 дней';
+    case 'awaiting-link':
+      return 'Туннель достижим — осталось привязать в «Дом с Алисой»';
     case 'tunnel-up':
-      return 'Туннель работает — осталось привязать в приложении';
+      return 'Туннель поднят — проверьте достижимость снаружи';
     case 'configured':
       return 'Креды сохранены — запустите туннель';
     case 'error':
@@ -401,11 +504,115 @@ const stageTitle = computed(() => {
 });
 const stageSubtitle = computed(() => alice.nextActionHint);
 
+const reachabilityChecked = computed(() => !!alice.reachability);
+
+const reachabilityClass = computed(() => {
+  if (!alice.reachability) return 'skill-bridge__reach--idle';
+  return alice.reachability.ok ? 'skill-bridge__reach--ok' : 'skill-bridge__reach--bad';
+});
+const reachabilityIcon = computed<IconName>(() => {
+  if (!alice.reachability) return 'refresh';
+  return alice.reachability.ok ? 'check' : 'close';
+});
+const reachabilityTitle = computed(() => {
+  const r = alice.reachability;
+  if (!r) return 'Достижимость не проверена';
+  if (r.ok) return `HEAD /v1.0 → ${r.status} · ${r.latencyMs} мс`;
+  return r.error ?? `HEAD /v1.0 → ${r.status}`;
+});
+const reachabilitySub = computed(() => {
+  const r = alice.reachability;
+  if (!r) {
+    return 'Нажмите «Проверить» — хаб дёрнет публичный URL снаружи и убедится, что Алиса достучится.';
+  }
+  return `Проверено ${relativeTime(r.at)}. Авто-перепроверка раз в 90с пока туннель up.`;
+});
+
+const linkChipLabel = computed(() => {
+  switch (stage.value) {
+    case 'linked':
+      return 'Привязано';
+    case 'linked-stale':
+      return 'Привязка подвисла';
+    case 'awaiting-link':
+      return 'Достижимы — ждём вас';
+    default:
+      return 'Ожидает привязки';
+  }
+});
+
+const linkChipClass = computed(() => ({
+  'is-success': stage.value === 'linked',
+  'is-warn': stage.value === 'linked-stale',
+  'is-info': stage.value === 'awaiting-link',
+}));
+
+const dialogsTokenHint = computed(() => {
+  if (!form.dialogsOauthToken) {
+    return 'Без токена Алиса узнаёт об изменениях только при следующем запросе';
+  }
+  if (alice.dialogsTokenOwner?.rejected) {
+    return 'Токен отклонён — Я.Диалоги вернули 401. Получите заново под аккаунтом владельца скилла';
+  }
+  if (alice.dialogsTokenOwner?.displayName) {
+    return `Push-токен · ${alice.dialogsTokenOwner.displayName}`;
+  }
+  return 'Токен сохранён — нажмите «Проверить», чтобы узнать владельца';
+});
+
+const ownerClass = computed(() => {
+  const owner = alice.dialogsTokenOwner;
+  if (owner?.rejected) return 'skill-bridge__owner--bad';
+  if (owner?.displayName) return 'skill-bridge__owner--ok';
+  return 'skill-bridge__owner--idle';
+});
+const ownerIcon = computed<IconName>(() => {
+  const owner = alice.dialogsTokenOwner;
+  if (owner?.rejected) return 'close';
+  if (owner?.displayName) return 'check';
+  return 'refresh';
+});
+const ownerTitle = computed(() => {
+  const owner = alice.dialogsTokenOwner;
+  if (owner?.rejected) return 'Токен отклонён Я.Диалогами';
+  if (owner?.displayName) return `Владелец токена · ${owner.displayName}`;
+  return 'Владелец токена не подтверждён';
+});
+const ownerSub = computed(() => {
+  const owner = alice.dialogsTokenOwner;
+  if (owner?.rejected) {
+    return 'Получите токен заново и убедитесь, что входите тем же аккаунтом, что создал скилл';
+  }
+  if (owner?.login) return `Логин: ${owner.login}`;
+  return 'Нажмите «Проверить» — мы дёрнем login.yandex.ru/info';
+});
+
+function relativeTime(iso: string): string {
+  const ms = Date.now() - Date.parse(iso);
+  if (ms < 60_000) return 'только что';
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)} мин назад`;
+  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)} ч назад`;
+  return `${Math.round(ms / 86_400_000)} дн назад`;
+}
+
+async function onVerifyToken(): Promise<void> {
+  dialogsOwnerError.value = null;
+  await alice.verifyDialogsToken();
+}
+
+function openSkillBindPage(): void {
+  // Прямая ссылка на навык в «Доме с Алисой» — пропускает 4 клика по меню.
+  void window.smarthome.app.openExternal(
+    `https://yandex.ru/quasar/skills/${encodeURIComponent(form.skillId.trim())}`,
+  );
+}
+
 const activity = computed(() => alice.status?.activity ?? null);
 
-function isStepDone(step: 1 | 2 | 3): boolean {
+function isStepDone(step: 1 | 2 | 3 | 4): boolean {
   if (step === 1) return alice.isConfigured;
   if (step === 2) return alice.tunnelRunning;
+  if (step === 3) return alice.isReachable;
   return alice.isLinked;
 }
 
@@ -486,10 +693,6 @@ async function onFetchDialogsToken(): Promise<void> {
   }
 }
 
-async function onProbeCloudflared(): Promise<void> {
-  await alice.probeCloudflared();
-}
-
 function maskSecret(secret: string): string {
   if (secret.length <= 8) return '••••••••';
   return `${secret.slice(0, 4)}${'•'.repeat(secret.length - 8)}${secret.slice(-4)}`;
@@ -506,14 +709,6 @@ async function copy(text: string): Promise<void> {
 
 function openExternal(url: string): void {
   void window.smarthome.app.openExternal(url);
-}
-
-function relativeTime(iso: string): string {
-  const ms = Date.now() - Date.parse(iso);
-  if (ms < 60_000) return 'только что';
-  if (ms < 3_600_000) return `${Math.round(ms / 60_000)} мин назад`;
-  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)} ч назад`;
-  return `${Math.round(ms / 86_400_000)} дн назад`;
 }
 </script>
 
@@ -541,6 +736,14 @@ function relativeTime(iso: string): string {
     &--linked {
       background: rgba(var(--color-success-rgb), 0.06);
       border-color: rgba(var(--color-success-rgb), 0.28);
+    }
+    &--linked-stale {
+      background: rgba(var(--color-warning-rgb), 0.06);
+      border-color: rgba(var(--color-warning-rgb), 0.3);
+    }
+    &--awaiting-link {
+      background: rgba(var(--color-brand-pink-rgb), 0.06);
+      border-color: rgba(var(--color-brand-pink-rgb), 0.28);
     }
     &--error {
       background: rgba(var(--color-danger-rgb), 0.06);
@@ -595,6 +798,22 @@ function relativeTime(iso: string): string {
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
+    transition:
+      color 220ms var(--ease-out),
+      background-color 220ms var(--ease-out),
+      border-color 220ms var(--ease-out);
+
+    &.is-active {
+      color: var(--color-brand-violet);
+      background: rgba(var(--color-brand-violet-rgb), 0.12);
+      border-color: rgba(var(--color-brand-violet-rgb), 0.4);
+    }
+
+    &.is-warn {
+      color: var(--color-warning);
+      background: rgba(var(--color-warning-rgb), 0.1);
+      border-color: rgba(var(--color-warning-rgb), 0.32);
+    }
 
     &.is-done {
       color: var(--color-success);
@@ -946,6 +1165,16 @@ function relativeTime(iso: string): string {
       background: rgba(var(--color-success-rgb), 0.1);
       border-color: rgba(var(--color-success-rgb), 0.28);
     }
+    &.is-warn {
+      color: var(--color-warning);
+      background: rgba(var(--color-warning-rgb), 0.1);
+      border-color: rgba(var(--color-warning-rgb), 0.28);
+    }
+    &.is-info {
+      color: var(--color-brand-pink);
+      background: rgba(var(--color-brand-pink-rgb), 0.12);
+      border-color: rgba(var(--color-brand-pink-rgb), 0.32);
+    }
   }
 
   &__chip-dot {
@@ -986,6 +1215,218 @@ function relativeTime(iso: string): string {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--color-text-muted);
+  }
+
+  // ---- Quick-action: один-клик автомат «открыть консоль + скопировать всё» ----
+  &__quick-action {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 14px 18px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(
+      90deg,
+      rgba(var(--color-brand-violet-rgb), 0.16),
+      rgba(var(--color-brand-pink-rgb), 0.08) 70%,
+      transparent
+    );
+    border: 1px solid rgba(var(--color-brand-violet-rgb), 0.32);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+
+    &:hover {
+      border-color: rgba(var(--color-brand-pink-rgb), 0.5);
+      transform: translateX(2px);
+    }
+  }
+
+  &__quick-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+
+    strong {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    span {
+      font-size: 12.5px;
+      color: var(--color-text-secondary);
+    }
+  }
+
+  // ---- Inline cloudflared install progress ----
+  &__install {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    background: rgba(var(--color-brand-violet-rgb), 0.06);
+    border: 1px solid rgba(var(--color-brand-violet-rgb), 0.22);
+  }
+
+  &__install-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+
+    strong {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+    span {
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  &__install-bar {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+    position: relative;
+  }
+
+  &__install-bar-fill {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    width: var(--w, 0%);
+    background: linear-gradient(
+      90deg,
+      var(--color-brand-violet),
+      var(--color-brand-pink)
+    );
+    transition: width 200ms linear;
+
+    &.is-indeterminate {
+      width: 35%;
+      animation: skillInstallSlide 1.6s linear infinite;
+    }
+  }
+
+  @keyframes skillInstallSlide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(285%); }
+  }
+
+  &__guide-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    align-self: flex-start;
+    transition: color 160ms var(--ease-out);
+
+    span {
+      border-bottom: 1px dashed currentColor;
+    }
+    &:hover {
+      color: var(--color-brand-cyan);
+    }
+  }
+
+  // ---- Reachability ----
+  &__reach {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.02);
+
+    &--ok {
+      background: rgba(var(--color-success-rgb), 0.06);
+      border-color: rgba(var(--color-success-rgb), 0.28);
+      color: var(--color-success);
+    }
+    &--bad {
+      background: rgba(var(--color-warning-rgb), 0.06);
+      border-color: rgba(var(--color-warning-rgb), 0.32);
+      color: var(--color-warning);
+    }
+  }
+
+  &__reach-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+
+    strong {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+    span {
+      font-size: 11.5px;
+      color: var(--color-text-secondary);
+      line-height: 1.45;
+    }
+  }
+
+  // ---- Token owner ----
+  &__owner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    margin-top: 8px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.02);
+
+    &--ok {
+      background: rgba(var(--color-success-rgb), 0.06);
+      border-color: rgba(var(--color-success-rgb), 0.28);
+      color: var(--color-success);
+    }
+    &--bad {
+      background: rgba(var(--color-danger-rgb), 0.06);
+      border-color: rgba(var(--color-danger-rgb), 0.32);
+      color: var(--color-danger);
+    }
+  }
+
+  &__owner-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+
+    strong {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+    span {
+      font-size: 11.5px;
+      color: var(--color-text-secondary);
+    }
   }
 }
 

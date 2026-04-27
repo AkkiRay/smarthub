@@ -38,10 +38,13 @@ export function useViewMount(opts: ViewMountOptions = {}): void {
   const { from } = useGsap(null);
 
   onMounted(() => {
+    // СИНХРОННО в onMounted: gsap.from с immediateRender:true (default) ставит
+    // FROM-state inline ДО browser-paint frame'а 0 → opacity:0 видно сразу,
+    // никаких flash'ей natural-state'а. RAF-defer возвращал лаг, потому что
+    // frame 0 успевал отрендериться с opacity:1, а на frame'е 1 GSAP снапил
+    // в 0 → визуально казалось, что fade'а нет. clearProps вычищает inline
+    // после tween'а, чтобы не оставлять opacity / transform в final-DOM.
     const scope = resolveScope(opts.scope);
-    // clearProps вычищает inline `opacity` / `transform` после tween'а.
-    // `will-change` намеренно опущен: `force3D:true` из useGsap.adapt
-    // GPU-промоутит через translateZ-trick.
     const CLEAR = 'opacity,transform';
 
     const headers = pickAll(scope, '[data-page-header], [data-anim="header"]');

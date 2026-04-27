@@ -9,12 +9,24 @@
  *   5. orphan-sweep с sanity-gates (skip если candidates=0 или ≥50% paired)
  */
 
+import { createHash } from 'node:crypto';
 import log from 'electron-log/main.js';
 import type {
   DiscoveredDevice,
   YandexHomeHousehold,
   YandexHomeSnapshot,
 } from '@smarthome/shared';
+
+/**
+ * Лог SSID без раскрытия. SSID часто содержит privacy-данные (адрес, фамилия,
+ * название домена), так что в main.log идёт sha256 prefix вместо plaintext.
+ * Сохраняем длину для отладки сетевой identity.
+ */
+function redactSsid(ssid: string | null): string {
+  if (!ssid) return '-';
+  const hash = createHash('sha256').update(ssid).digest('hex').slice(0, 8);
+  return `<sha256:${hash}>`;
+}
 import type { SettingsStore } from '../storage/settings-store.js';
 import type { DriverRegistry } from '../drivers/driver-registry.js';
 import type { DeviceRegistry } from '../registry/device-registry.js';
@@ -112,7 +124,8 @@ export class YandexImportService {
       currentNetwork,
     };
     log.info(
-      `YandexImport.sync: household=${householdId ?? 'all'} ssid=${currentNetwork.ssid ?? '-'} ` +
+      // SSID может содержать privacy-данные (адрес дома, фамилия) — log'аем хеш.
+      `YandexImport.sync: household=${householdId ?? 'all'} ssid=${redactSsid(currentNetwork.ssid)} ` +
         `subnet=${currentNetwork.subnet ?? '-'} | +${summary.imported} imported, ` +
         `${summary.updated} updated, -${summary.removed} removed, ${summary.failed} failed, ` +
         `${summary.rooms} rooms (total ${summary.total}, ${households.length} households)`,
@@ -203,7 +216,7 @@ export class YandexImportService {
       bindings[keepId] = list;
       changed = true;
       log.info(
-        `YandexImport: bound network mac=${current.gatewayMac ?? '-'} ssid=${current.ssid ?? '-'} subnet=${current.subnet ?? '-'} → ${keepId} (on household switch)`,
+        `YandexImport: bound network mac=${current.gatewayMac ?? '-'} ssid=${redactSsid(current.ssid)} subnet=${current.subnet ?? '-'} → ${keepId} (on household switch)`,
       );
     }
     if (changed) this.deps.settings.set('householdNetworks', bindings);
@@ -336,7 +349,7 @@ export class YandexImportService {
     all[householdId] = list;
     this.deps.settings.set('householdNetworks', all);
     log.info(
-      `YandexImport: bound network mac=${sig.gatewayMac ?? '-'} ssid=${sig.ssid ?? '-'} subnet=${sig.subnet ?? '-'} → ${householdId}`,
+      `YandexImport: bound network mac=${sig.gatewayMac ?? '-'} ssid=${redactSsid(sig.ssid)} subnet=${sig.subnet ?? '-'} → ${householdId}`,
     );
   }
 

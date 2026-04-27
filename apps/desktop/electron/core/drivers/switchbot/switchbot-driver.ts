@@ -3,6 +3,12 @@
  * SwitchBot Cloud API v1.1: token + secret HMAC-SHA256.
  * GET /v1.1/devices, POST /v1.1/devices/<id>/commands.
  * SwitchBot Mini Bot, Plug Mini, Curtain, Bulbs, Hub Mini.
+ *
+ * 2025-04 update: SwitchBot выпустили v1.2 API, добавлена поддержка
+ * Hub3, Pebble, Smart Lock Pro 2, новых color RGB strips. Sign-формула
+ * та же (HMAC-SHA256(token+t+nonce, secret)), endpoint URL остаётся
+ * v1.1 для backward compat — v1.2 работает на тех же URL'ах с extra
+ * device-types в /devices response.
  */
 
 import { createHmac, randomUUID } from 'node:crypto';
@@ -168,19 +174,34 @@ export class SwitchBotDriver extends BaseCloudDriver {
 function mapType(t: string): DeviceType {
   const lower = t.toLowerCase();
   if (lower.includes('bot') || lower.includes('plug')) return DEVICE_TYPE.SOCKET;
-  if (lower.includes('bulb') || lower.includes('strip') || lower.includes('lamp'))
+  if (
+    lower.includes('bulb') ||
+    lower.includes('strip') ||
+    lower.includes('lamp') ||
+    // 2025 SKU: «Color Bulb 2», «Floor Lamp», «Pebble» (RGB ambient).
+    lower.includes('color') ||
+    lower.includes('pebble')
+  ) {
     return DEVICE_TYPE.LIGHT;
+  }
   if (lower.includes('meter')) return DEVICE_TYPE.SENSOR;
   if (lower.includes('curtain') || lower.includes('blind')) return DEVICE_TYPE.CURTAIN;
   if (lower.includes('humidifier')) return DEVICE_TYPE.HUMIDIFIER;
   if (lower.includes('lock')) return DEVICE_TYPE.LOCK;
+  // Hub3 / Hub2 — sensor-aggregator с temp/humidity встроенным; не socket.
+  if (lower.includes('hub')) return DEVICE_TYPE.SENSOR;
   return DEVICE_TYPE.OTHER;
 }
 
 function defaultCaps(deviceType: string): Capability[] {
   const caps: Capability[] = [capOnOff(false)];
   const lower = deviceType.toLowerCase();
-  if (lower.includes('bulb') || lower.includes('strip')) {
+  if (
+    lower.includes('bulb') ||
+    lower.includes('strip') ||
+    lower.includes('color') ||
+    lower.includes('pebble')
+  ) {
     caps.push(capBrightness(100));
   }
   return caps;

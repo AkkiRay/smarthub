@@ -44,6 +44,7 @@ import { safeOpenExternal } from '@main/security/open-external.js';
 import { createTray, type TrayController } from '@main/tray.js';
 import { loadRuntimeEnv } from '@main/env-loader.js';
 import { resolveAppIcon } from '@main/app-icon.js';
+import { initAutoUpdater, type UpdaterController } from '@main/auto-updater.js';
 import type { Platform } from '@smarthome/shared';
 
 // setName до `app.getPath('userData')` — Electron фиксирует путь по `name` при первом обращении.
@@ -138,6 +139,7 @@ app.on('child-process-gone', (_e, details) => {
 let mainWindow: BrowserWindow | null = null;
 let hub: SmartHomeHub | null = null;
 let tray: TrayController | null = null;
+let updater: UpdaterController | null = null;
 
 async function createWindow(): Promise<void> {
   const icon = resolveAppIcon();
@@ -198,7 +200,10 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' };
   });
 
-  // Renderer-навигация ограничена origin'ом bundle / vite-dev-сервера. Origin-точное сравнение.
+  // Renderer-навигация ограничена origin'ом bundle / vite-dev-сервера.
+  // В prod-режиме разрешаем ТОЛЬКО точный path к нашему index.html — `file://`
+  // сам по себе разрешал бы `file:///etc/passwd` и подобное.
+  const allowedFileUrl = `file://${join(RENDERER_DIST, 'index.html').replace(/\\/g, '/')}`;
   mainWindow.webContents.on('will-navigate', (event, url) => {
     let allowed = false;
     try {
@@ -206,7 +211,7 @@ async function createWindow(): Promise<void> {
       if (VITE_DEV_SERVER_URL) {
         allowed = target.origin === new URL(VITE_DEV_SERVER_URL).origin;
       } else {
-        allowed = target.protocol === 'file:';
+        allowed = target.protocol === 'file:' && target.href === allowedFileUrl;
       }
     } catch {
       allowed = false;
@@ -290,9 +295,11 @@ app.whenReady().then(async () => {
   try {
     installCsp(IS_DEV);
     hub = await bootstrap();
+    updater = initAutoUpdater({ getMainWindow: () => mainWindow });
     registerIpcHandlers({
       ipcMain,
       hub,
+      updater,
       getMainWindow: () => mainWindow,
     });
     await createWindow();
@@ -354,6 +361,8 @@ app.on('before-quit', async (event) => {
   // Tray.destroy() до app.exit — на Windows иначе icon остаётся в трее до hover'а.
   tray?.destroy();
   tray = null;
+  updater?.dispose();
+  updater = null;
   app.exit(0);
 });
 
