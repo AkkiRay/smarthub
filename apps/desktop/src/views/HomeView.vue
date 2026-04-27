@@ -250,7 +250,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
 import { useDevicesStore } from '@/stores/devices';
 import { useScenesStore } from '@/stores/scenes';
 import { useYandexStationStore } from '@/stores/yandexStation';
@@ -268,7 +268,18 @@ const toaster = useToasterStore();
 const router = useRouter();
 const root = useTemplateRef<HTMLElement>('root');
 
-const hour = computed(() => new Date().getHours());
+// Reactive hour: пересчитывается при ре-маунте + раз в минуту,
+// чтобы greeting обновился после midnight без перезахода в view.
+const hour = ref(new Date().getHours());
+let hourTimer: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+  hourTimer = setInterval(() => {
+    hour.value = new Date().getHours();
+  }, 60_000);
+});
+onBeforeUnmount(() => {
+  if (hourTimer) clearInterval(hourTimer);
+});
 
 const greeting = computed(() => {
   const h = hour.value;
