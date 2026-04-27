@@ -1,10 +1,16 @@
 <template>
-  <section class="home" ref="root">
-    <!-- HERO: главный заголовок + статус-strip + ambient 3D mesh -->
+  <Transition name="home-bootstrap" mode="out-in">
+    <HomeSkeleton v-if="!bootstrapped" key="skeleton" />
+    <section v-else key="ready" class="home" ref="root">
+    <!-- HERO: главный заголовок + статус-strip + ambient 3D scene -->
     <header class="home__hero">
-      <!-- 3D wireframe sphere в правом-верхнем углу hero — статичный визуал
-           с медленным spin'ом. На narrow viewport скрыт через CSS. -->
-      <AmbientMesh class="home__hero-mesh" :detail="2" />
+      <!-- Centered atmospheric 3D wireframe sphere + radial glow halo за hero
+           gradient'ом. Низкая opacity, blurred — служит визуальным «дыханием»
+           вместо угловой иконки. -->
+      <div class="home__hero-scene" aria-hidden="true">
+        <span class="home__hero-halo" />
+        <AmbientMesh class="home__hero-mesh" :detail="2" />
+      </div>
       <div class="home__hero-copy">
         <span class="home__hero-eyebrow">
           <span class="home__hero-pulse" />
@@ -254,11 +260,21 @@
         </BaseButton>
       </template>
     </BaseEmpty>
-  </section>
+    </section>
+  </Transition>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  useTemplateRef,
+  watch,
+  watchEffect,
+} from 'vue';
 import { useDevicesStore } from '@/stores/devices';
 import { useScenesStore } from '@/stores/scenes';
 import { useYandexStationStore } from '@/stores/yandexStation';
@@ -267,6 +283,7 @@ import { useGsap } from '@/composables/useGsap';
 import { useRouter } from 'vue-router';
 import DeviceCard from '@/components/devices/DeviceCard.vue';
 import AmbientMesh from '@/components/visuals/AmbientMesh.vue';
+import HomeSkeleton from './HomeSkeleton.vue';
 import { BaseButton, BaseEmpty, BaseIcon } from '@/components/base';
 import { QUICK_SCENES, type QuickScene } from '@/constants/quickScenes';
 
@@ -276,6 +293,16 @@ const yandex = useYandexStationStore();
 const toaster = useToasterStore();
 const router = useRouter();
 const root = useTemplateRef<HTMLElement>('root');
+
+/**
+ * Bootstrap-gate: остаётся `false` пока async-stores (devices/scenes/yandex/
+ * drivers) не закончат первичную гидрацию. До этого момента рендерится
+ * `HomeSkeleton` — статичный shimmer-аналог, layout-размеры совпадают, поэтому
+ * crossfade на real-content не вызывает прыжков. Решает прежний баг: секции
+ * `home__rooms` / `home__alice` появлялись по отдельности по мере прихода данных,
+ * сдвигая блоки выше/ниже на 100-200px.
+ */
+const bootstrapped = ref(false);
 
 // Reactive hour: пересчитывается при ре-маунте + раз в минуту,
 // чтобы greeting обновился после midnight без перезахода в view.
@@ -445,40 +472,71 @@ async function runQuick(quick: QuickScene): Promise<void> {
 
 const { timeline } = useGsap(root);
 
-onMounted(() => {
-  // Async-bootstrap и IPC текут параллельно с mount-каскадом; результаты
-  // pop-in'ят элементы через Vue-reactivity.
-  void (async () => {
-    if (!scenes.scenes.length) await scenes.bootstrap();
-    try {
-      const drivers = await window.smarthome.drivers.list();
-      hasAnyIntegration.value = drivers.some(
-        (d) => d.active && d.id !== 'mock' && d.id !== 'yandex-station',
-      );
-    } catch {
-      /* ничего */
-    }
-  })();
-
-  // Единый timeline вместо 5 параллельных from()-вызовов:
-  // 1) общий ease/clearProps + один пул tween'ов меньше нагружает GSAP-ticker;
-  // 2) hero-stagger горизонтальный (x), tiles-stagger вертикальный (y) —
-  //    визуальная иерархия "shoulder → cards" сохраняется.
-  // СИНХРОННО в onMounted: immediateRender (default для from()) ставит
-  // opacity:0 inline ДО первого paint'а — fade-in полностью видим, без
-  // flash'а natural-state'а на frame'е 0.
+/**
+ * Запускает mount-stagger на real-content. Вызывается nextTick после
+ * `bootstrapped = true`, когда `root` уже указывает на `<section class="home">`.
+ */
+function runEntryAnimation(): void {
+  if (!root.value) return;
   const tl = timeline({
     defaults: { ease: 'power3.out', force3D: true, clearProps: 'opacity,transform' },
   });
   tl.from('.home__hero-copy > *', { opacity: 0, x: -16, stagger: 0.06, duration: 0.5 }, 0)
     .from('.home__kpi', { opacity: 0, y: 14, stagger: 0.04, duration: 0.45 }, 0.12)
-    // Comma-selector: квик-плитки + Alice-плитки + device-карты — одной волной.
-    // stagger.amount шапит общее время волны независимо от числа элементов.
     .from(
       '.quick-tile, .alice-tile, .home__device-grid > *',
       { opacity: 0, y: 12, stagger: { each: 0.04, amount: 0.42, from: 'start' }, duration: 0.42 },
       0.22,
     );
+}
+
+onMounted(async () => {
+  // Параллельно стартуем все async-источники (scenes, drivers list).
+  // devices/yandex/alice уже бутстрапятся в App.vue — их прогресс читаем
+  // через store-флаги.
+  const tasks: Array<Promise<unknown>> = [];
+
+  if (!scenes.scenes.length) tasks.push(scenes.bootstrap().catch(() => undefined));
+
+  tasks.push(
+    (async () => {
+      try {
+        const drivers = await window.smarthome.drivers.list();
+        hasAnyIntegration.value = drivers.some(
+          (d) => d.active && d.id !== 'mock' && d.id !== 'yandex-station',
+        );
+      } catch {
+        /* idle */
+      }
+    })(),
+  );
+
+  // Devices store: ждём пока isLoading станет false. Если он уже false —
+  // resolve мгновенно. timeout 1500ms — safety net если IPC завис.
+  tasks.push(
+    new Promise<void>((resolve) => {
+      if (!devices.isLoading) return resolve();
+      const stop = watch(
+        () => devices.isLoading,
+        (loading) => {
+          if (loading) return;
+          stop();
+          resolve();
+        },
+      );
+    }),
+  );
+
+  // Cap общего ожидания: 1500ms. Если что-то висит — flip всё равно,
+  // skeleton не должен залипать.
+  await Promise.race([
+    Promise.all(tasks),
+    new Promise((r) => setTimeout(r, 1500)),
+  ]);
+
+  bootstrapped.value = true;
+  await nextTick();
+  runEntryAnimation();
 });
 </script>
 
@@ -555,29 +613,66 @@ onMounted(() => {
   }
 }
 
-// AmbientMesh — 3D wireframe sphere в верхне-правом углу hero. Position
-// absolute поверх gradient'а, под content'ом, через z-index. На <1080px
-// hide — мобильный hero одноколоночный, mesh бы накладывался на text.
-.home__hero-mesh {
+// Hero-scene — атмосферный 3D-визуал: wireframe-сфера + radial halo за ней.
+// Position absolute, занимает правую половину hero, центрирована по высоте.
+// pointer-events:none — сцена декоративная, не блокирует клики на KPI strip.
+.home__hero-scene {
   position: absolute;
-  top: -40px;
-  right: -60px;
-  width: 320px;
-  height: 320px;
+  top: 50%;
+  right: -8%;
+  transform: translateY(-50%);
+  width: 540px;
+  height: 540px;
   z-index: 0;
-  opacity: 0.85;
   pointer-events: none;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+
+  @media (max-width: 1280px) {
+    width: 460px;
+    height: 460px;
+    right: -12%;
+  }
 
   @media (max-width: 1080px) {
-    width: 220px;
-    height: 220px;
-    top: -30px;
-    right: -40px;
-    opacity: 0.55;
+    width: 320px;
+    height: 320px;
+    right: -16%;
+    opacity: 0.7;
   }
 
   @media (max-width: 760px) {
     display: none;
+  }
+}
+
+.home__hero-halo {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(var(--color-brand-violet-rgb), 0.32) 0%,
+      rgba(var(--color-brand-pink-rgb), 0.18) 40%,
+      transparent 70%
+    );
+  filter: blur(28px);
+  animation: drift-slow calc(8s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
+  z-index: 0;
+}
+
+.home__hero-mesh {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  opacity: 0.85;
+  mix-blend-mode: screen;
+
+  @media (max-width: 1080px) {
+    opacity: 0.6;
   }
 }
 
@@ -610,7 +705,8 @@ onMounted(() => {
   border-radius: 50%;
   background: var(--gradient-brand);
   box-shadow: 0 0 12px rgba(var(--color-brand-violet-rgb), 0.7);
-  animation: pulseGlow 2.4s ease-in-out infinite;
+  // ÷ motion-scale: off → ∞ → kill в _motion.scss; reduced 0.6× → 4s.
+  animation: pulseGlow calc(2.4s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
 }
 
 .home__title {
@@ -784,7 +880,7 @@ onMounted(() => {
 
   &--pending {
     background: var(--color-warning);
-    animation: pulseGlow 1.6s ease-in-out infinite;
+    animation: pulseGlow calc(1.6s / max(var(--motion-scale, 1), 0.001)) ease-in-out infinite;
   }
 }
 
@@ -824,7 +920,9 @@ onMounted(() => {
     font-size: var(--font-size-small);
     color: var(--color-text-secondary);
     text-decoration: none;
-    transition: all var(--dur-fast) var(--ease-out);
+    transition:
+      color var(--trans-base),
+      background var(--trans-base);
 
     &:hover {
       color: var(--color-brand-violet);
@@ -856,7 +954,11 @@ onMounted(() => {
   cursor: pointer;
   color: var(--color-text-primary);
   text-align: left;
-  transition: all var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--trans-base),
+    border-color var(--trans-base),
+    transform var(--trans-transform),
+    box-shadow var(--trans-medium);
   position: relative;
   overflow: hidden;
 
@@ -870,7 +972,7 @@ onMounted(() => {
       transparent 60%
     );
     opacity: 0;
-    transition: opacity var(--dur-medium) var(--ease-out);
+    transition: opacity var(--trans-medium);
   }
 
   > * {
@@ -880,7 +982,7 @@ onMounted(() => {
 
   &:hover:not(:disabled) {
     border-color: color-mix(in srgb, var(--accent) 40%, var(--color-border-soft));
-    transform: translateY(-2px);
+    transform: translate3d(0, var(--lift), 0);
     box-shadow: var(--shadow-hover);
     &::before {
       opacity: 1;
@@ -892,7 +994,7 @@ onMounted(() => {
   }
 
   &:active {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0) scale(var(--press-scale));
     transition-duration: var(--dur-instant);
   }
   &:disabled {
@@ -938,7 +1040,9 @@ onMounted(() => {
 
   &__arrow {
     color: var(--color-text-muted);
-    transition: all var(--dur-fast) var(--ease-out);
+    transition:
+      color var(--trans-base),
+      transform var(--trans-transform);
   }
 }
 
@@ -964,7 +1068,11 @@ onMounted(() => {
   text-align: left;
   position: relative;
   overflow: hidden;
-  transition: all var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--trans-base),
+    border-color var(--trans-base),
+    transform var(--trans-transform),
+    box-shadow var(--trans-medium);
 
   &::after {
     content: '';
@@ -986,7 +1094,7 @@ onMounted(() => {
   &:hover:not(:disabled) {
     background: rgba(var(--alice-accent), 0.08);
     border-color: rgba(var(--alice-accent), 0.45);
-    transform: translateY(-1px);
+    transform: translate3d(0, var(--lift), 0);
     .alice-tile__action {
       transform: translateX(2px);
       color: var(--color-brand-yellow);
@@ -1036,7 +1144,9 @@ onMounted(() => {
 
   &__action {
     color: var(--color-text-muted);
-    transition: all var(--dur-fast) var(--ease-out);
+    transition:
+      color var(--trans-base),
+      transform var(--trans-transform);
   }
 }
 
@@ -1048,6 +1158,21 @@ onMounted(() => {
   @include auto-grid(var(--cell-md), var(--space-3));
 }
 
+// Bootstrap-gate Transition: skeleton ↔ real-content crossfade. Out-in mode
+// гарантирует что skeleton полностью fade-out'ит до начала fade-in'а content'а
+// — без двойного DOM в один момент и без прыжков layout'а.
+.home-bootstrap-enter-active,
+.home-bootstrap-leave-active {
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+.home-bootstrap-enter-from,
+.home-bootstrap-leave-to {
+  opacity: 0;
+}
+
+// Внутри-сессионная conditional section transition (onboarding hides когда
+// user добавил интеграцию). Использует opacity + translate, т.к. height-based
+// transition требует JS-измерений.
 .home-fade-enter-active,
 .home-fade-leave-active {
   transition:
