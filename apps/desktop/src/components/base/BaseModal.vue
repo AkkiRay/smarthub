@@ -101,16 +101,27 @@ function onBackdrop(): void {
   if (props.closeOnBackdrop) onClose();
 }
 
-/** Keyboard handler: ESC закрывает модалку. */
+/**
+ * Keyboard handler: ESC закрывает модалку.
+ * Stack-aware: при nested-modal'ах ESC закрывает только TOP-модалку, иначе
+ * стек модалок схлопывается одним нажатием.
+ */
 function onKey(e: KeyboardEvent): void {
-  if (e.key === 'Escape' && props.modelValue && props.closeOnEsc) {
-    e.stopPropagation();
-    onClose();
-  }
+  if (e.key !== 'Escape' || !props.modelValue || !props.closeOnEsc) return;
+  if (modalStack[modalStack.length - 1] !== onKey) return;
+  e.stopPropagation();
+  onClose();
 }
 
-onMounted(() => window.addEventListener('keydown', onKey));
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
+onMounted(() => {
+  window.addEventListener('keydown', onKey);
+  modalStack.push(onKey);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey);
+  const idx = modalStack.lastIndexOf(onKey);
+  if (idx !== -1) modalStack.splice(idx, 1);
+});
 
 /** Body-scroll lock пока модалка mounted. */
 watch(
