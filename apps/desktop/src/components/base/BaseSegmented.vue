@@ -199,7 +199,9 @@ onBeforeUnmount(() => resizeObs?.disconnect());
     font-weight: 600;
     letter-spacing: 0;
     flex-shrink: 0;
-    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    transition:
+      background var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
   }
 
   &__item.is-active &__count {

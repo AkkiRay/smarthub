@@ -110,7 +110,11 @@
               size="icon-sm"
               :icon-left="s.isActive ? 'check' : 'close'"
               :aria-label="s.isActive ? 'Выключить сценарий' : 'Включить сценарий'"
-              :title="s.isActive ? 'Активен — нажмите чтобы отключить' : 'Отключён — нажмите чтобы включить'"
+              :title="
+                s.isActive
+                  ? 'Активен — нажмите чтобы отключить'
+                  : 'Отключён — нажмите чтобы включить'
+              "
               :loading="togglingId === s.id"
               @click.stop="toggleActive(s)"
             />
@@ -122,7 +126,9 @@
             <span v-if="s.triggers.length" class="scene__trigger">
               <BaseIcon :name="iconForTrigger(s.triggers[0]!.type)" :size="11" />
               {{ s.triggers[0]!.summary }}
-              <span v-if="s.triggers.length > 1" class="scene__trigger-more">+{{ s.triggers.length - 1 }}</span>
+              <span v-if="s.triggers.length > 1" class="scene__trigger-more"
+                >+{{ s.triggers.length - 1 }}</span
+              >
             </span>
             <span v-else class="scene__trigger scene__trigger--manual">
               <BaseIcon name="arrow-right" :size="11" />
@@ -131,9 +137,7 @@
           </p>
 
           <p v-if="s.stepCount || s.devices.length" class="scene__meta-secondary text--small">
-            <span v-if="s.stepCount > 0">
-              {{ s.stepCount }} {{ pluralizeStep(s.stepCount) }}
-            </span>
+            <span v-if="s.stepCount > 0"> {{ s.stepCount }} {{ pluralizeStep(s.stepCount) }} </span>
             <span v-if="s.devices.length > 0">
               · {{ s.devices.length }} {{ pluralizeDevice(s.devices.length) }}
             </span>
@@ -198,14 +202,16 @@
           <h4>Затронутые устройства</h4>
           <p class="text--small">
             {{ yandexEditor.draft.devices.length }}
-            {{ pluralizeDevice(yandexEditor.draft.devices.length) }} —
-            редактирование шагов скоро появится. Пока меняйте конфигурацию в приложении Алисы.
+            {{ pluralizeDevice(yandexEditor.draft.devices.length) }} — редактирование шагов скоро
+            появится. Пока меняйте конфигурацию в приложении Алисы.
           </p>
         </section>
 
         <section v-if="yandexEditor.draft.stepCount > 0" class="scenes__editor-section">
           <h4>Шаги</h4>
-          <p class="text--small">{{ yandexEditor.draft.stepCount }} {{ pluralizeStep(yandexEditor.draft.stepCount) }}</p>
+          <p class="text--small">
+            {{ yandexEditor.draft.stepCount }} {{ pluralizeStep(yandexEditor.draft.stepCount) }}
+          </p>
         </section>
       </div>
       <p v-else class="text--small">Не удалось загрузить сценарий.</p>
@@ -636,9 +642,7 @@ useViewMount({ scope: root, itemsSelector: '.scenes__grid > .scene' });
   position: relative;
   overflow: hidden;
   text-align: left;
-  // Защита от mount-animation residue: yandex-сценарии появляются ПОСЛЕ async-fetchHome,
-  // могут попасть в GSAP-from'у пустого набора и унаследовать stale inline opacity:0.
-  // Явный opacity:1 + важность через `.is-inactive` ниже фиксирует ожидаемое значение.
+  // Опорный opacity: 1 — `.is-inactive` ниже задаёт фактическое значение.
   opacity: 1;
   transition:
     transform 200ms var(--ease-out),

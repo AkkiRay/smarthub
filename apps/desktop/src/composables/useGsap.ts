@@ -16,7 +16,12 @@ import { gsap } from 'gsap';
 import { useUiStore } from '@/stores/ui';
 import type { MotionLevel } from '@/stores/ui';
 
-type GsapScope = Element | Ref<Element | null | undefined> | (() => Element | null | undefined) | null | undefined;
+type GsapScope =
+  | Element
+  | Ref<Element | null | undefined>
+  | (() => Element | null | undefined)
+  | null
+  | undefined;
 
 // Transform-свойства, блокируемые на `reduced` — пропускаем только opacity и
 // color-tween'ы.
@@ -68,8 +73,7 @@ function adapt(vars: gsap.TweenVars, level: MotionLevel): gsap.TweenVars {
   // tween'ов (route transition + view mount).
   const base = level === 'reduced' ? stripTransforms(vars) : { ...vars };
   if (!('force3D' in base)) base.force3D = true;
-  const scale =
-    level === 'off' ? 0 : level === 'reduced' ? 0.6 : level === 'full' ? 1.15 : 1;
+  const scale = level === 'off' ? 0 : level === 'reduced' ? 0.6 : level === 'full' ? 1.15 : 1;
   return scaleDuration(base, scale);
 }
 

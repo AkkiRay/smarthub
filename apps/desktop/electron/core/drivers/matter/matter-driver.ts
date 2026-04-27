@@ -68,9 +68,7 @@ const MATTER_DEVICE_TYPES: Record<string, DeviceType> = {
 function parseDtId(raw: string | undefined): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
-  const n = trimmed.toLowerCase().startsWith('0x')
-    ? parseInt(trimmed, 16)
-    : Number(trimmed);
+  const n = trimmed.toLowerCase().startsWith('0x') ? parseInt(trimmed, 16) : Number(trimmed);
   return Number.isFinite(n) ? String(n) : null;
 }
 

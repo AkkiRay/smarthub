@@ -1,11 +1,6 @@
 <template>
   <div ref="rootEl" class="marketplace">
-    <div
-      v-for="group in groups"
-      :key="group.category"
-      class="marketplace__group"
-      data-anim="block"
-    >
+    <div v-for="group in groups" :key="group.category" class="marketplace__group" data-anim="block">
       <header class="marketplace__group-head">
         <h3 class="marketplace__group-title">{{ group.title }}</h3>
         <span class="marketplace__group-count">{{ group.drivers.length }}</span>
@@ -31,10 +26,7 @@
                 <span class="marketplace__region" :class="`region--${d.region}`">{{
                   regionLabel(d.region)
                 }}</span>
-                <span
-                  v-if="d.maturity === 'planned'"
-                  class="marketplace__beta"
-                >Beta</span>
+                <span v-if="d.maturity === 'planned'" class="marketplace__beta">Beta</span>
               </div>
               <span class="marketplace__desc">{{ d.description }}</span>
               <span class="chip marketplace__status" :class="statusChip(d)">
@@ -572,5 +564,4 @@ defineExpose({ reload: load });
     }
   }
 }
-
 </style>

@@ -108,7 +108,6 @@ const { reduceMotion } = storeToRefs(ui);
 const rootEl = useTemplateRef<HTMLElement>('rootEl');
 const canvasEl = useTemplateRef<HTMLCanvasElement>('canvasEl');
 
-
 // Three.js state — нереактивно, иначе Vue triggers per-frame.
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
@@ -274,7 +273,7 @@ function animate(): void {
   if (props.voiceMode) {
     if (props.voiceState === 'busy') baseSpin = 0.024;
     else if (props.voiceState === 'speaking') baseSpin = 0.014;
-    else if (props.voiceState === 'listening') baseSpin = 0.010;
+    else if (props.voiceState === 'listening') baseSpin = 0.01;
   }
   if (props.ambient) baseSpin = 0.006; // медленный, кинематографичный
   if (reduceMotion.value) baseSpin *= 0.4;
@@ -514,7 +513,6 @@ onBeforeUnmount(() => {
     --orb-glow: rgba(255, 85, 119, 0.6);
     --orb-glow-2: rgba(255, 138, 77, 0.5);
   }
-
 }
 
 .orb__halo {
@@ -610,24 +608,24 @@ onBeforeUnmount(() => {
   height: calc(var(--orb-size) * 0.18);
   margin-bottom: calc(var(--orb-size) * 0.92);
   border-radius: 2px;
-  background:
-    linear-gradient(
-      0deg,
-      rgba(var(--color-brand-pink-rgb), 0) 0%,
-      rgba(var(--color-brand-pink-rgb), 0.85) 38%,
-      rgba(var(--color-brand-purple-rgb), 1) 100%
-    );
+  background: linear-gradient(
+    0deg,
+    rgba(var(--color-brand-pink-rgb), 0) 0%,
+    rgba(var(--color-brand-pink-rgb), 0.85) 38%,
+    rgba(var(--color-brand-purple-rgb), 1) 100%
+  );
   transform: scaleY(var(--base-amp));
   transform-origin: 50% 100%;
   filter: drop-shadow(0 0 4px rgba(var(--color-brand-purple-rgb), 0.45));
-  animation: orbSpectrumPulse 1.6s cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
+  animation: orbSpectrumPulse 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   animation-delay: calc(var(--i) * -73ms);
   will-change: transform, opacity;
   opacity: 0.55;
 }
 
 @keyframes orbSpectrumPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scaleY(var(--base-amp));
     opacity: 0.45;
   }
@@ -639,20 +637,25 @@ onBeforeUnmount(() => {
 
 // State-driven амплитуда. Idle — едва дышит; listening — внятный пульс;
 // speaking — широкая волна; busy — radar-sweep по периметру.
-.orb--voice-idle .orb__spectrum-bar { --base-amp: 0.32; --peak-amp: 0.7; }
-.orb--voice-listening .orb__spectrum-bar { --base-amp: 0.45; --peak-amp: 1.15; }
+.orb--voice-idle .orb__spectrum-bar {
+  --base-amp: 0.32;
+  --peak-amp: 0.7;
+}
+.orb--voice-listening .orb__spectrum-bar {
+  --base-amp: 0.45;
+  --peak-amp: 1.15;
+}
 .orb--voice-speaking .orb__spectrum-bar {
   --base-amp: 0.55;
   --peak-amp: 1.55;
   animation-duration: 0.9s;
-  background:
-    linear-gradient(
-      0deg,
-      rgba(var(--color-brand-pink-rgb), 0) 0%,
-      rgba(255, 184, 102, 0.9) 30%,
-      rgba(var(--color-brand-pink-rgb), 1) 70%,
-      rgba(var(--color-brand-purple-rgb), 1) 100%
-    );
+  background: linear-gradient(
+    0deg,
+    rgba(var(--color-brand-pink-rgb), 0) 0%,
+    rgba(255, 184, 102, 0.9) 30%,
+    rgba(var(--color-brand-pink-rgb), 1) 70%,
+    rgba(var(--color-brand-purple-rgb), 1) 100%
+  );
 }
 // Busy: radar-sweep вокруг орба. Период 1.4с равномерно делится на 28 баров
 // (50мс на бар) — пик «бежит» по кругу как луч локатора, а не пульсирует
@@ -664,23 +667,21 @@ onBeforeUnmount(() => {
   animation-duration: 1.4s;
   animation-timing-function: cubic-bezier(0.16, 0.84, 0.44, 1);
   animation-delay: calc(var(--i) * -50ms);
-  background:
-    linear-gradient(
-      0deg,
-      rgba(255, 184, 102, 0) 0%,
-      rgba(255, 184, 102, 0.85) 50%,
-      rgba(var(--color-brand-purple-rgb), 1) 100%
-    );
+  background: linear-gradient(
+    0deg,
+    rgba(255, 184, 102, 0) 0%,
+    rgba(255, 184, 102, 0.85) 50%,
+    rgba(var(--color-brand-purple-rgb), 1) 100%
+  );
   filter: drop-shadow(0 0 6px rgba(255, 184, 102, 0.4));
 }
 .orb--error .orb__spectrum-bar {
-  background:
-    linear-gradient(
-      0deg,
-      rgba(255, 85, 119, 0) 0%,
-      rgba(255, 138, 77, 0.9) 40%,
-      rgba(255, 85, 119, 1) 100%
-    );
+  background: linear-gradient(
+    0deg,
+    rgba(255, 85, 119, 0) 0%,
+    rgba(255, 138, 77, 0.9) 40%,
+    rgba(255, 85, 119, 1) 100%
+  );
   filter: drop-shadow(0 0 5px rgba(255, 85, 119, 0.5));
 }
 
@@ -727,7 +728,9 @@ onBeforeUnmount(() => {
 }
 
 @keyframes orbSpectrumSweep {
-  0%, 70%, 100% {
+  0%,
+  70%,
+  100% {
     transform: scaleY(var(--base-amp));
     opacity: 0.35;
   }
@@ -741,28 +744,55 @@ onBeforeUnmount(() => {
 // Idle breath: внешний контейнер слегка пульсирует — орб никогда не статичен.
 // =============================================================================
 @keyframes orbBreath {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.012); }
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.012);
+  }
 }
 
 // Halo state-варианты: каждое голосовое состояние получает свою форму движения.
 // Busy — orbiting glow (точка света бегает по окружности halo).
 @keyframes orbHaloOrbit {
-  0% { transform: rotate(0deg) scale(1.04); opacity: 0.55; }
-  50% { transform: rotate(180deg) scale(1.12); opacity: 0.85; }
-  100% { transform: rotate(360deg) scale(1.04); opacity: 0.55; }
+  0% {
+    transform: rotate(0deg) scale(1.04);
+    opacity: 0.55;
+  }
+  50% {
+    transform: rotate(180deg) scale(1.12);
+    opacity: 0.85;
+  }
+  100% {
+    transform: rotate(360deg) scale(1.04);
+    opacity: 0.55;
+  }
 }
 
 // Listening — halo сжимается внутрь (втягивает внимание).
 @keyframes orbHaloFocus {
-  0%, 100% { transform: scale(1.02); opacity: 0.55; }
-  50% { transform: scale(0.88); opacity: 0.85; }
+  0%,
+  100% {
+    transform: scale(1.02);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(0.88);
+    opacity: 0.85;
+  }
 }
 
 // Speaking — резкий короткий пульс наружу.
 @keyframes orbHaloEmit {
-  0%, 100% { transform: scale(1.0); opacity: 0.6; }
-  50% { transform: scale(1.18); opacity: 1; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
 }
 
 // Voice-mode/ambient переопределяют idle-breath на orb-уровне (внутри

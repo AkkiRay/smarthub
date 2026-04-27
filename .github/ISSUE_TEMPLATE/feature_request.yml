@@ -1,6 +1,6 @@
 name: ✨ Feature request
 description: Предложить улучшение или новый интеграционный драйвер
-title: '[feat] '
+title: "[feat] "
 labels: [enhancement, triage]
 body:
   - type: textarea
@@ -29,4 +29,4 @@ body:
     id: vendor
     attributes:
       label: (для нового драйвера) Вендор / протокол
-      placeholder: 'например, Aqara M3 / Matter local'
+      placeholder: "например, Aqara M3 / Matter local"

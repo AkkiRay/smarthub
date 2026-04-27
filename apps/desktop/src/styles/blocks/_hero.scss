@@ -23,7 +23,11 @@
     inset: 0;
     background:
       radial-gradient(60% 80% at 0% 0%, var(--hero-glow) 0%, transparent 60%),
-      radial-gradient(50% 60% at 100% 100%, rgba(var(--color-brand-pink-rgb), 0.18) 0%, transparent 60%);
+      radial-gradient(
+        50% 60% at 100% 100%,
+        rgba(var(--color-brand-pink-rgb), 0.18) 0%,
+        transparent 60%
+      );
     opacity: 0.95;
     pointer-events: none;
     z-index: 0;

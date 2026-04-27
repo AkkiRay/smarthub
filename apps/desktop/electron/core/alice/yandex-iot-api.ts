@@ -307,7 +307,9 @@ interface RawScenariosResponse {
 }
 
 /** GET через `net.request` c cookies партиции. */
-async function fetchTextWithPartitionCookies(url: string): Promise<{ body: string; status: number }> {
+async function fetchTextWithPartitionCookies(
+  url: string,
+): Promise<{ body: string; status: number }> {
   return new Promise((resolve, reject) => {
     const sess = session.fromPartition(YANDEX_OAUTH_PARTITION);
     const req = net.request({
@@ -316,8 +318,7 @@ async function fetchTextWithPartitionCookies(url: string): Promise<{ body: strin
       session: sess,
       useSessionCookies: true,
       headers: {
-        'user-agent':
-          QUASAR_UA,
+        'user-agent': QUASAR_UA,
         accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
     });
@@ -363,8 +364,7 @@ async function fetchJsonWithCsrf<T>(url: string, csrfToken: string): Promise<T> 
       session: sess,
       useSessionCookies: true,
       headers: {
-        'user-agent':
-          QUASAR_UA,
+        'user-agent': QUASAR_UA,
         'x-csrf-token': csrfToken,
         accept: 'application/json',
       },
@@ -398,11 +398,7 @@ async function fetchJsonWithCsrf<T>(url: string, csrfToken: string): Promise<T> 
 }
 
 /** POST JSON c CSRF + session cookies. Возвращает распарсенный body. */
-async function postJsonWithCsrf<T>(
-  url: string,
-  csrfToken: string,
-  payload: unknown,
-): Promise<T> {
+async function postJsonWithCsrf<T>(url: string, csrfToken: string, payload: unknown): Promise<T> {
   await awaitIotRequestGap();
   return new Promise((resolve, reject) => {
     const sess = session.fromPartition(YANDEX_OAUTH_PARTITION);
@@ -412,8 +408,7 @@ async function postJsonWithCsrf<T>(
       session: sess,
       useSessionCookies: true,
       headers: {
-        'user-agent':
-          QUASAR_UA,
+        'user-agent': QUASAR_UA,
         'x-csrf-token': csrfToken,
         accept: 'application/json',
         'content-type': 'application/json',
@@ -471,8 +466,7 @@ async function jsonWithBody<T>(
       session: sess,
       useSessionCookies: true,
       headers: {
-        'user-agent':
-          QUASAR_UA,
+        'user-agent': QUASAR_UA,
         'x-csrf-token': csrfToken,
         accept: 'application/json',
         'content-type': 'application/json',
@@ -526,7 +520,8 @@ function parseTrigger(t: RawTrigger): YandexHomeTrigger {
   const type = String(t.trigger?.type ?? '');
   const value = t.trigger?.value;
   if (type === 'scenario.trigger.voice') {
-    const phrase = typeof value === 'string' ? value : (value as { phrase?: string })?.phrase ?? '';
+    const phrase =
+      typeof value === 'string' ? value : ((value as { phrase?: string })?.phrase ?? '');
     return { type: 'voice', summary: `«${phrase || 'голос'}»`, raw: t };
   }
   if (type === 'scenario.trigger.timetable') {
@@ -606,8 +601,10 @@ export class YandexIotClient {
 
   /** Берёт свежий или закэшированный csrfToken2. */
   private async getCsrf(forceRefresh = false): Promise<string> {
-    const fresh = !forceRefresh && this.csrfToken
-      && Date.now() - this.csrfFetchedAt < YandexIotClient.CSRF_TTL_MS;
+    const fresh =
+      !forceRefresh &&
+      this.csrfToken &&
+      Date.now() - this.csrfFetchedAt < YandexIotClient.CSRF_TTL_MS;
     if (fresh && this.csrfToken) return this.csrfToken;
 
     const page = await fetchTextWithPartitionCookies(QUASAR_CSRF_PAGE_URL);
@@ -1015,7 +1012,11 @@ export class YandexIotClient {
         postJsonWithCsrf<{ status?: string; message?: string }>(url, csrf, {}),
       );
       if (raw.status && raw.status !== 'ok') {
-        return { ok: false, status: raw.status, error: raw.message ?? 'iot.quasar отклонил запрос' };
+        return {
+          ok: false,
+          status: raw.status,
+          error: raw.message ?? 'iot.quasar отклонил запрос',
+        };
       }
       return { ok: true, status: 'DONE' };
     } catch (e) {
@@ -1075,7 +1076,11 @@ export class YandexIotClient {
         putJsonWithCsrf<{ status?: string; message?: string }>(url, csrf, payload),
       );
       if (raw.status && raw.status !== 'ok') {
-        return { ok: false, status: raw.status, error: raw.message ?? 'iot.quasar отклонил запрос' };
+        return {
+          ok: false,
+          status: raw.status,
+          error: raw.message ?? 'iot.quasar отклонил запрос',
+        };
       }
       return { ok: true, status: 'DONE' };
     } catch (e) {
@@ -1091,7 +1096,11 @@ export class YandexIotClient {
         deleteJsonWithCsrf<{ status?: string; message?: string }>(url, csrf),
       );
       if (raw.status && raw.status !== 'ok') {
-        return { ok: false, status: raw.status, error: raw.message ?? 'iot.quasar отклонил запрос' };
+        return {
+          ok: false,
+          status: raw.status,
+          error: raw.message ?? 'iot.quasar отклонил запрос',
+        };
       }
       return { ok: true, status: 'DONE' };
     } catch (e) {
@@ -1118,7 +1127,11 @@ export class YandexIotClient {
         putJsonWithCsrf<{ status?: string; message?: string }>(url, csrf, payload),
       );
       if (raw.status && raw.status !== 'ok') {
-        return { ok: false, status: raw.status, error: raw.message ?? 'iot.quasar отклонил запрос' };
+        return {
+          ok: false,
+          status: raw.status,
+          error: raw.message ?? 'iot.quasar отклонил запрос',
+        };
       }
       return { ok: true, status: 'DONE' };
     } catch (e) {
@@ -1304,7 +1317,9 @@ export class YandexIotClient {
     const collection = input.itemType === 'group' ? 'groups' : 'devices';
     const url = `https://iot.quasar.yandex.ru/m/user/${collection}/${encodeURIComponent(input.deviceId)}/actions`;
     const payload = {
-      actions: [{ type: input.capability, state: { instance: input.instance, value: input.value } }],
+      actions: [
+        { type: input.capability, state: { instance: input.instance, value: input.value } },
+      ],
     };
 
     let raw: RawActionResponse;
@@ -1372,8 +1387,12 @@ export class YandexIotClient {
       body = { device_ids: [deviceId], hsv: rgbIntToHsv(value) };
     } else if (instance === 'hsv' && value && typeof value === 'object') {
       const v = value as {
-        h?: number; s?: number; v?: number;
-        hue?: number; saturation?: number; value?: number;
+        h?: number;
+        s?: number;
+        v?: number;
+        hue?: number;
+        saturation?: number;
+        value?: number;
       };
       const h = v.h ?? v.hue ?? 0;
       const s = v.s ?? v.saturation ?? 0;

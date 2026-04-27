@@ -89,7 +89,10 @@ export class YandexLampDriver extends BaseDriver {
   /** Счётчик raw-broadcasts (любой формат, до парсинга). Используется в диагностике. */
   private rawFramesReceived = 0;
   /** Map `gwId → last-seen broadcast info`. Накапливается между discovery cycles. */
-  private readonly seen = new Map<string, { ip: string; port: number; lastSeenAt: number; productKey?: string; version?: string }>();
+  private readonly seen = new Map<
+    string,
+    { ip: string; port: number; lastSeenAt: number; productKey?: string; version?: string }
+  >();
   /** TTL без broadcast'а, после которого лампочка считается ушедшей из сети. */
   private static readonly STALE_AFTER_MS = 60_000;
 

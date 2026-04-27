@@ -120,8 +120,12 @@
     }
     &--icon {
       width: var(--control-h-md);
-      &.button--sm { width: var(--control-h-sm); }
-      &.button--lg { width: var(--control-h-lg); }
+      &.button--sm {
+        width: var(--control-h-sm);
+      }
+      &.button--lg {
+        width: var(--control-h-lg);
+      }
     }
   }
 }

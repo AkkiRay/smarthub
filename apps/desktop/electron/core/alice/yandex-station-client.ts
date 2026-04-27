@@ -42,7 +42,7 @@ export type CredsPersister = (creds: YandexStationCreds) => void;
 
 /** Сколько событий хранить в ring-buffer'e (UI-снимок при mount). */
 const EVENT_BUFFER_SIZE = 80;
-/** Если суммарный детальный JSON длиннее — обрезаем (защита от player-state c URL'ами в ответ). */
+/** Cap на длину детального JSON в события. */
 const EVENT_DETAILS_MAX_CHARS = 1200;
 
 interface PendingRequest {
@@ -114,9 +114,9 @@ export function createYandexStationClient() {
   /** true — disconnect() вызван явно, reconnect-loop отключён. */
   let manualDisconnect = false;
   const pending = new Map<string, PendingRequest>();
-  /** Максимум pending — защита от утечки если резко много sendCommand'ов и колонка молчит. */
+  /** Cap на размер pending Map'ы. */
   const PENDING_MAX = 256;
-  /** ID handshake/ping-сообщений — их ответы НЕ пушим в журнал, иначе он флудит. */
+  /** Request-ID handshake/ping-сообщений — их responses не идут в event-buffer. */
   const internalRequestIds = new Set<string>();
 
   /** FIFO-усечение pending Map'ы при перегрузке. Самые старые reject'ятся. */
@@ -135,9 +135,9 @@ export function createYandexStationClient() {
       }
     }
   };
-  /** Ring-buffer диагностических событий — UI забирает snapshot при mount. */
+  /** Ring-buffer диагностических событий; UI забирает snapshot при mount. */
   const eventBuffer: YandexStationEvent[] = [];
-  /** Подпись последнего state-push'а — чтобы не дублировать одинаковые тики. */
+  /** Hash последнего state-push'а — dedupe одинаковых тиков. */
   let lastStateSignature: string | null = null;
 
   const pushEvent = (input: Omit<YandexStationEvent, 'id' | 'at'>): YandexStationEvent => {
@@ -261,7 +261,11 @@ export function createYandexStationClient() {
 
       // TOFU fingerprint pin: pin при первом connect, mismatch → terminate.
       ws.on('upgrade', (response) => {
-        const sock = (response as unknown as { socket?: { getPeerCertificate?: () => { fingerprint256?: string } } }).socket;
+        const sock = (
+          response as unknown as {
+            socket?: { getPeerCertificate?: () => { fingerprint256?: string } };
+          }
+        ).socket;
         const cert = sock?.getPeerCertificate?.();
         const fp = cert?.fingerprint256;
         if (!fp) {
@@ -359,7 +363,9 @@ export function createYandexStationClient() {
           lastStateSignature = sig;
         }
 
-        const summary = isResponse ? buildResponseSummary(msg, extracted) : buildStateSummary(extracted);
+        const summary = isResponse
+          ? buildResponseSummary(msg, extracted)
+          : buildStateSummary(extracted);
         pushEvent({
           kind: isResponse ? 'response' : 'state',
           summary,
@@ -713,7 +719,10 @@ function extractInsights(msg: GlagolStateMessage & GlagolResponse): {
 
   const vins = msg.vinsResponse;
   if (vins) {
-    const cardText = vins.cards?.map((c) => c.text).filter(Boolean).join(' ');
+    const cardText = vins.cards
+      ?.map((c) => c.text)
+      .filter(Boolean)
+      .join(' ');
     if (cardText) out.aliceText = cardText;
     else if (vins.voice_response?.output_speech?.text) {
       out.aliceText = vins.voice_response.output_speech.text;

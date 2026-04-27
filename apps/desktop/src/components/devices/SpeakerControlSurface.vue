@@ -39,12 +39,7 @@
     <!-- сессии всё упадёт в toast «Колонка не подключена». Лучше показать -->
     <!-- явный CTA, чем 8 фейловых тостов подряд.                          -->
     <!-- ================================================================== -->
-    <article
-      v-if="!isOnline"
-      class="speaker-offline"
-      :data-state="offlineState"
-      data-anim="block"
-    >
+    <article v-if="!isOnline" class="speaker-offline" :data-state="offlineState" data-anim="block">
       <span class="speaker-offline__icon" aria-hidden="true">
         <BaseIcon name="bluetooth" :size="22" />
       </span>
@@ -86,388 +81,432 @@
     <div class="speaker-tab-stage">
       <Transition :name="motion ? 'tab-fade' : 'tab-fade-instant'">
         <div :key="activeCategory" class="speaker-tab-stage__inner">
-    <!-- ============================ Announce ============================ -->
-    <article v-if="activeCategory === 'announce'" class="speaker-card" data-anim="block">
-      <header class="speaker-card__head">
-        <span class="speaker-card__icon" aria-hidden="true">
-          <BaseIcon name="alice" :size="18" />
-        </span>
-        <div class="speaker-card__copy">
-          <h3 class="speaker-card__title">Произвольная команда</h3>
-          <p class="speaker-card__desc">
-            Колонка озвучит текст и одновременно обработает его как голосовой запрос Алисы.
-            Можно использовать для семейных объявлений или триггеров навыков.
-          </p>
-        </div>
-      </header>
+          <!-- ============================ Announce ============================ -->
+          <article v-if="activeCategory === 'announce'" class="speaker-card" data-anim="block">
+            <header class="speaker-card__head">
+              <span class="speaker-card__icon" aria-hidden="true">
+                <BaseIcon name="alice" :size="18" />
+              </span>
+              <div class="speaker-card__copy">
+                <h3 class="speaker-card__title">Произвольная команда</h3>
+                <p class="speaker-card__desc">
+                  Колонка озвучит текст и одновременно обработает его как голосовой запрос Алисы.
+                  Можно использовать для семейных объявлений или триггеров навыков.
+                </p>
+              </div>
+            </header>
 
-      <div class="speaker-card__sender">
-        <BaseInput
-          v-model="commandText"
-          placeholder="Например: «ужин готов» или «включи свет на кухне»"
-          class="speaker-card__sender-input"
-          @keyup.enter="onSend"
-        />
-        <BaseButton
-          variant="primary"
-          icon-right="arrow-right"
-          :disabled="cannotSend || !commandText.trim()"
-          :loading="busy"
-          @click="onSend"
-        >
-          Отправить
-        </BaseButton>
-      </div>
-    </article>
+            <div class="speaker-card__sender">
+              <BaseInput
+                v-model="commandText"
+                placeholder="Например: «ужин готов» или «включи свет на кухне»"
+                class="speaker-card__sender-input"
+                @keyup.enter="onSend"
+              />
+              <BaseButton
+                variant="primary"
+                icon-right="arrow-right"
+                :disabled="cannotSend || !commandText.trim()"
+                :loading="busy"
+                @click="onSend"
+              >
+                Отправить
+              </BaseButton>
+            </div>
+          </article>
 
-    <!-- ============================ Music =============================== -->
-    <article v-if="activeCategory === 'music'" class="speaker-card" data-anim="block">
-      <header class="speaker-card__head">
-        <span class="speaker-card__icon" aria-hidden="true">
-          <BaseIcon name="music" :size="18" />
-        </span>
-        <div class="speaker-card__copy">
-          <h3 class="speaker-card__title">Музыка и подкасты</h3>
-          <p class="speaker-card__desc">
-            Команды Я.Музыки. Колонка поднимет источник, который доступен в подписке аккаунта.
-          </p>
-        </div>
-      </header>
+          <!-- ============================ Music =============================== -->
+          <article v-if="activeCategory === 'music'" class="speaker-card" data-anim="block">
+            <header class="speaker-card__head">
+              <span class="speaker-card__icon" aria-hidden="true">
+                <BaseIcon name="music" :size="18" />
+              </span>
+              <div class="speaker-card__copy">
+                <h3 class="speaker-card__title">Музыка и подкасты</h3>
+                <p class="speaker-card__desc">
+                  Команды Я.Музыки. Колонка поднимет источник, который доступен в подписке аккаунта.
+                </p>
+              </div>
+            </header>
 
-      <div class="speaker-card__chips">
-        <button
-          v-for="q in musicCommands"
-          :key="q.text"
-          type="button"
-          class="speaker-card__chip"
-          :disabled="cannotSend"
-          @click="runQuick(q.text)"
-        >
-          <BaseIcon :name="q.icon" :size="13" />
-          <span>{{ q.label }}</span>
-        </button>
-      </div>
+            <div class="speaker-card__chips">
+              <button
+                v-for="q in musicCommands"
+                :key="q.text"
+                type="button"
+                class="speaker-card__chip"
+                :disabled="cannotSend"
+                @click="runQuick(q.text)"
+              >
+                <BaseIcon :name="q.icon" :size="13" />
+                <span>{{ q.label }}</span>
+              </button>
+            </div>
 
-      <div class="speaker-card__row">
-        <BaseInput
-          v-model="customMusicQuery"
-          placeholder="Поставь группу Кино"
-          class="speaker-card__row-input"
-          @keyup.enter="onRunCustomMusic"
-        />
-        <BaseButton
-          variant="ghost"
-          icon-right="arrow-right"
-          :disabled="cannotSend || !customMusicQuery.trim()"
-          @click="onRunCustomMusic"
-        >
-          Поставить
-        </BaseButton>
-      </div>
-    </article>
+            <div class="speaker-card__row">
+              <BaseInput
+                v-model="customMusicQuery"
+                placeholder="Поставь группу Кино"
+                class="speaker-card__row-input"
+                @keyup.enter="onRunCustomMusic"
+              />
+              <BaseButton
+                variant="ghost"
+                icon-right="arrow-right"
+                :disabled="cannotSend || !customMusicQuery.trim()"
+                @click="onRunCustomMusic"
+              >
+                Поставить
+              </BaseButton>
+            </div>
+          </article>
 
-    <!-- ============================ Sounds ============================== -->
-    <article v-if="activeCategory === 'sounds'" class="speaker-card" data-anim="block">
-      <header class="speaker-card__head">
-        <span class="speaker-card__icon" aria-hidden="true">
-          <BaseIcon name="scene-sleep" :size="18" />
-        </span>
-        <div class="speaker-card__copy">
-          <h3 class="speaker-card__title">Звуки и сон</h3>
-          <p class="speaker-card__desc">
-            Встроенные эмбиентные сцены, сказки на ночь и колыбельные.
-          </p>
-        </div>
-      </header>
-      <div class="speaker-card__chips">
-        <button
-          v-for="q in soundsCommands"
-          :key="q.text"
-          type="button"
-          class="speaker-card__chip"
-          :disabled="cannotSend"
-          @click="runQuick(q.text)"
-        >
-          <BaseIcon :name="q.icon" :size="13" />
-          <span>{{ q.label }}</span>
-        </button>
-      </div>
-    </article>
+          <!-- ============================ Sounds ============================== -->
+          <article v-if="activeCategory === 'sounds'" class="speaker-card" data-anim="block">
+            <header class="speaker-card__head">
+              <span class="speaker-card__icon" aria-hidden="true">
+                <BaseIcon name="scene-sleep" :size="18" />
+              </span>
+              <div class="speaker-card__copy">
+                <h3 class="speaker-card__title">Звуки и сон</h3>
+                <p class="speaker-card__desc">
+                  Встроенные эмбиентные сцены, сказки на ночь и колыбельные.
+                </p>
+              </div>
+            </header>
+            <div class="speaker-card__chips">
+              <button
+                v-for="q in soundsCommands"
+                :key="q.text"
+                type="button"
+                class="speaker-card__chip"
+                :disabled="cannotSend"
+                @click="runQuick(q.text)"
+              >
+                <BaseIcon :name="q.icon" :size="13" />
+                <span>{{ q.label }}</span>
+              </button>
+            </div>
+          </article>
 
-    <!-- ============================ Info ================================ -->
-    <article v-if="activeCategory === 'info'" class="speaker-card" data-anim="block">
-      <header class="speaker-card__head">
-        <span class="speaker-card__icon" aria-hidden="true">
-          <BaseIcon name="info" :size="18" />
-        </span>
-        <div class="speaker-card__copy">
-          <h3 class="speaker-card__title">Информация</h3>
-          <p class="speaker-card__desc">
-            Быстрые запросы — Алиса отвечает голосом. Полезно, когда руки заняты.
-          </p>
-        </div>
-      </header>
-      <div class="speaker-card__chips">
-        <button
-          v-for="q in infoCommands"
-          :key="q.text"
-          type="button"
-          class="speaker-card__chip"
-          :disabled="cannotSend"
-          @click="runQuick(q.text)"
-        >
-          <BaseIcon :name="q.icon" :size="13" />
-          <span>{{ q.label }}</span>
-        </button>
-      </div>
-    </article>
+          <!-- ============================ Info ================================ -->
+          <article v-if="activeCategory === 'info'" class="speaker-card" data-anim="block">
+            <header class="speaker-card__head">
+              <span class="speaker-card__icon" aria-hidden="true">
+                <BaseIcon name="info" :size="18" />
+              </span>
+              <div class="speaker-card__copy">
+                <h3 class="speaker-card__title">Информация</h3>
+                <p class="speaker-card__desc">
+                  Быстрые запросы — Алиса отвечает голосом. Полезно, когда руки заняты.
+                </p>
+              </div>
+            </header>
+            <div class="speaker-card__chips">
+              <button
+                v-for="q in infoCommands"
+                :key="q.text"
+                type="button"
+                class="speaker-card__chip"
+                :disabled="cannotSend"
+                @click="runQuick(q.text)"
+              >
+                <BaseIcon :name="q.icon" :size="13" />
+                <span>{{ q.label }}</span>
+              </button>
+            </div>
+          </article>
 
-    <!-- ============================ Smart home ========================== -->
-    <article v-if="activeCategory === 'home'" class="speaker-card" data-anim="block">
-      <header class="speaker-card__head">
-        <span class="speaker-card__icon" aria-hidden="true">
-          <BaseIcon name="devices" :size="18" />
-        </span>
-        <div class="speaker-card__copy">
-          <h3 class="speaker-card__title">Умный дом</h3>
-          <p class="speaker-card__desc">
-            Команды для устройств, которые видит Алиса (привязанные через Я.Дом или
-            экспонированные нашим skill'ом).
-          </p>
-        </div>
-      </header>
-      <div class="speaker-card__chips">
-        <button
-          v-for="q in homeCommands"
-          :key="q.text"
-          type="button"
-          class="speaker-card__chip"
-          :disabled="cannotSend"
-          @click="runQuick(q.text)"
-        >
-          <BaseIcon :name="q.icon" :size="13" />
-          <span>{{ q.label }}</span>
-        </button>
-      </div>
-    </article>
+          <!-- ============================ Smart home ========================== -->
+          <article v-if="activeCategory === 'home'" class="speaker-card" data-anim="block">
+            <header class="speaker-card__head">
+              <span class="speaker-card__icon" aria-hidden="true">
+                <BaseIcon name="devices" :size="18" />
+              </span>
+              <div class="speaker-card__copy">
+                <h3 class="speaker-card__title">Умный дом</h3>
+                <p class="speaker-card__desc">
+                  Команды для устройств, которые видит Алиса (привязанные через Я.Дом или
+                  экспонированные нашим skill'ом).
+                </p>
+              </div>
+            </header>
+            <div class="speaker-card__chips">
+              <button
+                v-for="q in homeCommands"
+                :key="q.text"
+                type="button"
+                class="speaker-card__chip"
+                :disabled="cannotSend"
+                @click="runQuick(q.text)"
+              >
+                <BaseIcon :name="q.icon" :size="13" />
+                <span>{{ q.label }}</span>
+              </button>
+            </div>
+          </article>
 
-    <!-- ============================ Timer/Alarm ========================= -->
-    <article v-if="activeCategory === 'timer'" class="speaker-card" data-anim="block">
-      <header class="speaker-card__head">
-        <span class="speaker-card__icon" aria-hidden="true">
-          <BaseIcon name="timer" :size="18" />
-        </span>
-        <div class="speaker-card__copy">
-          <h3 class="speaker-card__title">Таймер и будильник</h3>
-          <p class="speaker-card__desc">
-            Алиса поставит таймер сразу — будильник попросит подтвердить время голосом.
-          </p>
-        </div>
-      </header>
+          <!-- ============================ Timer/Alarm ========================= -->
+          <article v-if="activeCategory === 'timer'" class="speaker-card" data-anim="block">
+            <header class="speaker-card__head">
+              <span class="speaker-card__icon" aria-hidden="true">
+                <BaseIcon name="timer" :size="18" />
+              </span>
+              <div class="speaker-card__copy">
+                <h3 class="speaker-card__title">Таймер и будильник</h3>
+                <p class="speaker-card__desc">
+                  Алиса поставит таймер сразу — будильник попросит подтвердить время голосом.
+                </p>
+              </div>
+            </header>
 
-      <div class="speaker-card__timer">
-        <span class="speaker-card__timer-label">Поставить таймер</span>
-        <div class="speaker-card__timer-row">
-          <BaseInput
-            v-model.number="timerMinutes"
-            type="number"
-            placeholder="15"
-            class="speaker-card__timer-field"
-          />
-          <span class="speaker-card__timer-unit">минут</span>
-          <BaseButton
-            variant="primary"
-            icon-right="arrow-right"
-            :disabled="cannotSend || !timerMinutes || timerMinutes < 1"
-            @click="onSetTimer"
+            <div class="speaker-card__timer">
+              <span class="speaker-card__timer-label">Поставить таймер</span>
+              <div class="speaker-card__timer-row">
+                <BaseInput
+                  v-model.number="timerMinutes"
+                  type="number"
+                  placeholder="15"
+                  class="speaker-card__timer-field"
+                />
+                <span class="speaker-card__timer-unit">минут</span>
+                <BaseButton
+                  variant="primary"
+                  icon-right="arrow-right"
+                  :disabled="cannotSend || !timerMinutes || timerMinutes < 1"
+                  @click="onSetTimer"
+                >
+                  Поставить
+                </BaseButton>
+              </div>
+            </div>
+
+            <div class="speaker-card__chips">
+              <button
+                v-for="q in timerCommands"
+                :key="q.text"
+                type="button"
+                class="speaker-card__chip"
+                :disabled="cannotSend"
+                @click="runQuick(q.text)"
+              >
+                <BaseIcon :name="q.icon" :size="13" />
+                <span>{{ q.label }}</span>
+              </button>
+            </div>
+          </article>
+
+          <!-- ============================ Equalizer =========================== -->
+          <article v-if="activeCategory === 'eq'" class="speaker-card" data-anim="block">
+            <header class="speaker-card__head">
+              <span class="speaker-card__icon" aria-hidden="true">
+                <BaseIcon name="equalizer" :size="18" />
+              </span>
+              <div class="speaker-card__copy">
+                <h3 class="speaker-card__title">Эквалайзер</h3>
+                <p class="speaker-card__desc">
+                  Готовые пресеты звука. На разных платформах список немного отличается — если
+                  пресет не знаком, станция ответит голосом.
+                </p>
+              </div>
+            </header>
+            <div class="speaker-card__chips">
+              <button
+                v-for="q in eqCommands"
+                :key="q.text"
+                type="button"
+                class="speaker-card__chip"
+                :disabled="cannotSend"
+                @click="runQuick(q.text)"
+              >
+                <BaseIcon :name="q.icon" :size="13" />
+                <span>{{ q.label }}</span>
+              </button>
+            </div>
+          </article>
+
+          <!-- ============================ Stream from PC ====================== -->
+          <article
+            v-if="activeCategory === 'stream'"
+            class="speaker-card speaker-card--stream"
+            data-anim="block"
           >
-            Поставить
-          </BaseButton>
-        </div>
-      </div>
+            <header class="speaker-card__head">
+              <span class="speaker-card__icon speaker-card__icon--accent" aria-hidden="true">
+                <BaseIcon name="speaker" :size="18" />
+              </span>
+              <div class="speaker-card__copy">
+                <h3 class="speaker-card__title">Стрим звука с ПК (Spotify, YouTube, игры)</h3>
+                <p class="speaker-card__desc">
+                  Я.Станция — закрытая экосистема:
+                  <strong>нет ни DLNA, ни Spotify Connect, ни Chromecast Audio</strong>. Официально
+                  работают только Bluetooth A2DP (все модели) и AirPlay 2 (только Станция Макс).
+                  Третий путь — голосовая Я.Музыка по подписке.
+                </p>
+              </div>
+            </header>
 
-      <div class="speaker-card__chips">
-        <button
-          v-for="q in timerCommands"
-          :key="q.text"
-          type="button"
-          class="speaker-card__chip"
-          :disabled="cannotSend"
-          @click="runQuick(q.text)"
-        >
-          <BaseIcon :name="q.icon" :size="13" />
-          <span>{{ q.label }}</span>
-        </button>
-      </div>
-    </article>
+            <section class="speaker-path speaker-path--primary">
+              <header class="speaker-path__head">
+                <span class="speaker-path__badge">Рекомендуем · работает всегда</span>
+                <h4 class="speaker-path__title">Bluetooth A2DP — любой звук с ПК</h4>
+                <p class="speaker-path__desc">
+                  <strong
+                    >Единственный универсальный путь для Spotify, YouTube, Discord, игр</strong
+                  >
+                  на любую модель Я.Станции. На ПК без Bluetooth подойдёт USB-донгл за 300 ₽.
+                </p>
+              </header>
+              <ol class="speaker-steps">
+                <li class="speaker-step">
+                  <span class="speaker-step__num">1</span>
+                  <div class="speaker-step__copy">
+                    <strong>Включите Bluetooth у колонки</strong>
+                    <span>Скажите «Алиса, включи блютуз» или нажмите кнопку.</span>
+                  </div>
+                  <BaseButton
+                    variant="primary"
+                    size="sm"
+                    icon-left="alice"
+                    :disabled="cannotSend"
+                    @click="onEnableBluetooth"
+                  >
+                    Включить BT
+                  </BaseButton>
+                </li>
+                <li class="speaker-step">
+                  <span class="speaker-step__num">2</span>
+                  <div class="speaker-step__copy">
+                    <strong>Спарьте ПК со станцией</strong>
+                    <span>«Bluetooth и устройства» → «Добавить устройство» → станция.</span>
+                  </div>
+                  <BaseButton
+                    variant="ghost"
+                    size="sm"
+                    icon-right="arrow-right"
+                    @click="onOpenBluetoothSettings"
+                  >
+                    Открыть BT
+                  </BaseButton>
+                </li>
+                <li class="speaker-step">
+                  <span class="speaker-step__num">3</span>
+                  <div class="speaker-step__copy">
+                    <strong>Сделайте станцию устройством по умолчанию</strong>
+                    <span>Звук → Output → выберите станцию. Открывайте Spotify — готово.</span>
+                  </div>
+                  <BaseButton
+                    variant="ghost"
+                    size="sm"
+                    icon-right="arrow-right"
+                    @click="onOpenSoundSettings"
+                  >
+                    Звук Windows
+                  </BaseButton>
+                </li>
+                <li class="speaker-step">
+                  <span class="speaker-step__num">4</span>
+                  <div class="speaker-step__copy">
+                    <strong>После работы — выключите Bluetooth у колонки</strong>
+                    <span>Иначе соседнее устройство может перехватить станцию.</span>
+                  </div>
+                  <BaseButton
+                    variant="ghost"
+                    size="sm"
+                    icon-left="close"
+                    :disabled="cannotSend"
+                    @click="onDisableBluetooth"
+                  >
+                    Выключить BT
+                  </BaseButton>
+                </li>
+              </ol>
+            </section>
 
-    <!-- ============================ Equalizer =========================== -->
-    <article v-if="activeCategory === 'eq'" class="speaker-card" data-anim="block">
-      <header class="speaker-card__head">
-        <span class="speaker-card__icon" aria-hidden="true">
-          <BaseIcon name="equalizer" :size="18" />
-        </span>
-        <div class="speaker-card__copy">
-          <h3 class="speaker-card__title">Эквалайзер</h3>
-          <p class="speaker-card__desc">
-            Готовые пресеты звука. На разных платформах список немного отличается — если
-            пресет не знаком, станция ответит голосом.
-          </p>
-        </div>
-      </header>
-      <div class="speaker-card__chips">
-        <button
-          v-for="q in eqCommands"
-          :key="q.text"
-          type="button"
-          class="speaker-card__chip"
-          :disabled="cannotSend"
-          @click="runQuick(q.text)"
-        >
-          <BaseIcon :name="q.icon" :size="13" />
-          <span>{{ q.label }}</span>
-        </button>
-      </div>
-    </article>
+            <section class="speaker-path">
+              <header class="speaker-path__head">
+                <span class="speaker-path__badge speaker-path__badge--alt"
+                  >Только Станция Макс</span
+                >
+                <h4 class="speaker-path__title">AirPlay 2 — Wi-Fi без Bluetooth</h4>
+                <p class="speaker-path__desc">
+                  На <strong>Я.Станции Макс</strong> AirPlay 2 добавлен в обновлении прошивки. На
+                  macOS работает нативно; на Windows нужен <strong>TuneBlade</strong> (≈ $10, free
+                  trial) — он транслирует системный звук на любой AirPlay-приёмник, включая Spotify
+                  и игры.
+                </p>
+              </header>
+              <ol class="speaker-steps">
+                <li class="speaker-step">
+                  <span class="speaker-step__num">1</span>
+                  <div class="speaker-step__copy">
+                    <strong>macOS: AirPlay-иконка в строке меню → станция</strong>
+                    <span>Любой звук системы пойдёт на колонку.</span>
+                  </div>
+                </li>
+                <li class="speaker-step">
+                  <span class="speaker-step__num">2</span>
+                  <div class="speaker-step__copy">
+                    <strong>Windows: установите TuneBlade</strong>
+                    <span>В трее выберите станцию из AirPlay-списка.</span>
+                  </div>
+                  <BaseButton
+                    variant="ghost"
+                    size="sm"
+                    icon-right="arrow-right"
+                    @click="onOpenTuneBlade"
+                  >
+                    TuneBlade
+                  </BaseButton>
+                </li>
+              </ol>
+            </section>
 
-    <!-- ============================ Stream from PC ====================== -->
-    <article
-      v-if="activeCategory === 'stream'"
-      class="speaker-card speaker-card--stream"
-      data-anim="block"
-    >
-      <header class="speaker-card__head">
-        <span class="speaker-card__icon speaker-card__icon--accent" aria-hidden="true">
-          <BaseIcon name="speaker" :size="18" />
-        </span>
-        <div class="speaker-card__copy">
-          <h3 class="speaker-card__title">Стрим звука с ПК (Spotify, YouTube, игры)</h3>
-          <p class="speaker-card__desc">
-            Я.Станция — закрытая экосистема: <strong>нет ни DLNA, ни Spotify Connect,
-            ни Chromecast Audio</strong>. Официально работают только Bluetooth A2DP (все модели)
-            и AirPlay 2 (только Станция Макс). Третий путь — голосовая Я.Музыка по подписке.
-          </p>
-        </div>
-      </header>
-
-      <section class="speaker-path speaker-path--primary">
-        <header class="speaker-path__head">
-          <span class="speaker-path__badge">Рекомендуем · работает всегда</span>
-          <h4 class="speaker-path__title">Bluetooth A2DP — любой звук с ПК</h4>
-          <p class="speaker-path__desc">
-            <strong>Единственный универсальный путь для Spotify, YouTube, Discord, игр</strong>
-            на любую модель Я.Станции. На ПК без Bluetooth подойдёт USB-донгл за 300 ₽.
-          </p>
-        </header>
-        <ol class="speaker-steps">
-          <li class="speaker-step">
-            <span class="speaker-step__num">1</span>
-            <div class="speaker-step__copy">
-              <strong>Включите Bluetooth у колонки</strong>
-              <span>Скажите «Алиса, включи блютуз» или нажмите кнопку.</span>
-            </div>
-            <BaseButton variant="primary" size="sm" icon-left="alice" :disabled="cannotSend" @click="onEnableBluetooth">
-              Включить BT
-            </BaseButton>
-          </li>
-          <li class="speaker-step">
-            <span class="speaker-step__num">2</span>
-            <div class="speaker-step__copy">
-              <strong>Спарьте ПК со станцией</strong>
-              <span>«Bluetooth и устройства» → «Добавить устройство» → станция.</span>
-            </div>
-            <BaseButton variant="ghost" size="sm" icon-right="arrow-right" @click="onOpenBluetoothSettings">
-              Открыть BT
-            </BaseButton>
-          </li>
-          <li class="speaker-step">
-            <span class="speaker-step__num">3</span>
-            <div class="speaker-step__copy">
-              <strong>Сделайте станцию устройством по умолчанию</strong>
-              <span>Звук → Output → выберите станцию. Открывайте Spotify — готово.</span>
-            </div>
-            <BaseButton variant="ghost" size="sm" icon-right="arrow-right" @click="onOpenSoundSettings">
-              Звук Windows
-            </BaseButton>
-          </li>
-          <li class="speaker-step">
-            <span class="speaker-step__num">4</span>
-            <div class="speaker-step__copy">
-              <strong>После работы — выключите Bluetooth у колонки</strong>
-              <span>Иначе соседнее устройство может перехватить станцию.</span>
-            </div>
-            <BaseButton variant="ghost" size="sm" icon-left="close" :disabled="cannotSend" @click="onDisableBluetooth">
-              Выключить BT
-            </BaseButton>
-          </li>
-        </ol>
-      </section>
-
-      <section class="speaker-path">
-        <header class="speaker-path__head">
-          <span class="speaker-path__badge speaker-path__badge--alt">Только Станция Макс</span>
-          <h4 class="speaker-path__title">AirPlay 2 — Wi-Fi без Bluetooth</h4>
-          <p class="speaker-path__desc">
-            На <strong>Я.Станции Макс</strong> AirPlay 2 добавлен в обновлении прошивки. На macOS
-            работает нативно; на Windows нужен <strong>TuneBlade</strong> (≈ $10, free trial) —
-            он транслирует системный звук на любой AirPlay-приёмник, включая Spotify и игры.
-          </p>
-        </header>
-        <ol class="speaker-steps">
-          <li class="speaker-step">
-            <span class="speaker-step__num">1</span>
-            <div class="speaker-step__copy">
-              <strong>macOS: AirPlay-иконка в строке меню → станция</strong>
-              <span>Любой звук системы пойдёт на колонку.</span>
-            </div>
-          </li>
-          <li class="speaker-step">
-            <span class="speaker-step__num">2</span>
-            <div class="speaker-step__copy">
-              <strong>Windows: установите TuneBlade</strong>
-              <span>В трее выберите станцию из AirPlay-списка.</span>
-            </div>
-            <BaseButton variant="ghost" size="sm" icon-right="arrow-right" @click="onOpenTuneBlade">
-              TuneBlade
-            </BaseButton>
-          </li>
-        </ol>
-      </section>
-
-      <section class="speaker-path">
-        <header class="speaker-path__head">
-          <span class="speaker-path__badge speaker-path__badge--alt">Только Я.Музыка</span>
-          <h4 class="speaker-path__title">Я.Музыка → передать на колонку</h4>
-          <p class="speaker-path__desc">
-            Технически это <strong>не стрим с ПК</strong>, а удалённое управление: ПК говорит
-            станции «играй трек X», звук идёт из облака Яндекса. Spotify/YouTube/системный звук
-            <strong>не пойдут</strong>.
-          </p>
-        </header>
-        <ol class="speaker-steps">
-          <li class="speaker-step">
-            <span class="speaker-step__num">1</span>
-            <div class="speaker-step__copy">
-              <strong>Откройте music.yandex.ru с тем же аккаунтом</strong>
-              <span>В плеере появится иконка «Передать» — выберите свою станцию.</span>
-            </div>
-            <BaseButton variant="ghost" size="sm" icon-right="arrow-right" @click="onOpenYandexMusic">
-              Я.Музыка
-            </BaseButton>
-          </li>
-          <li class="speaker-step">
-            <span class="speaker-step__num">2</span>
-            <div class="speaker-step__copy">
-              <strong>Или скажите голосом</strong>
-              <span>«Алиса, включи Яндекс Музыку» — без участия ПК.</span>
-            </div>
-            <BaseButton variant="ghost" size="sm" icon-left="alice" :disabled="cannotSend" @click="onYandexMusicVoice">
-              Сказать
-            </BaseButton>
-          </li>
-        </ol>
-      </section>
-    </article>
+            <section class="speaker-path">
+              <header class="speaker-path__head">
+                <span class="speaker-path__badge speaker-path__badge--alt">Только Я.Музыка</span>
+                <h4 class="speaker-path__title">Я.Музыка → передать на колонку</h4>
+                <p class="speaker-path__desc">
+                  Технически это <strong>не стрим с ПК</strong>, а удалённое управление: ПК говорит
+                  станции «играй трек X», звук идёт из облака Яндекса. Spotify/YouTube/системный
+                  звук <strong>не пойдут</strong>.
+                </p>
+              </header>
+              <ol class="speaker-steps">
+                <li class="speaker-step">
+                  <span class="speaker-step__num">1</span>
+                  <div class="speaker-step__copy">
+                    <strong>Откройте music.yandex.ru с тем же аккаунтом</strong>
+                    <span>В плеере появится иконка «Передать» — выберите свою станцию.</span>
+                  </div>
+                  <BaseButton
+                    variant="ghost"
+                    size="sm"
+                    icon-right="arrow-right"
+                    @click="onOpenYandexMusic"
+                  >
+                    Я.Музыка
+                  </BaseButton>
+                </li>
+                <li class="speaker-step">
+                  <span class="speaker-step__num">2</span>
+                  <div class="speaker-step__copy">
+                    <strong>Или скажите голосом</strong>
+                    <span>«Алиса, включи Яндекс Музыку» — без участия ПК.</span>
+                  </div>
+                  <BaseButton
+                    variant="ghost"
+                    size="sm"
+                    icon-left="alice"
+                    :disabled="cannotSend"
+                    @click="onYandexMusicVoice"
+                  >
+                    Сказать
+                  </BaseButton>
+                </li>
+              </ol>
+            </section>
+          </article>
         </div>
       </Transition>
     </div>
@@ -605,7 +644,10 @@ const offlineHint = computed(() => {
     case 'reconnecting':
       return 'Хаб открывает WS-сессию. Команды станут доступны после подтверждения handshake.';
     case 'error':
-      return station.status?.lastError ?? 'WS-сессия не открылась — возможно, колонка ушла из LAN или истёк device-token.';
+      return (
+        station.status?.lastError ??
+        'WS-сессия не открылась — возможно, колонка ушла из LAN или истёк device-token.'
+      );
     default:
       return 'Команды ниже идут через локальный glagol-сервер колонки. Сейчас сессии нет — переподключитесь, чтобы пультом можно было пользоваться.';
   }
@@ -996,8 +1038,15 @@ async function onYandexMusicVoice(): Promise<void> {
 }
 
 @keyframes speakerHeroScan {
-  0%, 100% { transform: scaleX(0.4); opacity: 0.2; }
-  50% { transform: scaleX(1); opacity: 0.55; }
+  0%,
+  100% {
+    transform: scaleX(0.4);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scaleX(1);
+    opacity: 0.55;
+  }
 }
 
 .speaker-hero__copy {
@@ -1101,7 +1150,6 @@ async function onYandexMusicVoice(): Promise<void> {
   text-wrap: pretty;
   max-width: 56ch;
 }
-
 
 // =============================================================================
 // CARDS (категории)

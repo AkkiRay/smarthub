@@ -480,11 +480,7 @@ export class AliceBridge extends EventEmitter {
 
   // ===== Dialogs token verification =====
 
-  /**
-   * Дёргает login.yandex.ru/info — узнаёт display_name владельца токена.
-   * Защита от типичной ошибки «вошёл не тем аккаунтом» — если токен валиден,
-   * но display_name != владельца скилла, callback API вернёт 401 на push.
-   */
+  /** Дёргает login.yandex.ru/info — display_name владельца dialogs-токена. */
   async verifyDialogsToken(): Promise<AliceDialogsTokenOwner | null> {
     const config = this.deps.settings.getAlice().config;
     if (!config?.dialogsOauthToken) {

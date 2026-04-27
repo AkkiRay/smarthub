@@ -10,10 +10,10 @@ raw — все SVG попадают в стартовый chunk без runtime-f
 имеют brand-mark. Если для нового driver-id SVG отсутствует — `BrandMark.vue`
 показывает fallback-circle с восклицательным знаком (видно сразу).
 
-| Источник | Бренды |
-| :--- | :--- |
-| `simple-icons` (CC0) | shelly, hue, lifx, lifx-cloud, tplink-kasa, tplink-tapo, tplink-cloud, miio, mihome-cloud, dirigera (IKEA), wemo, yandex-iot, yandex-lamp, yandex-station, mqtt, homekit (Apple), home-assistant |
-| Кастомные monochrome marks (24×24, `currentColor`) | yeelight, wiz, tuya, matter, govee, switchbot, aqara-cloud, ewelink, sber-home, salute-home, rubetek, zwavejs, generic-http, mock |
+| Источник                                           | Бренды                                                                                                                                                                                           |
+| :------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `simple-icons` (CC0)                               | shelly, hue, lifx, lifx-cloud, tplink-kasa, tplink-tapo, tplink-cloud, miio, mihome-cloud, dirigera (IKEA), wemo, yandex-iot, yandex-lamp, yandex-station, mqtt, homekit (Apple), home-assistant |
+| Кастомные monochrome marks (24×24, `currentColor`) | yeelight, wiz, tuya, matter, govee, switchbot, aqara-cloud, ewelink, sber-home, salute-home, rubetek, zwavejs, generic-http, mock                                                                |
 
 ## Как добавить новый driver-id
 

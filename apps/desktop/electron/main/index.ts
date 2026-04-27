@@ -181,12 +181,10 @@ async function createWindow(): Promise<void> {
   });
 
   // Permission requests (notifications/geolocation/media) — deny by default.
-  mainWindow.webContents.session.setPermissionRequestHandler(
-    (_wc, permission, callback) => {
-      log.warn(`main-window: denied permission request "${permission}"`);
-      callback(false);
-    },
-  );
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+    log.warn(`main-window: denied permission request "${permission}"`);
+    callback(false);
+  });
 
   nativeTheme.themeSource = 'dark';
 
@@ -351,10 +349,7 @@ app.on('before-quit', async (event) => {
   shuttingDown = true;
   log.info('App shutdown — graceful');
   try {
-    await Promise.race([
-      hub.shutdown(),
-      new Promise((resolve) => setTimeout(resolve, 8_000)),
-    ]);
+    await Promise.race([hub.shutdown(), new Promise((resolve) => setTimeout(resolve, 8_000))]);
   } catch (e) {
     log.warn(`shutdown timeout: ${(e as Error).message}`);
   }

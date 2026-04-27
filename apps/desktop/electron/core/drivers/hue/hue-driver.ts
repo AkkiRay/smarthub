@@ -130,14 +130,11 @@ export class HueDriver extends BaseDriver {
     client: AxiosInstance,
   ): Promise<void> {
     try {
-      const resp = await client.get(
-        `https://${bridge.internalipaddress}/clip/v2/resource/light`,
-        {
-          headers: { 'hue-application-key': bridge.username },
-          validateStatus: () => true,
-          timeout: 2000,
-        },
-      );
+      const resp = await client.get(`https://${bridge.internalipaddress}/clip/v2/resource/light`, {
+        headers: { 'hue-application-key': bridge.username },
+        validateStatus: () => true,
+        timeout: 2000,
+      });
       if (resp.status === 200 || resp.status === 207) {
         this.v2SupportedByBridge.add(bridge.bridgeId);
         this.logInfo(

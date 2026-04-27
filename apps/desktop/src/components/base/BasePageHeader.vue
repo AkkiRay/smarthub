@@ -117,7 +117,10 @@ function onBack(): void {
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  > * { position: relative; z-index: 1; }
+  > * {
+    position: relative;
+    z-index: 1;
+  }
 
   &__lead {
     display: flex;
@@ -227,8 +230,14 @@ function onBack(): void {
 }
 
 @keyframes pageHeadAccent {
-  0% { background-position: 0% 0%; opacity: 0.7; }
-  100% { background-position: 0% 100%; opacity: 1; }
+  0% {
+    background-position: 0% 0%;
+    opacity: 0.7;
+  }
+  100% {
+    background-position: 0% 100%;
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

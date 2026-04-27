@@ -35,10 +35,7 @@
         <article
           ref="tooltipEl"
           class="tour__tooltip glass--strong"
-          :class="[
-            `tour__tooltip--${placement.side}`,
-            { 'tour__tooltip--measuring': isMeasuring },
-          ]"
+          :class="[`tour__tooltip--${placement.side}`, { 'tour__tooltip--measuring': isMeasuring }]"
           :style="tooltipStyle"
           :data-step="tour.stepIndex"
         >
@@ -524,7 +521,12 @@ function centerPlacement(tw: number, th: number): PlacementResult {
  *  указывает на себя). Вертикально предпочитаем верхнюю треть halo, чтобы заголовок
  *  был ближе к началу подсвеченного блока — взгляд не «теряется» в большой секции.
  *  `pad` — отступ от рамки halo: INSIDE_PAD для нормального случая, ~12 для tight. */
-function insidePlacement(v: VisibleRect, tw: number, th: number, pad = INSIDE_PAD): PlacementResult {
+function insidePlacement(
+  v: VisibleRect,
+  tw: number,
+  th: number,
+  pad = INSIDE_PAD,
+): PlacementResult {
   const left = clamp(v.x + (v.width - tw) / 2, v.x + pad, v.right - tw - pad);
   const preferred = v.y + Math.max(pad, (v.height - th) / 3);
   const top = clamp(preferred, v.y + pad, v.bottom - th - pad);

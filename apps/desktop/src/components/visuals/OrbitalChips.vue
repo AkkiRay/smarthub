@@ -88,7 +88,7 @@ let tickerFn: (() => void) | null = null;
 // Helpers разделены между init() и resize-handler'ом.
 function computeOrbitRadius(w: number, h: number): number {
   const halfMin = Math.max(80, Math.min(w, h) / 2);
-  const focalPx = (h / 2) / Math.tan((CAMERA_FOV_DEG * Math.PI / 180) / 2);
+  const focalPx = h / 2 / Math.tan((CAMERA_FOV_DEG * Math.PI) / 180 / 2);
   const safeWorld = ((halfMin - CHIP_HALF_PX) * CAMERA_DIST) / focalPx;
   return safeWorld * ORBIT_RADIUS_FRAC;
 }
@@ -112,11 +112,11 @@ const DOF_OPACITY_MIN = 0.35;
 interface OrbitState {
   sprite: CSS3DSprite;
   initial: THREE.Vector3; // unit-vector
-  axis: THREE.Vector3;    // unit-vector; ось вращения орбиты
-  speed: number;          // rad/s, может быть отрицательной (retrograde)
-  angle: number;          // текущий угол поворота вокруг axis
-  mountDelay: number;     // сек до старта fade-in (stagger)
-  mountElapsed: number;   // сек с момента mount'а — для smooth fade-in factor
+  axis: THREE.Vector3; // unit-vector; ось вращения орбиты
+  speed: number; // rad/s, может быть отрицательной (retrograde)
+  angle: number; // текущий угол поворота вокруг axis
+  mountDelay: number; // сек до старта fade-in (stagger)
+  mountElapsed: number; // сек с момента mount'а — для smooth fade-in factor
 }
 
 const orbits: OrbitState[] = [];
@@ -133,11 +133,7 @@ function fibonacciOrbit(i: number, total: number): { initial: THREE.Vector3; axi
   const y = 1 - (2 * (i + 0.5)) / total;
   const radiusXZ = Math.sqrt(Math.max(0, 1 - y * y));
   const azimuth = i * GOLDEN_ANGLE;
-  const initial = new THREE.Vector3(
-    Math.cos(azimuth) * radiusXZ,
-    y,
-    Math.sin(azimuth) * radiusXZ,
-  );
+  const initial = new THREE.Vector3(Math.cos(azimuth) * radiusXZ, y, Math.sin(azimuth) * radiusXZ);
   // Per-chip orbit axis: лёгкий tilt от world-Y, направление зависит от i.
   // Magnitude ≤ 0.45 rad (≈26°), чтобы орбит-плейн оставался в safe-радиусе.
   const tiltX = Math.sin(i * 0.73) * 0.32;

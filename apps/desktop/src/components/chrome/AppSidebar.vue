@@ -100,7 +100,8 @@ const hasUpdate = computed(
   () => updater.isAvailable || updater.isDownloading || updater.isDownloaded,
 );
 const versionTitle = computed(() => {
-  if (updater.isDownloaded) return `Обновление ${updater.newVersion} готово — нажмите для установки`;
+  if (updater.isDownloaded)
+    return `Обновление ${updater.newVersion} готово — нажмите для установки`;
   if (updater.isDownloading) return `Скачивается ${updater.newVersion ?? 'обновление'}…`;
   if (updater.isAvailable) return `Доступно обновление ${updater.newVersion}`;
   return 'Открыть настройки и проверить обновления';
@@ -170,7 +171,8 @@ async function syncRail(): Promise<void> {
   const itemRect = active.getBoundingClientRect();
   // Pill 26px по центру item'а с поправкой на scrollTop nav-контейнера.
   const railHeight = 26;
-  const top = itemRect.top - navRect.top + navEl.value.scrollTop + (itemRect.height - railHeight) / 2;
+  const top =
+    itemRect.top - navRect.top + navEl.value.scrollTop + (itemRect.height - railHeight) / 2;
   railStyle.value = {
     top: `${Math.round(top)}px`,
     height: `${railHeight}px`,
@@ -183,7 +185,10 @@ async function syncRail(): Promise<void> {
   }
 }
 
-watch(() => route.path, () => syncRail());
+watch(
+  () => route.path,
+  () => syncRail(),
+);
 
 onMounted(() => {
   void syncRail();
@@ -630,8 +635,15 @@ onBeforeUnmount(() => {
 }
 
 @keyframes sidebar-pip-pulse {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(1.3); opacity: 1; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
 }
 
 // Tablet 720–1100px: compact-режим (icon-only), иконки по центру column.

@@ -64,9 +64,7 @@
       class="skill-bridge__guide-link"
       type="button"
       @click="
-        openExternal(
-          'https://github.com/AkkiRay/smarthub/blob/main/docs/ALICE-SKILL-SETUP.md',
-        )
+        openExternal('https://github.com/AkkiRay/smarthub/blob/main/docs/ALICE-SKILL-SETUP.md')
       "
     >
       <BaseIcon name="alice" :size="12" />
@@ -202,7 +200,7 @@
               {{ form.dialogsOauthToken ? 'Сменить токен' : 'Получить через Яндекс ID' }}
             </BaseButton>
           </div>
-          <!-- Owner-info: защита от типичной ошибки «вошёл не тем аккаунтом». -->
+          <!-- Owner-info: display_name владельца dialogs-токена. -->
           <div
             v-if="form.dialogsOauthToken && (alice.dialogsTokenOwner || dialogsOwnerError)"
             class="skill-bridge__owner"
@@ -319,11 +317,7 @@
       </div>
 
       <!-- Honest reachability — авто-проба после tunnel-up + раз в 90с. -->
-      <div
-        v-if="alice.publicUrl"
-        class="skill-bridge__reach"
-        :class="reachabilityClass"
-      >
+      <div v-if="alice.publicUrl" class="skill-bridge__reach" :class="reachabilityClass">
         <BaseIcon :name="reachabilityIcon" :size="14" />
         <div class="skill-bridge__reach-copy">
           <strong>{{ reachabilityTitle }}</strong>
@@ -438,6 +432,7 @@ const form = reactive<AliceSkillConfig>({
 const saving = ref(false);
 const dialogsTokenFetching = ref(false);
 const revealSecret = ref(false);
+const dialogsOwnerError = ref<string | null>(null);
 
 /** «Креды есть», если оба поля заполнены — неважно как (save / manual / generate). */
 const hasGenerated = computed(() => !!form.oauthClientId.trim() && !!form.oauthClientSecret.trim());
@@ -463,8 +458,7 @@ watch(
 
 // Yandex skill_id — UUID v4. Если юзер вбил случайную строку, save заблокируется
 // и хаб не отправит мусор в `/callback/state` (где skillId идёт в URL-path).
-const SKILL_ID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SKILL_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const skillIdLooksValid = computed(() => SKILL_ID_REGEX.test(form.skillId.trim()));
 
 const canSave = computed(
@@ -1310,11 +1304,7 @@ function openExternal(url: string): void {
     inset: 0;
     border-radius: inherit;
     width: var(--w, 0%);
-    background: linear-gradient(
-      90deg,
-      var(--color-brand-violet),
-      var(--color-brand-pink)
-    );
+    background: linear-gradient(90deg, var(--color-brand-violet), var(--color-brand-pink));
     transition: width 200ms linear;
 
     &.is-indeterminate {
@@ -1324,8 +1314,12 @@ function openExternal(url: string): void {
   }
 
   @keyframes skillInstallSlide {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(285%); }
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(285%);
+    }
   }
 
   &__guide-link {

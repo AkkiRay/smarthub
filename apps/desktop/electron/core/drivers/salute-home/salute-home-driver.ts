@@ -82,7 +82,9 @@ export class SaluteHomeDriver extends BaseCloudDriver {
     } catch (e) {
       // Без normalize'а юзер видел generic axios-сообщение «Request failed
       // with status code 400» вместо понятной причины ('invalid_grant' и т.п.).
-      const ax = e as { response?: { status?: number; data?: { error?: string; error_description?: string } } };
+      const ax = e as {
+        response?: { status?: number; data?: { error?: string; error_description?: string } };
+      };
       const code = ax.response?.status;
       const detail = ax.response?.data?.error_description ?? ax.response?.data?.error;
       throw new Error(
@@ -90,9 +92,7 @@ export class SaluteHomeDriver extends BaseCloudDriver {
       );
     }
     if (r.data.error) {
-      throw new Error(
-        `SaluteHome refresh declined: ${r.data.error_description ?? r.data.error}`,
-      );
+      throw new Error(`SaluteHome refresh declined: ${r.data.error_description ?? r.data.error}`);
     }
     if (!r.data.access_token) {
       throw new Error('SaluteHome refresh: cloud вернул пустой access_token');

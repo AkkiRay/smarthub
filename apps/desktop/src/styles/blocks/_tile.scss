@@ -117,12 +117,36 @@
   }
 
   // Tone-варианты: tile--violet, tile--pink, tile--blue, ...
-  &--violet { --tile-tone: var(--color-brand-violet); --tile-tone-rgb: var(--color-brand-violet-rgb); }
-  &--pink   { --tile-tone: var(--color-brand-pink);   --tile-tone-rgb: var(--color-brand-pink-rgb); }
-  &--blue   { --tile-tone: var(--color-brand-blue);   --tile-tone-rgb: var(--color-brand-blue-rgb); }
-  &--cyan   { --tile-tone: var(--color-brand-cyan);   --tile-tone-rgb: var(--color-brand-cyan-rgb); }
-  &--amber  { --tile-tone: var(--color-brand-amber);  --tile-tone-rgb: var(--color-brand-amber-rgb); }
-  &--mint   { --tile-tone: var(--color-brand-mint);   --tile-tone-rgb: var(--color-brand-mint-rgb); }
-  &--coral  { --tile-tone: var(--color-brand-coral);  --tile-tone-rgb: var(--color-brand-coral-rgb); }
-  &--orange { --tile-tone: var(--color-brand-orange); --tile-tone-rgb: var(--color-brand-orange-rgb); }
+  &--violet {
+    --tile-tone: var(--color-brand-violet);
+    --tile-tone-rgb: var(--color-brand-violet-rgb);
+  }
+  &--pink {
+    --tile-tone: var(--color-brand-pink);
+    --tile-tone-rgb: var(--color-brand-pink-rgb);
+  }
+  &--blue {
+    --tile-tone: var(--color-brand-blue);
+    --tile-tone-rgb: var(--color-brand-blue-rgb);
+  }
+  &--cyan {
+    --tile-tone: var(--color-brand-cyan);
+    --tile-tone-rgb: var(--color-brand-cyan-rgb);
+  }
+  &--amber {
+    --tile-tone: var(--color-brand-amber);
+    --tile-tone-rgb: var(--color-brand-amber-rgb);
+  }
+  &--mint {
+    --tile-tone: var(--color-brand-mint);
+    --tile-tone-rgb: var(--color-brand-mint-rgb);
+  }
+  &--coral {
+    --tile-tone: var(--color-brand-coral);
+    --tile-tone-rgb: var(--color-brand-coral-rgb);
+  }
+  &--orange {
+    --tile-tone: var(--color-brand-orange);
+    --tile-tone-rgb: var(--color-brand-orange-rgb);
+  }
 }

@@ -254,7 +254,13 @@ function parseAdvert(text: string): YeelightAdvert | null {
     // пользователь установил кириллический name через приложение. Detect:
     // только hex-chars, чётная длина, > 4. Decode best-effort, на failure
     // — оставляем raw.
-    if (key === 'name' && value && /^[0-9a-f]+$/i.test(value) && value.length % 2 === 0 && value.length >= 4) {
+    if (
+      key === 'name' &&
+      value &&
+      /^[0-9a-f]+$/i.test(value) &&
+      value.length % 2 === 0 &&
+      value.length >= 4
+    ) {
       try {
         const decoded = Buffer.from(value, 'hex').toString('utf8');
         if (!decoded.includes(' ') && decoded.length > 0) value = decoded;

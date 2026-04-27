@@ -76,7 +76,9 @@ export const useUiStore = defineStore('ui', () => {
   const motionLevel = ref<MotionLevel>(initialLevel);
 
   // Boolean view над `motionLevel` для legacy callsite'ов.
-  const reduceMotion = computed<boolean>(() => motionLevel.value !== 'standard' && motionLevel.value !== 'full');
+  const reduceMotion = computed<boolean>(
+    () => motionLevel.value !== 'standard' && motionLevel.value !== 'full',
+  );
   const motionScale = computed<number>(() => MOTION_SCALE[motionLevel.value]);
 
   const hasSeenOnboarding = ref<boolean>(persisted.hasSeenOnboarding ?? false);

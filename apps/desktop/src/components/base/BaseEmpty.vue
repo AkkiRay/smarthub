@@ -95,7 +95,11 @@ withDefaults(
     content: '';
     position: absolute;
     inset: -30%;
-    background: radial-gradient(circle, rgba(var(--color-brand-purple-rgb), 0.32) 0%, transparent 65%);
+    background: radial-gradient(
+      circle,
+      rgba(var(--color-brand-purple-rgb), 0.32) 0%,
+      transparent 65%
+    );
     filter: blur(16px);
     z-index: -1;
     pointer-events: none;

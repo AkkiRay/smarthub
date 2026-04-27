@@ -75,7 +75,10 @@ async function syncPill(): Promise<void> {
   }
 }
 
-watch(() => route.path, () => syncPill());
+watch(
+  () => route.path,
+  () => syncPill(),
+);
 
 let resizeObs: ResizeObserver | null = null;
 onMounted(() => {
@@ -169,8 +172,7 @@ onBeforeUnmount(() => resizeObs?.disconnect());
     border-radius: var(--radius-md);
     color: var(--color-text-muted);
     text-decoration: none;
-    transition:
-      color calc(180ms * var(--motion-scale)) var(--ease-out);
+    transition: color calc(180ms * var(--motion-scale)) var(--ease-out);
     -webkit-tap-highlight-color: transparent;
 
     &:active:not(.is-active) {

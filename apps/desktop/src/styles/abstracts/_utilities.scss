@@ -117,16 +117,36 @@
   opacity: 0;
   animation: float-up 480ms var(--ease-out) forwards;
 }
-.stack-in > :nth-child(1) { animation-delay: 60ms; }
-.stack-in > :nth-child(2) { animation-delay: 120ms; }
-.stack-in > :nth-child(3) { animation-delay: 180ms; }
-.stack-in > :nth-child(4) { animation-delay: 240ms; }
-.stack-in > :nth-child(5) { animation-delay: 300ms; }
-.stack-in > :nth-child(6) { animation-delay: 360ms; }
-.stack-in > :nth-child(7) { animation-delay: 420ms; }
-.stack-in > :nth-child(8) { animation-delay: 480ms; }
-.stack-in > :nth-child(9) { animation-delay: 540ms; }
-.stack-in > :nth-child(10) { animation-delay: 600ms; }
+.stack-in > :nth-child(1) {
+  animation-delay: 60ms;
+}
+.stack-in > :nth-child(2) {
+  animation-delay: 120ms;
+}
+.stack-in > :nth-child(3) {
+  animation-delay: 180ms;
+}
+.stack-in > :nth-child(4) {
+  animation-delay: 240ms;
+}
+.stack-in > :nth-child(5) {
+  animation-delay: 300ms;
+}
+.stack-in > :nth-child(6) {
+  animation-delay: 360ms;
+}
+.stack-in > :nth-child(7) {
+  animation-delay: 420ms;
+}
+.stack-in > :nth-child(8) {
+  animation-delay: 480ms;
+}
+.stack-in > :nth-child(9) {
+  animation-delay: 540ms;
+}
+.stack-in > :nth-child(10) {
+  animation-delay: 600ms;
+}
 
 .app--reduce-motion .stack-in > * {
   opacity: 1;

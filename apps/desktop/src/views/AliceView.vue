@@ -46,263 +46,273 @@
     <div class="alice__tab-stage">
       <Transition :name="motion ? 'tab-fade' : 'tab-fade-instant'">
         <div v-if="activeSection === 'station'" :key="'station'" class="alice__stack">
-      <!-- ============================================================== -->
-      <!-- Connected: success-баннер с быстрыми голосовыми командами       -->
-      <!-- ============================================================== -->
-      <Transition name="alice-fade" mode="out-in">
-        <article
-          v-if="isConnected"
-          key="connected"
-          class="alice__connected"
-          data-tour="alice-station-connected"
-        >
-          <div class="alice__connected-body">
-            <div class="alice__connected-head">
-              <span class="alice__connected-pulse" aria-hidden="true" />
-              <div>
-                <h3 class="alice__connected-title">
-                  «{{ station.status?.station?.name ?? 'Колонка' }}» подключена
-                </h3>
-                <p class="alice__connected-sub">
-                  {{ station.status?.station?.host }}:{{
-                    station.status?.station?.port ?? YANDEX_STATION_PORT
-                  }}
-                  ·
-                  {{ station.status?.station?.platform ?? '—' }}
+          <!-- ============================================================== -->
+          <!-- Connected: success-баннер с быстрыми голосовыми командами       -->
+          <!-- ============================================================== -->
+          <Transition name="alice-fade" mode="out-in">
+            <article
+              v-if="isConnected"
+              key="connected"
+              class="alice__connected"
+              data-tour="alice-station-connected"
+            >
+              <div class="alice__connected-body">
+                <div class="alice__connected-head">
+                  <span class="alice__connected-pulse" aria-hidden="true" />
+                  <div>
+                    <h3 class="alice__connected-title">
+                      «{{ station.status?.station?.name ?? 'Колонка' }}» подключена
+                    </h3>
+                    <p class="alice__connected-sub">
+                      {{ station.status?.station?.host }}:{{
+                        station.status?.station?.port ?? YANDEX_STATION_PORT
+                      }}
+                      ·
+                      {{ station.status?.station?.platform ?? '—' }}
+                    </p>
+                  </div>
+                  <BaseButton
+                    variant="ghost"
+                    size="sm"
+                    icon-left="close"
+                    class="alice__connected-action"
+                    @click="onDisconnect"
+                  >
+                    Отключить
+                  </BaseButton>
+                </div>
+                <p class="alice__connected-hint">
+                  Подключение готово. Управление воспроизведением, оповещения и стрим звука с ПК
+                  живут в отдельном разделе <strong>«Колонка»</strong>.
+                </p>
+                <div class="alice__connected-actions">
+                  <BaseButton
+                    variant="primary"
+                    icon-right="arrow-right"
+                    @click="speakerNav.openSpeaker()"
+                  >
+                    Перейти к управлению
+                  </BaseButton>
+                </div>
+              </div>
+              <!-- Orb справа: voice-mode читает aliceState из glagol-сессии
+               (LISTENING → пульс, SPEAKING → волна). Mouse-tilt отключён. -->
+              <button
+                type="button"
+                class="alice__orb-stage"
+                :aria-label="orbAriaLabel"
+                @click="onOrbClick"
+              >
+                <JarvisOrb
+                  size="lg"
+                  :state="orbState"
+                  voice-mode
+                  :voice-state="station.voiceState"
+                />
+                <Transition name="alice-caption" mode="out-in">
+                  <span :key="orbCaption" class="alice__orb-caption">{{ orbCaption }}</span>
+                </Transition>
+              </button>
+            </article>
+            <AliceAutoPair v-else key="auto" />
+          </Transition>
+
+          <!-- =================================================================== -->
+          <!-- Резервный ручной flow — спрятан в details, открывается по требованию -->
+          <!-- =================================================================== -->
+          <details class="alice__manual">
+            <summary class="alice__manual-summary">
+              <span>Ручное подключение по device-token</span>
+              <span class="alice__manual-hint">для отладки и кейсов без OAuth</span>
+            </summary>
+
+            <article class="alice__card">
+              <header class="alice__card-head">
+                <span class="alice__card-num">01</span>
+                <div class="alice__card-copy">
+                  <h3 class="alice__card-title">Найти колонку в сети</h3>
+                  <p class="alice__card-desc">
+                    Колонка должна быть в том же Wi-Fi, что и этот компьютер. Хаб шлёт mDNS-запрос
+                    <code>_yandexio._tcp.local</code> и слушает ответы 4 секунды.
+                  </p>
+                </div>
+                <BaseButton
+                  variant="primary"
+                  icon-left="search"
+                  :loading="station.isScanning"
+                  class="alice__card-action"
+                  @click="onScan"
+                >
+                  {{ station.isScanning ? `Сканирую · ${scanElapsedLabel}` : 'Сканировать LAN' }}
+                </BaseButton>
+              </header>
+
+              <!-- Live-панель: видна после первого скана, показывает active/done/error. -->
+              <div v-if="hasEverScanned" class="alice__scan" :class="`alice__scan--${scanPhase}`">
+                <div class="alice__scan-head">
+                  <span class="alice__scan-pip" aria-hidden="true">
+                    <BaseIcon v-if="scanPhase === 'done'" name="check" :size="11" />
+                    <BaseIcon v-else-if="scanPhase === 'error'" name="close" :size="11" />
+                    <BaseIcon v-else name="refresh" :size="11" spin />
+                  </span>
+                  <div class="alice__scan-copy">
+                    <strong class="alice__scan-title">{{ scanTitle }}</strong>
+                    <span class="alice__scan-sub">{{ scanSubtitle }}</span>
+                  </div>
+                  <span class="alice__scan-count">
+                    <strong>{{ station.candidates.length }}</strong>
+                    {{ pluralizeStation(station.candidates.length) }}
+                  </span>
+                </div>
+
+                <div
+                  class="alice__scan-bar"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-valuenow="Math.round(scanProgress * 100)"
+                >
+                  <span
+                    class="alice__scan-bar-fill"
+                    :style="{ '--scan-progress': `${scanProgress * 100}%` }"
+                  />
+                </div>
+
+                <p v-if="scanError" class="alice__scan-error">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M8 1.5l7 12.5H1L8 1.5z"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linejoin="round"
+                    />
+                    <path
+                      d="M8 6.5v3.5M8 12v.6"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <span>{{ scanError }}</span>
                 </p>
               </div>
-              <BaseButton
-                variant="ghost"
-                size="sm"
-                icon-left="close"
-                class="alice__connected-action"
-                @click="onDisconnect"
-              >
-                Отключить
-              </BaseButton>
-            </div>
-            <p class="alice__connected-hint">
-              Подключение готово. Управление воспроизведением, оповещения и стрим звука с ПК
-              живут в отдельном разделе <strong>«Колонка»</strong>.
-            </p>
-            <div class="alice__connected-actions">
-              <BaseButton
-                variant="primary"
-                icon-right="arrow-right"
-                @click="speakerNav.openSpeaker()"
-              >
-                Перейти к управлению
-              </BaseButton>
-            </div>
-          </div>
-          <!-- Orb справа: voice-mode читает aliceState из glagol-сессии
-               (LISTENING → пульс, SPEAKING → волна). Mouse-tilt отключён. -->
-          <button
-            type="button"
-            class="alice__orb-stage"
-            :aria-label="orbAriaLabel"
-            @click="onOrbClick"
-          >
-            <JarvisOrb size="lg" :state="orbState" voice-mode :voice-state="station.voiceState" />
-            <Transition name="alice-caption" mode="out-in">
-              <span :key="orbCaption" class="alice__orb-caption">{{ orbCaption }}</span>
-            </Transition>
-          </button>
-        </article>
-        <AliceAutoPair v-else key="auto" />
-      </Transition>
 
-      <!-- =================================================================== -->
-      <!-- Резервный ручной flow — спрятан в details, открывается по требованию -->
-      <!-- =================================================================== -->
-      <details class="alice__manual">
-        <summary class="alice__manual-summary">
-          <span>Ручное подключение по device-token</span>
-          <span class="alice__manual-hint">для отладки и кейсов без OAuth</span>
-        </summary>
-
-        <article class="alice__card">
-          <header class="alice__card-head">
-            <span class="alice__card-num">01</span>
-            <div class="alice__card-copy">
-              <h3 class="alice__card-title">Найти колонку в сети</h3>
-              <p class="alice__card-desc">
-                Колонка должна быть в том же Wi-Fi, что и этот компьютер. Хаб шлёт mDNS-запрос
-                <code>_yandexio._tcp.local</code> и слушает ответы 4 секунды.
+              <ul v-if="station.candidates.length" class="alice__candidates">
+                <li v-for="c in station.candidates" :key="c.deviceId" class="alice__candidate">
+                  <div class="alice__candidate-icon">
+                    <BaseIcon name="alice" size="18" />
+                  </div>
+                  <div class="alice__candidate-copy">
+                    <strong class="alice__candidate-name">{{ c.name }}</strong>
+                    <span class="alice__candidate-meta">
+                      {{ c.platform }} · {{ c.host }}:{{ c.port }}
+                    </span>
+                  </div>
+                  <BaseButton
+                    variant="ghost"
+                    size="sm"
+                    icon-right="arrow-right"
+                    @click="useCandidate(c)"
+                  >
+                    Использовать
+                  </BaseButton>
+                </li>
+              </ul>
+              <p v-else-if="!station.isScanning && !hasEverScanned" class="alice__empty">
+                Запустите сканирование — найденные колонки появятся здесь.
               </p>
-            </div>
-            <BaseButton
-              variant="primary"
-              icon-left="search"
-              :loading="station.isScanning"
-              class="alice__card-action"
-              @click="onScan"
-            >
-              {{ station.isScanning ? `Сканирую · ${scanElapsedLabel}` : 'Сканировать LAN' }}
-            </BaseButton>
-          </header>
+            </article>
 
-          <!-- Live-панель: видна после первого скана, показывает active/done/error. -->
-          <div v-if="hasEverScanned" class="alice__scan" :class="`alice__scan--${scanPhase}`">
-            <div class="alice__scan-head">
-              <span class="alice__scan-pip" aria-hidden="true">
-                <BaseIcon v-if="scanPhase === 'done'" name="check" :size="11" />
-                <BaseIcon v-else-if="scanPhase === 'error'" name="close" :size="11" />
-                <BaseIcon v-else name="refresh" :size="11" spin />
-              </span>
-              <div class="alice__scan-copy">
-                <strong class="alice__scan-title">{{ scanTitle }}</strong>
-                <span class="alice__scan-sub">{{ scanSubtitle }}</span>
-              </div>
-              <span class="alice__scan-count">
-                <strong>{{ station.candidates.length }}</strong>
-                {{ pluralizeStation(station.candidates.length) }}
-              </span>
-            </div>
+            <!-- =================================================================== -->
+            <!-- Шаг 2: ввести креды и подключиться                                   -->
+            <!-- =================================================================== -->
+            <article class="alice__card">
+              <header class="alice__card-head">
+                <span class="alice__card-num">02</span>
+                <div class="alice__card-copy">
+                  <h3 class="alice__card-title">Подключение</h3>
+                  <p class="alice__card-desc">
+                    Glagol-токен (<code>token</code>) выдаётся колонке после OAuth Yandex и
+                    одноразового запроса к
+                    <code>quasar.yandex.net/glagol/token</code>. Один раз получив токен, приложение
+                    использует только локальную сеть.
+                    <a class="alice__link" @click="openTokenGuide">Как получить токен →</a>
+                  </p>
+                </div>
+              </header>
 
-            <div
-              class="alice__scan-bar"
-              role="progressbar"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              :aria-valuenow="Math.round(scanProgress * 100)"
-            >
-              <span
-                class="alice__scan-bar-fill"
-                :style="{ '--scan-progress': `${scanProgress * 100}%` }"
-              />
-            </div>
-
-            <p v-if="scanError" class="alice__scan-error">
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M8 1.5l7 12.5H1L8 1.5z"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  stroke-linejoin="round"
+              <div class="alice__grid">
+                <BaseInput
+                  v-model="form.host"
+                  label="IP колонки в LAN"
+                  placeholder="192.168.1.42"
+                  autocomplete="off"
                 />
-                <path
-                  d="M8 6.5v3.5M8 12v.6"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linecap="round"
+                <BaseInput
+                  v-model.number="form.port"
+                  type="number"
+                  label="Порт"
+                  placeholder="1961"
                 />
-              </svg>
-              <span>{{ scanError }}</span>
-            </p>
-          </div>
-
-          <ul v-if="station.candidates.length" class="alice__candidates">
-            <li v-for="c in station.candidates" :key="c.deviceId" class="alice__candidate">
-              <div class="alice__candidate-icon">
-                <BaseIcon name="alice" size="18" />
+                <BaseInput
+                  v-model="form.deviceId"
+                  label="Device ID"
+                  placeholder="A0X-XXXX..."
+                  autocomplete="off"
+                />
+                <BaseInput
+                  v-model="form.token"
+                  label="Glagol-token"
+                  placeholder="..."
+                  autocomplete="off"
+                  class="alice__field--wide"
+                />
+                <BaseInput
+                  v-model="form.platform"
+                  label="Платформа"
+                  placeholder="yandexstation_2"
+                  hint="Опционально — определяется автоматически"
+                />
+                <BaseInput
+                  v-model="form.name"
+                  label="Имя"
+                  placeholder="Алиса в гостиной"
+                  hint="Как называть колонку в хабе"
+                />
               </div>
-              <div class="alice__candidate-copy">
-                <strong class="alice__candidate-name">{{ c.name }}</strong>
-                <span class="alice__candidate-meta">
-                  {{ c.platform }} · {{ c.host }}:{{ c.port }}
-                </span>
-              </div>
-              <BaseButton
-                variant="ghost"
-                size="sm"
-                icon-right="arrow-right"
-                @click="useCandidate(c)"
-              >
-                Использовать
-              </BaseButton>
-            </li>
-          </ul>
-          <p v-else-if="!station.isScanning && !hasEverScanned" class="alice__empty">
-            Запустите сканирование — найденные колонки появятся здесь.
-          </p>
-        </article>
 
-        <!-- =================================================================== -->
-        <!-- Шаг 2: ввести креды и подключиться                                   -->
-        <!-- =================================================================== -->
-        <article class="alice__card">
-          <header class="alice__card-head">
-            <span class="alice__card-num">02</span>
-            <div class="alice__card-copy">
-              <h3 class="alice__card-title">Подключение</h3>
-              <p class="alice__card-desc">
-                Glagol-токен (<code>token</code>) выдаётся колонке после OAuth Yandex и одноразового
-                запроса к
-                <code>quasar.yandex.net/glagol/token</code>. Один раз получив токен, приложение
-                использует только локальную сеть.
-                <a class="alice__link" @click="openTokenGuide">Как получить токен →</a>
-              </p>
-            </div>
-          </header>
+              <footer class="alice__card-foot">
+                <div class="alice__status" :class="`alice__status--${state}`">
+                  <span class="alice__status-dot" />
+                  <span class="alice__status-label">{{ statusLabel }}</span>
+                  <span v-if="station.status?.lastError" class="alice__status-error">
+                    · {{ station.status.lastError }}
+                  </span>
+                </div>
 
-          <div class="alice__grid">
-            <BaseInput
-              v-model="form.host"
-              label="IP колонки в LAN"
-              placeholder="192.168.1.42"
-              autocomplete="off"
-            />
-            <BaseInput v-model.number="form.port" type="number" label="Порт" placeholder="1961" />
-            <BaseInput
-              v-model="form.deviceId"
-              label="Device ID"
-              placeholder="A0X-XXXX..."
-              autocomplete="off"
-            />
-            <BaseInput
-              v-model="form.token"
-              label="Glagol-token"
-              placeholder="..."
-              autocomplete="off"
-              class="alice__field--wide"
-            />
-            <BaseInput
-              v-model="form.platform"
-              label="Платформа"
-              placeholder="yandexstation_2"
-              hint="Опционально — определяется автоматически"
-            />
-            <BaseInput
-              v-model="form.name"
-              label="Имя"
-              placeholder="Алиса в гостиной"
-              hint="Как называть колонку в хабе"
-            />
-          </div>
-
-          <footer class="alice__card-foot">
-            <div class="alice__status" :class="`alice__status--${state}`">
-              <span class="alice__status-dot" />
-              <span class="alice__status-label">{{ statusLabel }}</span>
-              <span v-if="station.status?.lastError" class="alice__status-error">
-                · {{ station.status.lastError }}
-              </span>
-            </div>
-
-            <div class="alice__actions">
-              <BaseButton
-                v-if="isConnected || station.status?.configured"
-                variant="ghost"
-                icon-left="close"
-                size="sm"
-                @click="onDisconnect"
-              >
-                Отключить
-              </BaseButton>
-              <BaseButton
-                variant="primary"
-                icon-left="check"
-                :disabled="!canConnect"
-                @click="onConnect"
-              >
-                {{ isConnected ? 'Переподключить' : 'Подключиться' }}
-              </BaseButton>
-            </div>
-          </footer>
-        </article>
-      </details>
-    </div>
+                <div class="alice__actions">
+                  <BaseButton
+                    v-if="isConnected || station.status?.configured"
+                    variant="ghost"
+                    icon-left="close"
+                    size="sm"
+                    @click="onDisconnect"
+                  >
+                    Отключить
+                  </BaseButton>
+                  <BaseButton
+                    variant="primary"
+                    icon-left="check"
+                    :disabled="!canConnect"
+                    @click="onConnect"
+                  >
+                    {{ isConnected ? 'Переподключить' : 'Подключиться' }}
+                  </BaseButton>
+                </div>
+              </footer>
+            </article>
+          </details>
+        </div>
 
         <AliceHomeDevices v-else-if="activeSection === 'home'" :key="'home'" />
         <AliceSkillBridge v-else-if="activeSection === 'skill'" :key="'skill'" />

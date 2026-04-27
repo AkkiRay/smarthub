@@ -170,14 +170,24 @@ export interface IpcApi {
       rooms: number;
       householdId: string | null;
       availableHouseholds: Array<{ id: string; name: string }>;
-      currentNetwork: { gatewayMac: string | null; ssid: string | null; subnet: string | null; detectedAt: string } | null;
+      currentNetwork: {
+        gatewayMac: string | null;
+        ssid: string | null;
+        subnet: string | null;
+        detectedAt: string;
+      } | null;
       lastError?: string;
     }>;
     /** Households + selected + current network + bound id + cloud-control flag. */
     listHouseholds: () => Promise<{
       households: Array<{ id: string; name: string }>;
       selected: string | null;
-      currentNetwork: { gatewayMac: string | null; ssid: string | null; subnet: string | null; detectedAt: string };
+      currentNetwork: {
+        gatewayMac: string | null;
+        ssid: string | null;
+        subnet: string | null;
+        detectedAt: string;
+      };
       boundHouseholdId: string | null;
       allowCloudControlOffNetwork: boolean;
     }>;
@@ -200,7 +210,12 @@ export interface IpcApi {
       rooms: number;
       householdId: string | null;
       availableHouseholds: Array<{ id: string; name: string }>;
-      currentNetwork: { gatewayMac: string | null; ssid: string | null; subnet: string | null; detectedAt: string } | null;
+      currentNetwork: {
+        gatewayMac: string | null;
+        ssid: string | null;
+        subnet: string | null;
+        detectedAt: string;
+      } | null;
       lastError?: string;
     }>;
     /**

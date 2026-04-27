@@ -47,11 +47,7 @@
             </linearGradient>
           </defs>
           <!-- Speaker body. -->
-          <path
-            class="vol-ico__body"
-            d="M5 9v6h4l5 4V5L9 9H5z"
-            fill="currentColor"
-          />
+          <path class="vol-ico__body" d="M5 9v6h4l5 4V5L9 9H5z" fill="currentColor" />
           <!-- Три волны: stagger по уровню громкости. -->
           <path
             class="vol-ico__wave vol-ico__wave--1"
@@ -153,12 +149,7 @@
     <section class="panel__log">
       <header class="panel__log-head">
         <h4 class="panel__log-title">Последние команды</h4>
-        <button
-          v-if="commandLog.length"
-          type="button"
-          class="panel__log-clear"
-          @click="onClear"
-        >
+        <button v-if="commandLog.length" type="button" class="panel__log-clear" @click="onClear">
           Очистить
         </button>
       </header>
@@ -223,7 +214,14 @@ const latest = computed(() => {
     if (!out.userText && e.userText) out.userText = e.userText;
     if (!out.trackTitle && e.trackTitle) out.trackTitle = e.trackTitle;
     if (out.volume === undefined && typeof e.volume === 'number') out.volume = e.volume;
-    if (out.aliceState && out.aliceText && out.userText && out.trackTitle && out.volume !== undefined) break;
+    if (
+      out.aliceState &&
+      out.aliceText &&
+      out.userText &&
+      out.trackTitle &&
+      out.volume !== undefined
+    )
+      break;
   }
   return out;
 });
@@ -749,13 +747,12 @@ function truncate(s: string, n: number): string {
     width: 100%;
     height: 6px;
     border-radius: 3px;
-    background:
-      linear-gradient(
-        to right,
-        var(--color-brand-purple) 0%,
-        var(--color-brand-pink) var(--fill, 0%),
-        rgba(255, 255, 255, 0.08) var(--fill, 0%)
-      );
+    background: linear-gradient(
+      to right,
+      var(--color-brand-purple) 0%,
+      var(--color-brand-pink) var(--fill, 0%),
+      rgba(255, 255, 255, 0.08) var(--fill, 0%)
+    );
     outline: none;
     cursor: pointer;
 

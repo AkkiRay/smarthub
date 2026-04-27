@@ -1,10 +1,5 @@
 <template>
-  <TransitionGroup
-    tag="div"
-    class="toaster"
-    name="toast"
-    move-class="toast--moving"
-  >
+  <TransitionGroup tag="div" class="toaster" name="toast" move-class="toast--moving">
     <div
       v-for="t in toaster.toasts"
       :key="t.id"
@@ -146,11 +141,7 @@ onBeforeUnmount(() => {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-      90deg,
-      rgba(var(--toast-tone-rgb), 0.1) 0%,
-      transparent 40%
-    );
+    background: linear-gradient(90deg, rgba(var(--toast-tone-rgb), 0.1) 0%, transparent 40%);
     pointer-events: none;
     z-index: -1;
   }

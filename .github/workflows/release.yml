@@ -24,11 +24,11 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Версия релиза (без префикса v, напр. 1.2.3). Создаст тег и draft.'
+        description: "Версия релиза (без префикса v, напр. 1.2.3). Создаст тег и draft."
         required: true
         type: string
 

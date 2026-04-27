@@ -280,7 +280,9 @@ export class TunnelManager extends EventEmitter {
     }
     const delay = RECONNECT_DELAYS_MS[Math.min(this.retryCount, RECONNECT_DELAYS_MS.length - 1)];
     this.retryCount += 1;
-    log.info(`[tunnel] reconnect in ${delay}ms (attempt ${this.retryCount}/${RECONNECT_MAX_ATTEMPTS})`);
+    log.info(
+      `[tunnel] reconnect in ${delay}ms (attempt ${this.retryCount}/${RECONNECT_MAX_ATTEMPTS})`,
+    );
     this.retryTimer = setTimeout(() => {
       if (this.opts) void this.spawnAndWait(this.opts);
     }, delay);

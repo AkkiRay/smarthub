@@ -75,9 +75,7 @@ export const useToasterStore = defineStore('toaster', () => {
    * Stack cap: при `length >= MAX_TOASTS` старейший non-pending удаляется.
    */
   function push(input: Omit<Toast, 'id'>): number {
-    const existing = toasts.value.find(
-      (t) => t.kind === input.kind && t.message === input.message,
-    );
+    const existing = toasts.value.find((t) => t.kind === input.kind && t.message === input.message);
     if (existing) {
       const merged: Toast = { ...existing, ...input, id: existing.id };
       const idx = toasts.value.findIndex((t) => t.id === existing.id);

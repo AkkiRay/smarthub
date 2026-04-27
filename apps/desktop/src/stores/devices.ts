@@ -272,8 +272,7 @@ export const useDevicesStore = defineStore('devices', () => {
         // Если станция уже подключена локально через glagol, простое «нет
         // устройств» врёт — у пользователя есть колонка, она просто не в
         // облачном реестре «Дома с Алисой». Объясняем разрыв двух каналов.
-        const stationConnected =
-          useYandexStationStore().status?.connection === 'connected';
+        const stationConnected = useYandexStationStore().status?.connection === 'connected';
         if (stationConnected) {
           message = 'Колонка работает локально, но не в «Доме с Алисой»';
           detail =
@@ -309,8 +308,7 @@ export const useDevicesStore = defineStore('devices', () => {
       const msg = (e as Error).message ?? 'Неизвестная ошибка';
       // IPC сериализует Error без custom props — детектим по тексту message.
       // HOUSEHOLD_AMBIGUOUS / NETWORK_MISMATCH — user-actionable, не unexpected.
-      const isUserAction =
-        msg.startsWith('В аккаунте Яндекса') || msg.startsWith('Текущая сеть');
+      const isUserAction = msg.startsWith('В аккаунте Яндекса') || msg.startsWith('Текущая сеть');
       if (pendingId !== null) {
         toaster.update(pendingId, {
           kind: isUserAction ? 'pending' : 'error',

@@ -71,7 +71,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # CSC_IDENTITY_AUTO_DISCOVERY=false — без подписи на CI; релиз/sign отдельно.
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         shell: bash
         run: |
           case "${{ matrix.os }}" in

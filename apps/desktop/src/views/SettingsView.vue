@@ -787,14 +787,29 @@ const marketplaceReady = useDeferredMount({ mode: 'idle', delayMs: 250 });
   border: 1px solid rgba(255, 255, 255, 0.04);
   animation: settingsSkeletonPulse 1.4s ease-in-out infinite;
 }
-.settings__skeleton-row:nth-child(2) { animation-delay: 0.08s; }
-.settings__skeleton-row:nth-child(3) { animation-delay: 0.16s; }
-.settings__skeleton-row:nth-child(4) { animation-delay: 0.24s; }
-.settings__skeleton-row:nth-child(5) { animation-delay: 0.32s; }
-.settings__skeleton-row:nth-child(6) { animation-delay: 0.4s; }
+.settings__skeleton-row:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.settings__skeleton-row:nth-child(3) {
+  animation-delay: 0.16s;
+}
+.settings__skeleton-row:nth-child(4) {
+  animation-delay: 0.24s;
+}
+.settings__skeleton-row:nth-child(5) {
+  animation-delay: 0.32s;
+}
+.settings__skeleton-row:nth-child(6) {
+  animation-delay: 0.4s;
+}
 @keyframes settingsSkeletonPulse {
-  0%, 100% { opacity: 0.6; }
-  50%      { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 // Fade-swap skeleton ↔ DriversMarketplace.

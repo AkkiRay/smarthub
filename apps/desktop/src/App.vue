@@ -9,10 +9,7 @@
         </Transition>
       </template>
       <template v-else>
-        <div
-          class="app__shell"
-          :class="{ 'app__shell--mobile': bp.isMobile.value }"
-        >
+        <div class="app__shell" :class="{ 'app__shell--mobile': bp.isMobile.value }">
           <!-- Sidebar: только desktop/tablet. На mobile (<720px) её заменяет AppBottomNav. -->
           <AppSidebar v-if="!bp.isMobile.value" class="app__sidebar" />
 

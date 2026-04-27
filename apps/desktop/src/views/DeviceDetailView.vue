@@ -3,216 +3,212 @@
        Transition в App.vue использует Component != null. -->
   <section class="detail" ref="root">
     <template v-if="device">
-    <BasePageHeader back :title="device.name" :description="`${driverLabel} · ${device.address}`">
-      <template #actions>
-        <BaseButton
-          variant="ghost"
-          size="sm"
-          icon-left="refresh"
-          :loading="refreshing"
-          :class="{ 'is-just-refreshed': justRefreshed }"
-          @click="refresh"
-        >
-          {{ refreshing ? 'Обновляю…' : justRefreshed ? 'Обновлено' : 'Обновить' }}
-        </BaseButton>
-        <BaseButton variant="danger" size="sm" icon-left="trash" @click="remove">
-          Удалить
-        </BaseButton>
-      </template>
-    </BasePageHeader>
+      <BasePageHeader back :title="device.name" :description="`${driverLabel} · ${device.address}`">
+        <template #actions>
+          <BaseButton
+            variant="ghost"
+            size="sm"
+            icon-left="refresh"
+            :loading="refreshing"
+            :class="{ 'is-just-refreshed': justRefreshed }"
+            @click="refresh"
+          >
+            {{ refreshing ? 'Обновляю…' : justRefreshed ? 'Обновлено' : 'Обновить' }}
+          </BaseButton>
+          <BaseButton variant="danger" size="sm" icon-left="trash" @click="remove">
+            Удалить
+          </BaseButton>
+        </template>
+      </BasePageHeader>
 
-    <div class="detail__layout">
-      <!-- Speaker hero: AliceStationPanel (now-playing/volume/transport/log)
+      <div class="detail__layout">
+        <!-- Speaker hero: AliceStationPanel (now-playing/volume/transport/log)
            + категории команд + PC-stream. -->
-      <SpeakerControlSurface
-        v-if="isYandexStation"
-        :device="device"
-        class="detail__speaker-surface"
-        data-anim="block"
-      />
+        <SpeakerControlSurface
+          v-if="isYandexStation"
+          :device="device"
+          class="detail__speaker-surface"
+          data-anim="block"
+        />
 
-      <!-- Generic hero для всех остальных устройств. -->
-      <div
-        v-else
-        class="detail__hero card card--gradient"
-        :class="{
-          'detail__hero--on': isOn,
-          'detail__hero--off': hasOnOff && !isOn,
-        }"
-        :style="heroStyle"
-        data-anim="block"
-      >
-        <div class="detail__hero-icon" v-safe-html="iconFor(device.type)" />
-        <div class="detail__hero-text">
-          <span class="text--micro">{{ statusLabel }}</span>
-          <h2 class="text--display detail__hero-title">{{ device.name }}</h2>
-          <span class="detail__hero-status" :data-state="device.status">
-            <span class="detail__hero-dot" />
-            {{ statusChipLabel }}
-          </span>
+        <!-- Generic hero для всех остальных устройств. -->
+        <div
+          v-else
+          class="detail__hero card card--gradient"
+          :class="{
+            'detail__hero--on': isOn,
+            'detail__hero--off': hasOnOff && !isOn,
+          }"
+          :style="heroStyle"
+          data-anim="block"
+        >
+          <div class="detail__hero-icon" v-safe-html="iconFor(device.type)" />
+          <div class="detail__hero-text">
+            <span class="text--micro">{{ statusLabel }}</span>
+            <h2 class="text--display detail__hero-title">{{ device.name }}</h2>
+            <span class="detail__hero-status" :data-state="device.status">
+              <span class="detail__hero-dot" />
+              {{ statusChipLabel }}
+            </span>
+          </div>
         </div>
-      </div>
 
-      <!-- Capabilities. На станции скрыты quasar.* (TTS/voice — в SpeakerControlSurface).
+        <!-- Capabilities. На станции скрыты quasar.* (TTS/voice — в SpeakerControlSurface).
            Остальное: LED, cloud-volume, режимы. -->
-      <div v-if="visibleCapabilities.length" class="card detail__capabilities" data-anim="block">
-        <h3 class="text--h2">
-          {{ isYandexStation ? 'Дополнительные возможности' : 'Управление' }}
-        </h3>
-        <p v-if="isYandexStation" class="text--small detail__capabilities-hint">
-          Подсветка, режимы и прочие возможности колонки, которых нет в пульте выше.
-          Идут через cloud-API «Дома с Алисой».
-        </p>
-        <div class="detail__caps">
-          <div
-            v-for="(cap, idx) in visibleCapabilities"
-            :key="`${cap.type}::${cap.parameters?.instance ?? cap.state?.instance ?? idx}`"
-            class="detail__cap"
-          >
-            <CapabilityControl :device="device" :capability="cap" />
-          </div>
-        </div>
-      </div>
-
-      <div
-        v-if="visibleProperties.length"
-        class="card detail__props"
-        data-anim="block"
-      >
-        <h3 class="text--h2">Показания</h3>
-        <ul class="detail__props-list">
-          <li
-            v-for="(p, idx) in visibleProperties"
-            :key="`${p.type}::${p.parameters.instance ?? idx}`"
-            class="prop"
-            :class="{
-              'prop--has-bar': hasProgressBar(p.parameters.instance),
-              'prop--state': isStateProp(p.parameters.instance),
-            }"
-            :style="{ '--prop-accent': propAccent(p.parameters.instance) }"
-          >
-            <span class="prop__icon" v-safe-html="propIcon(p.parameters.instance)" />
-            <span class="prop__label">{{ propLabel(p.parameters.instance) }}</span>
-
-            <span
-              v-if="isStateProp(p.parameters.instance)"
-              class="prop__chip"
-              :data-tone="statePropTone(p.parameters.instance, p.state?.value)"
-            >
-              <span class="prop__chip-dot" />
-              {{ statePropLabel(p.parameters.instance, p.state?.value) }}
-            </span>
-
-            <strong v-else class="prop__value">
-              {{ formatPropValue(p.state?.value) }}{{ unitFor(p.parameters.unit) }}
-            </strong>
-
+        <div v-if="visibleCapabilities.length" class="card detail__capabilities" data-anim="block">
+          <h3 class="text--h2">
+            {{ isYandexStation ? 'Дополнительные возможности' : 'Управление' }}
+          </h3>
+          <p v-if="isYandexStation" class="text--small detail__capabilities-hint">
+            Подсветка, режимы и прочие возможности колонки, которых нет в пульте выше. Идут через
+            cloud-API «Дома с Алисой».
+          </p>
+          <div class="detail__caps">
             <div
-              v-if="hasProgressBar(p.parameters.instance)"
-              class="prop__bar"
-              :style="{ '--progress': `${clamp01(Number(p.state?.value)) * 100}%` }"
+              v-for="(cap, idx) in visibleCapabilities"
+              :key="`${cap.type}::${cap.parameters?.instance ?? cap.state?.instance ?? idx}`"
+              class="detail__cap"
             >
-              <span class="prop__bar-fill" />
+              <CapabilityControl :device="device" :capability="cap" />
             </div>
-          </li>
-        </ul>
-      </div>
+          </div>
+        </div>
 
-      <div class="card detail__assignment" data-anim="block">
-        <h3 class="text--h2">Размещение</h3>
-        <p v-if="!isYandexImported" class="text--small detail__assignment-hint">
-          Имя и комната — основные поля для голосовых команд через Алису.
-        </p>
-        <div v-else class="banner banner--warning detail__yandex-banner">
-          <span class="banner__icon">
-            <BaseIcon name="alice" :size="18" />
-          </span>
-          <div class="banner__copy">
-            <span class="banner__title">Управляется «Домом с Алисой»</span>
-            <span class="banner__text">
-              Имя и комната синхронизируются из приложения. Меняйте в «Доме с Алисой» — иначе правки
-              затрутся при следующей синхронизации.
+        <div v-if="visibleProperties.length" class="card detail__props" data-anim="block">
+          <h3 class="text--h2">Показания</h3>
+          <ul class="detail__props-list">
+            <li
+              v-for="(p, idx) in visibleProperties"
+              :key="`${p.type}::${p.parameters.instance ?? idx}`"
+              class="prop"
+              :class="{
+                'prop--has-bar': hasProgressBar(p.parameters.instance),
+                'prop--state': isStateProp(p.parameters.instance),
+              }"
+              :style="{ '--prop-accent': propAccent(p.parameters.instance) }"
+            >
+              <span class="prop__icon" v-safe-html="propIcon(p.parameters.instance)" />
+              <span class="prop__label">{{ propLabel(p.parameters.instance) }}</span>
+
+              <span
+                v-if="isStateProp(p.parameters.instance)"
+                class="prop__chip"
+                :data-tone="statePropTone(p.parameters.instance, p.state?.value)"
+              >
+                <span class="prop__chip-dot" />
+                {{ statePropLabel(p.parameters.instance, p.state?.value) }}
+              </span>
+
+              <strong v-else class="prop__value">
+                {{ formatPropValue(p.state?.value) }}{{ unitFor(p.parameters.unit) }}
+              </strong>
+
+              <div
+                v-if="hasProgressBar(p.parameters.instance)"
+                class="prop__bar"
+                :style="{ '--progress': `${clamp01(Number(p.state?.value)) * 100}%` }"
+              >
+                <span class="prop__bar-fill" />
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="card detail__assignment" data-anim="block">
+          <h3 class="text--h2">Размещение</h3>
+          <p v-if="!isYandexImported" class="text--small detail__assignment-hint">
+            Имя и комната — основные поля для голосовых команд через Алису.
+          </p>
+          <div v-else class="banner banner--warning detail__yandex-banner">
+            <span class="banner__icon">
+              <BaseIcon name="alice" :size="18" />
             </span>
+            <div class="banner__copy">
+              <span class="banner__title">Управляется «Домом с Алисой»</span>
+              <span class="banner__text">
+                Имя и комната синхронизируются из приложения. Меняйте в «Доме с Алисой» — иначе
+                правки затрутся при следующей синхронизации.
+              </span>
+            </div>
           </div>
+          <div class="detail__assignment-row">
+            <BaseInput
+              label="Имя устройства"
+              :model-value="device.name"
+              :disabled="isYandexImported"
+              @change="onRename(String($event))"
+            />
+            <BaseSelect
+              label="Комната"
+              :model-value="device.room ?? ''"
+              :options="roomOptions"
+              :disabled="isYandexImported"
+              placeholder="— Без комнаты —"
+              @change="onRoomChange(String($event))"
+            />
+          </div>
+          <RouterLink to="/rooms" class="text--small detail__link">
+            Управление комнатами
+            <BaseIcon name="arrow-right" :size="11" />
+          </RouterLink>
         </div>
-        <div class="detail__assignment-row">
-          <BaseInput
-            label="Имя устройства"
-            :model-value="device.name"
-            :disabled="isYandexImported"
-            @change="onRename(String($event))"
-          />
-          <BaseSelect
-            label="Комната"
-            :model-value="device.room ?? ''"
-            :options="roomOptions"
-            :disabled="isYandexImported"
-            placeholder="— Без комнаты —"
-            @change="onRoomChange(String($event))"
-          />
-        </div>
-        <RouterLink to="/rooms" class="text--small detail__link">
-          Управление комнатами
-          <BaseIcon name="arrow-right" :size="11" />
-        </RouterLink>
+
+        <details class="card detail__meta" data-anim="block" @toggle="onMetaToggle">
+          <summary class="detail__meta-summary">
+            <span class="detail__meta-summary-icon">
+              <BaseIcon name="info" :size="14" />
+            </span>
+            <span class="detail__meta-summary-title">Технические данные</span>
+            <span class="detail__meta-summary-hint text--micro">для отладки</span>
+            <BaseIcon name="arrow-right" :size="14" class="detail__meta-summary-chevron" />
+          </summary>
+          <dl class="detail__dl">
+            <div>
+              <dt>ID</dt>
+              <dd>{{ device.id }}</dd>
+            </div>
+            <div>
+              <dt>Внешний ID</dt>
+              <dd>{{ device.externalId }}</dd>
+            </div>
+            <div>
+              <dt>Тип</dt>
+              <dd>{{ device.type }}</dd>
+            </div>
+            <div>
+              <dt>Драйвер</dt>
+              <dd>{{ device.driver }}</dd>
+            </div>
+            <div>
+              <dt>Адрес</dt>
+              <dd>{{ device.address }}</dd>
+            </div>
+            <div v-if="device.lastSeenAt">
+              <dt>Последняя связь</dt>
+              <dd>{{ formatDate(device.lastSeenAt) }}</dd>
+            </div>
+          </dl>
+        </details>
       </div>
 
-      <details
-        class="card detail__meta"
-        data-anim="block"
-        @toggle="onMetaToggle"
-      >
-        <summary class="detail__meta-summary">
-          <span class="detail__meta-summary-icon">
-            <BaseIcon name="info" :size="14" />
-          </span>
-          <span class="detail__meta-summary-title">Технические данные</span>
-          <span class="detail__meta-summary-hint text--micro">для отладки</span>
-          <BaseIcon name="arrow-right" :size="14" class="detail__meta-summary-chevron" />
-        </summary>
-        <dl class="detail__dl">
-          <div>
-            <dt>ID</dt>
-            <dd>{{ device.id }}</dd>
-          </div>
-          <div>
-            <dt>Внешний ID</dt>
-            <dd>{{ device.externalId }}</dd>
-          </div>
-          <div>
-            <dt>Тип</dt>
-            <dd>{{ device.type }}</dd>
-          </div>
-          <div>
-            <dt>Драйвер</dt>
-            <dd>{{ device.driver }}</dd>
-          </div>
-          <div>
-            <dt>Адрес</dt>
-            <dd>{{ device.address }}</dd>
-          </div>
-          <div v-if="device.lastSeenAt">
-            <dt>Последняя связь</dt>
-            <dd>{{ formatDate(device.lastSeenAt) }}</dd>
-          </div>
-        </dl>
-      </details>
-    </div>
-
-    <ConfirmDialog
-      v-model="confirmRemove"
-      title="Удалить устройство?"
-      :message="`«${device.name}» будет отключено от хаба. Вы сможете снова найти его через сканирование сети.`"
-      confirm-label="Удалить"
-      confirm-icon="trash"
-      tone="danger"
-      :loading="removing"
-      @confirm="performRemove"
-    />
+      <ConfirmDialog
+        v-model="confirmRemove"
+        title="Удалить устройство?"
+        :message="`«${device.name}» будет отключено от хаба. Вы сможете снова найти его через сканирование сети.`"
+        confirm-label="Удалить"
+        confirm-icon="trash"
+        tone="danger"
+        :loading="removing"
+        @confirm="performRemove"
+      />
     </template>
     <!-- Loading-shell: skeleton + BasePageHeader до hydration device. -->
     <template v-else>
-      <BasePageHeader back title="Загружаем устройство…" description="Тянем актуальное состояние из реестра." />
+      <BasePageHeader
+        back
+        title="Загружаем устройство…"
+        description="Тянем актуальное состояние из реестра."
+      />
       <div class="detail__skeleton card" data-anim="block">
         <div class="detail__skeleton-bar detail__skeleton-bar--md" />
         <div class="detail__skeleton-bar detail__skeleton-bar--sm" />
@@ -335,7 +331,9 @@ const visibleProperties = computed(() => {
       }
       return p;
     })
-    .filter((p) => p.state?.value !== undefined && p.state?.value !== null && p.state?.value !== '');
+    .filter(
+      (p) => p.state?.value !== undefined && p.state?.value !== null && p.state?.value !== '',
+    );
 });
 
 const driverLabel = computed<string>(
@@ -482,7 +480,16 @@ const PROP_ACCENTS: Record<string, string> = {
 };
 
 // State-style props (вместо number/value — chip с dot и human-label).
-const STATE_PROP_INSTANCES = new Set(['voice_activity', 'open', 'motion', 'vibration', 'smoke', 'gas', 'water_leak', 'button']);
+const STATE_PROP_INSTANCES = new Set([
+  'voice_activity',
+  'open',
+  'motion',
+  'vibration',
+  'smoke',
+  'gas',
+  'water_leak',
+  'button',
+]);
 
 interface VoiceState {
   label: string;
@@ -513,7 +520,10 @@ function statePropLabel(instance: string, value: unknown): string {
   return v || '—';
 }
 
-function statePropTone(instance: string, value: unknown): 'idle' | 'active' | 'alert' | 'processing' {
+function statePropTone(
+  instance: string,
+  value: unknown,
+): 'idle' | 'active' | 'alert' | 'processing' {
   const v = String(value ?? '').toLowerCase();
   if (instance === 'voice_activity') {
     const tone = VOICE_ACTIVITY_STATES[v]?.tone;
@@ -696,14 +706,24 @@ useViewMount({ scope: root });
     background-size: 200% 100%;
     animation: detailSkelShimmer 1.6s linear infinite;
 
-    &--sm { width: 35%; }
-    &--md { width: 60%; }
-    &--lg { width: 90%; }
+    &--sm {
+      width: 35%;
+    }
+    &--md {
+      width: 60%;
+    }
+    &--lg {
+      width: 90%;
+    }
   }
 
   @keyframes detailSkelShimmer {
-    0% { background-position: 100% 0; }
-    100% { background-position: -100% 0; }
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -100% 0;
+    }
   }
 
   &__layout {
@@ -922,7 +942,9 @@ useViewMount({ scope: root });
     color: var(--color-brand-violet);
     align-self: flex-start;
     font-weight: 500;
-    transition: color 160ms var(--ease-out), gap 160ms var(--ease-out);
+    transition:
+      color 160ms var(--ease-out),
+      gap 160ms var(--ease-out);
 
     &:hover {
       color: var(--color-text-primary);

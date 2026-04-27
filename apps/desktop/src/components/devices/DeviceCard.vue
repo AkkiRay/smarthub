@@ -21,7 +21,11 @@
     <div class="device-card__body">
       <h3 class="device-card__name">{{ device.name }}</h3>
       <div class="device-card__tags">
-        <span v-if="roomName" class="device-card__tag device-card__tag--room" :title="`Комната: ${roomName}`">
+        <span
+          v-if="roomName"
+          class="device-card__tag device-card__tag--room"
+          :title="`Комната: ${roomName}`"
+        >
           <BaseIcon name="rooms" :size="11" />
           {{ roomName }}
         </span>
@@ -48,7 +52,11 @@
           type="button"
           class="device-card__alice-chip"
           :class="{ 'is-on': aliceExposed }"
-          :title="aliceExposed ? 'Алиса видит это устройство — клик скроет' : 'Выдать в Алису одним кликом'"
+          :title="
+            aliceExposed
+              ? 'Алиса видит это устройство — клик скроет'
+              : 'Выдать в Алису одним кликом'
+          "
           @click.stop="onToggleAliceExposure"
         >
           <BaseIcon name="alice" :size="11" />
@@ -57,7 +65,9 @@
       </div>
       <p v-if="primaryReading" class="device-card__reading">
         <BaseIcon :name="primaryReading.icon" :size="12" />
-        <span>{{ primaryReading.label }}: <strong>{{ primaryReading.value }}</strong></span>
+        <span
+          >{{ primaryReading.label }}: <strong>{{ primaryReading.value }}</strong></span
+        >
       </p>
     </div>
 
@@ -120,7 +130,6 @@ const alice = useAliceStore();
 
 // busy-flag блокирует двойные клики во время выполнения команды.
 const busy = ref(false);
-
 
 const onOffCap = computed(() =>
   findCapability(props.device.capabilities, CAPABILITY.ON_OFF, INSTANCE.ON),
@@ -211,9 +220,11 @@ function hsvToRgbInt(h: number, s: number, v: number): number {
   const sn = Math.max(0, Math.min(1, s / 100));
   const vn = Math.max(0, Math.min(1, v / 100));
   const c = vn * sn;
-  const hp = ((h % 360) + 360) % 360 / 60;
+  const hp = (((h % 360) + 360) % 360) / 60;
   const x = c * (1 - Math.abs((hp % 2) - 1));
-  let r = 0, g = 0, b = 0;
+  let r = 0,
+    g = 0,
+    b = 0;
   if (hp < 1) [r, g, b] = [c, x, 0];
   else if (hp < 2) [r, g, b] = [x, c, 0];
   else if (hp < 3) [r, g, b] = [0, c, x];

@@ -33,7 +33,10 @@
                 {{ room.deviceCount }} {{ pluralizeDevice(room.deviceCount) }}
               </span>
               <span v-else class="room__meta--muted">Пусто</span>
-              <span v-if="room.onlineCount < room.deviceCount && room.deviceCount > 0" class="room__meta--warn">
+              <span
+                v-if="room.onlineCount < room.deviceCount && room.deviceCount > 0"
+                class="room__meta--warn"
+              >
                 · {{ room.deviceCount - room.onlineCount }} офлайн
               </span>
             </p>
@@ -83,16 +86,8 @@
           }"
           :disabled="!!bulkBusy[room.id]"
           :data-loading="!!bulkBusy[room.id]"
-          :title="
-            room.activeCount === room.toggleableCount
-              ? 'Выключить всё'
-              : 'Включить всё'
-          "
-          :aria-label="
-            room.activeCount === room.toggleableCount
-              ? 'Выключить всё'
-              : 'Включить всё'
-          "
+          :title="room.activeCount === room.toggleableCount ? 'Выключить всё' : 'Включить всё'"
+          :aria-label="room.activeCount === room.toggleableCount ? 'Выключить всё' : 'Включить всё'"
           @click.stop="onBulkToggle(room.id, room.activeCount !== room.toggleableCount)"
         >
           <span class="room__toggle-icon" aria-hidden="true">
@@ -120,7 +115,8 @@
           </span>
           <span class="room__toggle-meta">
             <strong class="room__toggle-num">
-              {{ room.activeCount }}<span class="room__toggle-sep">/</span>{{ room.toggleableCount }}
+              {{ room.activeCount }}<span class="room__toggle-sep">/</span
+              >{{ room.toggleableCount }}
             </strong>
             <span class="room__toggle-caption">
               {{
@@ -158,11 +154,7 @@
         </div>
 
         <!-- ============== Inline brightness slider ============== -->
-        <label
-          v-if="room.dimmableCount > 0"
-          class="room__bulk-bright"
-          @click.stop
-        >
+        <label v-if="room.dimmableCount > 0" class="room__bulk-bright" @click.stop>
           <span class="room__bulk-label">
             <BaseIcon name="light" :size="11" />
             Яркость · {{ room.dimmableCount }} {{ pluralizeLamp(room.dimmableCount) }}
@@ -173,16 +165,14 @@
             max="100"
             step="1"
             class="room__bulk-slider"
-            @input="onBrightnessSliderInput(room.id, ($event.target as HTMLInputElement).valueAsNumber)"
+            @input="
+              onBrightnessSliderInput(room.id, ($event.target as HTMLInputElement).valueAsNumber)
+            "
           />
         </label>
 
         <!-- ============== Color palette ============== -->
-        <div
-          v-if="room.colorableCount > 0"
-          class="room__bulk-palette"
-          @click.stop
-        >
+        <div v-if="room.colorableCount > 0" class="room__bulk-palette" @click.stop>
           <span class="room__bulk-label">
             <BaseIcon name="color" :size="11" />
             Цвет · {{ room.colorableCount }} {{ pluralizeLamp(room.colorableCount) }}
@@ -348,9 +338,7 @@ const capsOf = (d: Device): Device['capabilities'] =>
 
 /** Считаем устройство «вкл», если у него on_off-cap имеет truthy state.value. */
 function isDeviceOn(d: Device): boolean {
-  return capsOf(d).some(
-    (c) => c.type === 'devices.capabilities.on_off' && Boolean(c.state?.value),
-  );
+  return capsOf(d).some((c) => c.type === 'devices.capabilities.on_off' && Boolean(c.state?.value));
 }
 
 const roomsWithStats = computed(() =>
@@ -360,13 +348,12 @@ const roomsWithStats = computed(() =>
       capsOf(d).some((c) => c.type === 'devices.capabilities.on_off'),
     );
     const active = toggleable.filter((d) =>
-      capsOf(d).some(
-        (c) => c.type === 'devices.capabilities.on_off' && Boolean(c.state?.value),
-      ),
+      capsOf(d).some((c) => c.type === 'devices.capabilities.on_off' && Boolean(c.state?.value)),
     );
     const dimmable = inRoom.filter((d) =>
       capsOf(d).some(
-        (c) => c.type === 'devices.capabilities.range' && c.parameters?.['instance'] === 'brightness',
+        (c) =>
+          c.type === 'devices.capabilities.range' && c.parameters?.['instance'] === 'brightness',
       ),
     );
     const colorable = inRoom.filter((d) => acceptsRgbOrHsv(d));
@@ -476,7 +463,8 @@ async function onBulkBrightness(roomId: string, percent: number): Promise<void> 
       d.room === roomId &&
       d.status === 'online' &&
       capsOf(d).some(
-        (c) => c.type === 'devices.capabilities.range' && c.parameters?.['instance'] === 'brightness',
+        (c) =>
+          c.type === 'devices.capabilities.range' && c.parameters?.['instance'] === 'brightness',
       ),
   );
   if (!targets.length) return;
@@ -627,8 +615,7 @@ async function onBulkColor(roomId: string, preset: ColorPreset): Promise<void> {
   if (!candidates.length) {
     const hasAnyColorCapable = devices.devices.some(
       (d) =>
-        d.room === roomId &&
-        capsOf(d).some((c) => c.type === 'devices.capabilities.color_setting'),
+        d.room === roomId && capsOf(d).some((c) => c.type === 'devices.capabilities.color_setting'),
     );
     toaster.push({
       kind: 'info',
@@ -639,9 +626,7 @@ async function onBulkColor(roomId: string, preset: ColorPreset): Promise<void> {
     return;
   }
 
-  const results = await Promise.allSettled(
-    candidates.map(({ cmd }) => devices.executeSilent(cmd)),
-  );
+  const results = await Promise.allSettled(candidates.map(({ cmd }) => devices.executeSilent(cmd)));
 
   // Помечаем фейлнувшиеся устройства в session-cache — но ТОЛЬКО для логических
   // отказов лампы (driver вернул конкретный errorCode её отклонения). HTTP-сбои
@@ -1319,17 +1304,16 @@ useViewMount({ scope: root, itemsSelector: '.room' });
     // Native `<input type="color">` спрятан под label-ом, кликом по swatch'у вызывает
     // системный picker.
     &--custom {
-      background:
-        conic-gradient(
-          from 0deg,
-          #ff4d4d,
-          #ffcc4d,
-          #4dff80,
-          #4dccff,
-          #9b5dff,
-          #ff4dcc,
-          #ff4d4d
-        );
+      background: conic-gradient(
+        from 0deg,
+        #ff4d4d,
+        #ffcc4d,
+        #4dff80,
+        #4dccff,
+        #9b5dff,
+        #ff4dcc,
+        #ff4d4d
+      );
       display: grid;
       place-items: center;
       color: rgba(0, 0, 0, 0.55);
@@ -1371,8 +1355,15 @@ useViewMount({ scope: root, itemsSelector: '.room' });
 }
 
 @keyframes roomTogglePulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.06); opacity: 0.85; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.85;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

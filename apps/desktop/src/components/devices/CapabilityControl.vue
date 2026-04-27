@@ -36,7 +36,9 @@
 
     <!-- Color picker: color_model ∈ {rgb, hsv} или наличие temperature_k. -->
     <div
-      v-else-if="capability.type === 'devices.capabilities.color_setting' && (acceptsColor || hasTemperature)"
+      v-else-if="
+        capability.type === 'devices.capabilities.color_setting' && (acceptsColor || hasTemperature)
+      "
       class="cap__color"
     >
       <BaseSegmented
@@ -120,10 +122,7 @@
     />
 
     <!-- quasar.server_action / devices.capabilities.quasar: input + send строкового action'а. -->
-    <div
-      v-else-if="isQuasarTextAction"
-      class="cap__action"
-    >
+    <div v-else-if="isQuasarTextAction" class="cap__action">
       <BaseInput
         v-model="serverActionPhrase"
         :placeholder="serverActionPlaceholder"
@@ -186,16 +185,10 @@ const busy = ref(false);
 
 /** Canonical instance из parameters / state; пустая строка при отсутствии. */
 const instanceName = computed(() =>
-  String(
-    props.capability.parameters?.instance ??
-      props.capability.state?.instance ??
-      '',
-  ),
+  String(props.capability.parameters?.instance ?? props.capability.state?.instance ?? ''),
 );
 
-const label = computed(() =>
-  labelForCapability(props.capability.type, instanceName.value),
-);
+const label = computed(() => labelForCapability(props.capability.type, instanceName.value));
 
 // Placeholder hints per instance (используются в `cap__action` input'ах для
 // quasar.server_action / quasar). Локально, потому что hints — UI-only,

@@ -241,5 +241,10 @@ function normalizeNotes(raw: UpdateInfo['releaseNotes']): string | undefined {
   if (!raw) return undefined;
   if (typeof raw === 'string') return raw;
   // Массив объектов { version, note } — берём notes последнего бампа.
-  return raw.map((r) => r.note).filter(Boolean).join('\n\n') || undefined;
+  return (
+    raw
+      .map((r) => r.note)
+      .filter(Boolean)
+      .join('\n\n') || undefined
+  );
 }

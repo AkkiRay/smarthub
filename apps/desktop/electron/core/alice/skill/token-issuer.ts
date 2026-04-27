@@ -23,13 +23,13 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { SettingsStore } from '../../storage/settings-store.js';
 
-const ACCESS_TTL_SEC = 60 * 60 * 24 * 30; // 30 дней; Алиса дёрнет refresh за неделю до конца
-const REFRESH_TTL_SEC = 60 * 60 * 24 * 365; // 1 год — достаточно
+const ACCESS_TTL_SEC = 60 * 60 * 24 * 30;
+const REFRESH_TTL_SEC = 60 * 60 * 24 * 365;
 
 const randomToken = (): string => randomBytes(32).toString('base64url');
 const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
 
-/** Constant-time hex-string compare (защита от timing attacks при lookup). */
+/** Constant-time hex-string compare для timing-safe lookup. */
 function safeEqualHex(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   const aBuf = Buffer.from(a, 'hex');
@@ -45,11 +45,7 @@ export interface IssuedTokenPair {
   internalUserId: string;
 }
 
-/**
- * Состояния OAuth /authorize → /token. Хранится в памяти (короткоживёт ~10 мин).
- * После /token запись удаляется. Persist не нужен — process restart = юзер
- * заново привяжет аккаунт в Я.приложении (это секунды).
- */
+/** OAuth /authorize → /token state, in-memory ~10 мин; удаляется после /token. */
 export interface AuthorizationCodeRecord {
   code: string;
   clientId: string;
@@ -65,11 +61,7 @@ export class TokenIssuer {
 
   constructor(private readonly settings: SettingsStore) {
     this.migrateLegacyPlaintextTokens();
-    // Periodic prune — codes хранятся 10 мин, без фонового sweep'а они оставались
-    // в памяти бесконечно, если /authorize-flow срабатывал, а /token нет
-    // (юзер закрыл вкладку). Тихая утечка.
     this.pruneTimer = setInterval(() => this.pruneExpiredCodes(), 5 * 60_000);
-    // Не блокируем shutdown event-loop'а из-за timer'а.
     this.pruneTimer.unref?.();
   }
 
@@ -123,7 +115,6 @@ export class TokenIssuer {
       expiresAt: now + ACCESS_TTL_SEC * 1000,
       refreshToken: hashToken(refreshToken),
     };
-    // Чистим истёкшие — не растёт бесконечно при regeneration loop'ах.
     for (const [tokenHash, record] of Object.entries(issuedTokens)) {
       if (record.expiresAt < now) delete issuedTokens[tokenHash];
     }
@@ -137,14 +128,7 @@ export class TokenIssuer {
     };
   }
 
-  /**
-   * Найти запись по access_token. null если не найден или истёк.
-   *
-   * Лукап БЕЗ early-out по совпадению: вне зависимости от того, нашли ли матч
-   * на первой записи или последней, обходим все entries — иначе атакующий
-   * через timing определяет «какой слот совпал», что в комбинации с другими
-   * каналами утечки сужает space перебора.
-   */
+  /** Lookup по access_token; full-scan без early-out для timing-safe match. null если не найден или истёк. */
   resolveAccessToken(accessToken: string): {
     internalUserId: string;
     expiresAt: number;
@@ -163,10 +147,7 @@ export class TokenIssuer {
     return match;
   }
 
-  /**
-   * Refresh: ищем запись по refresh_token, выдаём новую пару, старый access инвалидируем.
-   * Полный обход entries без early-out (см. resolveAccessToken).
-   */
+  /** Refresh: lookup по refresh_token (full-scan), выдача новой пары, инвалидация старого access. */
   refresh(refreshToken: string): IssuedTokenPair | null {
     if (typeof refreshToken !== 'string' || refreshToken.length === 0) return null;
     const candidate = hashToken(refreshToken);
@@ -174,8 +155,7 @@ export class TokenIssuer {
     let foundHash: string | null = null;
     let foundRecord: { internalUserId: string } | null = null;
     for (const [storedHash, v] of Object.entries(alice.issuedTokens)) {
-      const equal =
-        typeof v.refreshToken === 'string' && safeEqualHex(v.refreshToken, candidate);
+      const equal = typeof v.refreshToken === 'string' && safeEqualHex(v.refreshToken, candidate);
       if (equal && !foundHash) {
         foundHash = storedHash;
         foundRecord = { internalUserId: v.internalUserId };
@@ -193,13 +173,7 @@ export class TokenIssuer {
     this.settings.patchAlice({ issuedTokens: {} });
   }
 
-  /**
-   * Удаляет legacy plaintext-токены (ключ != sha256-hex) из issuedTokens.
-   *
-   * Раньше один битый ключ обнулял всю мапу — единичный malformed entry
-   * выкидывал валидные токены, юзер терял Alice link. Теперь удаляются
-   * именно битые ключи; валидные sha256-hex остаются.
-   */
+  /** Удаляет legacy plaintext-ключи (не sha256-hex); валидные sha256-hex-ключи остаются. */
   private migrateLegacyPlaintextTokens(): void {
     const tokens = this.settings.getAlice().issuedTokens;
     const legacyKeys = Object.keys(tokens).filter((k) => !/^[0-9a-f]{64}$/.test(k));

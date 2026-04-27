@@ -8,7 +8,8 @@
           Устройства
         </span>
         <h1 class="devices__title">
-          {{ devices.devices.length }} <span class="text--gradient">{{ devicePluralizeRu(devices.devices.length) }}</span>
+          {{ devices.devices.length }}
+          <span class="text--gradient">{{ devicePluralizeRu(devices.devices.length) }}</span>
         </h1>
         <p class="devices__lead">
           {{ devices.onlineCount }} в сети ·
@@ -30,9 +31,11 @@
           icon-left="refresh"
           :loading="syncing"
           :disabled="!yandexAuthorized"
-          :title="yandexAuthorized
-            ? 'Импортировать устройства из Дома с Алисой'
-            : 'Сначала войдите через Яндекс в разделе «Подключение Алисы»'"
+          :title="
+            yandexAuthorized
+              ? 'Импортировать устройства из Дома с Алисой'
+              : 'Сначала войдите через Яндекс в разделе «Подключение Алисы»'
+          "
           @click="onSyncYandex"
         >
           Из Яндекса
@@ -64,9 +67,11 @@
       v-if="!filtered.length"
       data-anim="block"
       :title="devices.devices.length === 0 ? 'Устройств пока нет' : 'Нет устройств в выборке'"
-      :text="devices.devices.length === 0
-        ? 'Импортируйте всё из «Дома с Алисой» одним нажатием — или найдите локально через сканер.'
-        : 'Попробуйте изменить фильтр или запустите поиск.'"
+      :text="
+        devices.devices.length === 0
+          ? 'Импортируйте всё из «Дома с Алисой» одним нажатием — или найдите локально через сканер.'
+          : 'Попробуйте изменить фильтр или запустите поиск.'
+      "
     >
       <template #glyph>
         <BaseIcon name="devices" :size="64" />
@@ -89,9 +94,7 @@
         >
           Войти через Яндекс
         </BaseButton>
-        <BaseButton variant="ghost" icon-left="search" @click="onAdd">
-          Поиск в LAN
-        </BaseButton>
+        <BaseButton variant="ghost" icon-left="search" @click="onAdd"> Поиск в LAN </BaseButton>
       </template>
     </BaseEmpty>
 
@@ -309,13 +312,24 @@ useViewMount({
       position: absolute;
       inset: 0;
       background:
-        radial-gradient(60% 80% at 0% 0%, rgba(var(--color-brand-violet-rgb), 0.28) 0%, transparent 60%),
-        radial-gradient(40% 60% at 100% 100%, rgba(var(--color-brand-pink-rgb), 0.18) 0%, transparent 60%);
+        radial-gradient(
+          60% 80% at 0% 0%,
+          rgba(var(--color-brand-violet-rgb), 0.28) 0%,
+          transparent 60%
+        ),
+        radial-gradient(
+          40% 60% at 100% 100%,
+          rgba(var(--color-brand-pink-rgb), 0.18) 0%,
+          transparent 60%
+        );
       pointer-events: none;
       z-index: 0;
     }
 
-    > * { position: relative; z-index: 1; }
+    > * {
+      position: relative;
+      z-index: 1;
+    }
 
     @media (max-width: 920px) {
       grid-template-columns: minmax(0, 1fr);
@@ -404,8 +418,16 @@ useViewMount({
 
       &::before {
         background:
-          radial-gradient(80% 60% at 0% 0%, rgba(var(--color-brand-violet-rgb), 0.22) 0%, transparent 65%),
-          radial-gradient(70% 60% at 100% 100%, rgba(var(--color-brand-pink-rgb), 0.14) 0%, transparent 65%);
+          radial-gradient(
+            80% 60% at 0% 0%,
+            rgba(var(--color-brand-violet-rgb), 0.22) 0%,
+            transparent 65%
+          ),
+          radial-gradient(
+            70% 60% at 100% 100%,
+            rgba(var(--color-brand-pink-rgb), 0.14) 0%,
+            transparent 65%
+          );
       }
     }
 
@@ -434,7 +456,9 @@ useViewMount({
       :deep(.segmented) {
         overflow-x: auto;
         scrollbar-width: none;
-        &::-webkit-scrollbar { display: none; }
+        &::-webkit-scrollbar {
+          display: none;
+        }
         flex-wrap: nowrap;
       }
     }

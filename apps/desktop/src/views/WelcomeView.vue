@@ -16,12 +16,7 @@
         </div>
         <span class="steps__label">{{ stepLabel }}</span>
       </div>
-      <button
-        v-if="step < totalSteps - 1"
-        type="button"
-        class="welcome__skip"
-        @click="skip"
-      >
+      <button v-if="step < totalSteps - 1" type="button" class="welcome__skip" @click="skip">
         Пропустить
         <BaseIcon name="arrow-right" :size="14" />
       </button>
@@ -52,8 +47,8 @@
                 </span>
               </h1>
               <p class="welcome__lead">
-                28+ интеграций, локальное управление, голосовые сценарии через Алису.
-                Без облака, без подписок, без лишнего.
+                28+ интеграций, локальное управление, голосовые сценарии через Алису. Без облака,
+                без подписок, без лишнего.
               </p>
               <ul class="welcome__pill-list">
                 <li v-for="b in heroBullets" :key="b">
@@ -78,8 +73,8 @@
                 </span>
               </h2>
               <p class="welcome__lead">
-                Каждый канал работает независимо. Можно начать с одного и постепенно
-                подключать остальные.
+                Каждый канал работает независимо. Можно начать с одного и постепенно подключать
+                остальные.
               </p>
               <div class="welcome__feature-grid">
                 <article
@@ -118,8 +113,8 @@
                 </span>
               </h2>
               <p class="welcome__lead">
-                После онбординга сразу откроем нужный экран. Передумаете — всегда
-                можно вернуться через боковое меню.
+                После онбординга сразу откроем нужный экран. Передумаете — всегда можно вернуться
+                через боковое меню.
               </p>
               <div class="welcome__path-grid">
                 <button
@@ -138,10 +133,7 @@
                   <span class="welcome__path-title">{{ p.title }}</span>
                   <span class="welcome__path-text">{{ p.text }}</span>
                   <span class="welcome__path-pick">
-                    <BaseIcon
-                      :name="chosenPath === p.id ? 'check' : 'arrow-right'"
-                      :size="14"
-                    />
+                    <BaseIcon :name="chosenPath === p.id ? 'check' : 'arrow-right'" :size="14" />
                     {{ chosenPath === p.id ? 'Выбран' : 'Выбрать' }}
                   </span>
                 </button>
@@ -168,8 +160,9 @@
                 </span>
               </h2>
               <p class="welcome__lead">
-                Покажу тур по интерфейсу — 60 секунд, чтобы освоиться. Или сразу
-                откроем <strong>{{ chosenPathTitle ?? 'хаб' }}</strong>.
+                Покажу тур по интерфейсу — 60 секунд, чтобы освоиться. Или сразу откроем
+                <strong>{{ chosenPathTitle ?? 'хаб' }}</strong
+                >.
               </p>
               <div class="welcome__finish">
                 <button
@@ -183,19 +176,15 @@
                   <span class="welcome__finish-body">
                     <span class="welcome__finish-title">Покажу всё на интерфейсе</span>
                     <span class="welcome__finish-text">
-                      Подсветим где искать устройства, как собрать сценарий и
-                      подключить колонку. Прервать — Esc.
+                      Подсветим где искать устройства, как собрать сценарий и подключить колонку.
+                      Прервать — Esc.
                     </span>
                   </span>
                   <span class="welcome__finish-cta">
                     Начать тур <BaseIcon name="arrow-right" :size="14" />
                   </span>
                 </button>
-                <button
-                  type="button"
-                  class="welcome__finish-card"
-                  @click="finish(false)"
-                >
+                <button type="button" class="welcome__finish-card" @click="finish(false)">
                   <span class="welcome__finish-icon">
                     <BaseIcon name="arrow-right" :size="20" />
                   </span>
@@ -204,8 +193,7 @@
                       Сразу к {{ chosenPathTitle ?? 'хабу' }}
                     </span>
                     <span class="welcome__finish-text">
-                      Пропустим тур и откроем нужный раздел. Подсказки доступны
-                      в Настройках.
+                      Пропустим тур и откроем нужный раздел. Подсказки доступны в Настройках.
                     </span>
                   </span>
                   <span class="welcome__finish-cta">Перейти</span>
@@ -278,12 +266,7 @@ const root = useTemplateRef<HTMLElement>('root');
 const sceneEl = useTemplateRef<HTMLElement>('sceneEl');
 const cards = useTemplateRef<HTMLElement[]>('cards');
 
-const scenes = [
-  { id: 'hero' },
-  { id: 'features' },
-  { id: 'path' },
-  { id: 'finish' },
-] as const;
+const scenes = [{ id: 'hero' }, { id: 'features' }, { id: 'path' }, { id: 'finish' }] as const;
 
 const stepLabels = ['Знакомство', 'Возможности', 'Выбор пути', 'Финал'];
 const stepLabel = computed(
@@ -318,24 +301,21 @@ const features: Feature[] = [
     text: 'Yeelight, Shelly, WiZ, LIFX, Hue, TP-Link, miIO — без интернета.',
     tone: 'violet',
     tags: ['Wi-Fi', 'mDNS', 'UPnP'],
-    icon:
-      '<svg viewBox="0 0 24 24" fill="none"><path d="M2 9c5.5-5.5 14.5-5.5 20 0M5.5 12.5c3.5-3.5 9.5-3.5 13 0M9 16c1.7-1.7 4.3-1.7 6 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="20" r="1.4" fill="currentColor"/></svg>',
+    icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M2 9c5.5-5.5 14.5-5.5 20 0M5.5 12.5c3.5-3.5 9.5-3.5 13 0M9 16c1.7-1.7 4.3-1.7 6 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="20" r="1.4" fill="currentColor"/></svg>',
   },
   {
     title: 'Колонка Алисы',
     text: 'Один клик «Войти через Яндекс» — хаб найдёт ваши Станции.',
     tone: 'pink',
     tags: ['OAuth', 'Glagol', 'WSS:1961'],
-    icon:
-      '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M8 11v2M10.5 9.5v5M13.5 8.5v7M16 10.5v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M8 11v2M10.5 9.5v5M13.5 8.5v7M16 10.5v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   },
   {
     title: 'Облачные платформы',
     text: 'Сбер Дом, Tuya, Mi Home, eWeLink, Govee — единая форма ключей.',
     tone: 'amber',
     tags: ['API', 'OAuth', 'РФ + EN'],
-    icon:
-      '<svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 010-8 6 6 0 0111 1.5 4 4 0 011 7.5H7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13" r="1.3" fill="currentColor"/></svg>',
+    icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 010-8 6 6 0 0111 1.5 4 4 0 011 7.5H7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13" r="1.3" fill="currentColor"/></svg>',
   },
 ];
 
@@ -573,23 +553,22 @@ onMounted(async () => {
   });
   entranceTl = tl;
   tl.from('.welcome__bar > *', {
+    opacity: 0,
+    y: -6,
+    duration: 0.4,
+    stagger: 0.05,
+    clearProps: 'opacity,transform',
+  }).from(
+    '.welcome__pane--visual',
+    {
       opacity: 0,
-      y: -6,
-      duration: 0.4,
-      stagger: 0.05,
+      scale: 0.96,
+      duration: 0.55,
+      ease: 'power2.out',
       clearProps: 'opacity,transform',
-    })
-    .from(
-      '.welcome__pane--visual',
-      {
-        opacity: 0,
-        scale: 0.96,
-        duration: 0.55,
-        ease: 'power2.out',
-        clearProps: 'opacity,transform',
-      },
-      '-=0.25',
-    );
+    },
+    '-=0.25',
+  );
 
   const active = cards.value?.[step.value];
   if (active) {
@@ -1069,14 +1048,18 @@ onBeforeUnmount(() => {
     &:hover {
       border-color: rgba(var(--tone-rgb), 0.32);
       background: rgba(255, 255, 255, 0.045);
-      &::before { opacity: 0.55; }
+      &::before {
+        opacity: 0.55;
+      }
     }
 
     &--active {
       border-color: rgba(var(--tone-rgb), 0.55);
       background: rgba(var(--tone-rgb), 0.07);
       box-shadow: 0 0 0 1px rgba(var(--tone-rgb), 0.35);
-      &::before { opacity: 1; }
+      &::before {
+        opacity: 1;
+      }
     }
   }
 
@@ -1305,7 +1288,8 @@ onBeforeUnmount(() => {
 }
 
 @keyframes welcomeMarkPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.85;
   }
@@ -1316,7 +1300,8 @@ onBeforeUnmount(() => {
 }
 
 @keyframes welcomeAccent {
-  0%, 100% {
+  0%,
+  100% {
     transform: scaleX(1);
     opacity: 1;
   }
@@ -1458,8 +1443,13 @@ onBeforeUnmount(() => {
       gap: 12px;
       padding: 14px;
 
-      .welcome__finish-icon { grid-row: 1; }
-      .welcome__finish-body { grid-row: 1; grid-column: 2; }
+      .welcome__finish-icon {
+        grid-row: 1;
+      }
+      .welcome__finish-body {
+        grid-row: 1;
+        grid-column: 2;
+      }
       .welcome__finish-cta {
         grid-row: 2;
         grid-column: 1 / -1;

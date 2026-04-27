@@ -15,17 +15,7 @@ import {
   parseOauthCallback,
 } from './yandex-quasar-api.js';
 
-/**
- * Strict allow-list хостов для OAuth-окна.
- *
- * Anchored regex (НЕ простой endsWith) — защита от подмены типа `evilyandex.ru`
- * или `attackeryandex.com`, которые проходят через `endsWith('.yandex.ru')`-like
- * проверки (сравни: `'attackeryandex.ru'.endsWith('.yandex.ru')` → false, OK,
- * но `'attacker-yandex.ru.evil.com'` ломал бы старую логику). Регрессия
- * предупреждается явно через regex anchor `$`.
- *
- * Включает `yandex.com.tr` (Турция) — без него фишинг-вектор.
- */
+/** Anchored allow-list хостов для OAuth-окна (yandex.ru/com/by/kz/net/com.tr). */
 const YANDEX_HOST_REGEX =
   /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*yandex\.(?:ru|com|by|kz|net|com\.tr)$/i;
 
