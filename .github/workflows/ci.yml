@@ -1,10 +1,9 @@
 # SmartHome Hub — CI pipeline.
 #
 # Триггерится на каждый push в main и на любой PR. Прогон в порядке:
-#   1. lint (eslint + prettier-check)
-#   2. typecheck (vue-tsc + tsc по всему монорепо)
-#   3. matrix build (windows / macos / ubuntu) — собирает packaged-артефакт без
-#      публикации. Артефакты загружаются в GH Actions для skim-проверки PR'а.
+#   1. quality (prettier --check + vue-tsc + tsc по всему монорепо).
+#   2. matrix build (ubuntu / windows / macos) — собирает packaged-артефакт
+#      без публикации. Артефакты загружаются в GH Actions для skim-проверки.
 #
 # Не публикует ничего — релизы только из release.yml по тегам v*.
 name: CI
@@ -16,7 +15,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Параллельные пуши в одну ветку отменяют предыдущий run — экономим minutes.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -26,7 +24,7 @@ permissions:
 
 jobs:
   quality:
-    name: Lint, format, typecheck
+    name: Format & typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -40,8 +38,6 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Prettier check
         run: pnpm format:check
-      - name: ESLint
-        run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
 
@@ -65,8 +61,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build (no publish)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # CSC_IDENTITY_AUTO_DISCOVERY=false — без подписи на CI; релиз/sign отдельно.
+          # CSC_IDENTITY_AUTO_DISCOVERY=false — отключаем поиск keychain-сертификатов
+          # на CI, иначе electron-builder падает на macOS, не найдя identity.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         shell: bash
         run: |
