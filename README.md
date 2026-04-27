@@ -5,8 +5,10 @@
 backend-а, без Docker, без облаков. Премиум-UI в фирменной палитре Алисы
 (`#6852FF → #A961FF → #FF61E6`), GSAP-анимации, продуманные user flow.
 
-[![Latest release](https://img.shields.io/github/v/release/AkkiRay/smarthub?style=flat&color=8b5cf6)](https://github.com/AkkiRay/smarthub/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/AkkiRay/smarthub/total?style=flat&color=8b5cf6)](https://github.com/AkkiRay/smarthub/releases)
+[![Latest tag](https://img.shields.io/github/v/tag/AkkiRay/smarthub?label=latest&style=flat&color=8b5cf6&cacheSeconds=120)](https://github.com/AkkiRay/smarthub/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/AkkiRay/smarthub/ci.yml?branch=main&style=flat&label=ci&cacheSeconds=120)](https://github.com/AkkiRay/smarthub/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/AkkiRay/smarthub/release.yml?style=flat&label=release&cacheSeconds=120)](https://github.com/AkkiRay/smarthub/actions/workflows/release.yml)
+[![Downloads](https://img.shields.io/github/downloads/AkkiRay/smarthub/total?style=flat&color=8b5cf6&cacheSeconds=120)](https://github.com/AkkiRay/smarthub/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg?style=flat)](LICENSE)
 
 ## Скачать
