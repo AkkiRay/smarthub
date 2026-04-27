@@ -3,17 +3,23 @@
 # Сценарии запуска:
 #   1. Push тега `v*.*.*` (например, `v1.2.3`) — production-релиз.
 #   2. workflow_dispatch с input `version` — ручной релиз: создаёт коммит
-#      с bump'ом версии и тег v<version>, далее обычный flow.
+#      bump'ом версии и тег v<version>, далее ОДНИМ workflow runem build+publish.
 #
 # Поток:
 #   - quality (prettier + typecheck) на ubuntu — fail-fast перед сборкой.
-#   - dispatch-prep (только для workflow_dispatch) — bump версии + tag-push.
-#   - build-matrix (linux / windows / macos) собирает и публикует артефакт
+#   - prepare (только для workflow_dispatch) — bump версии + tag-push,
+#     ИДЕМПОТЕНТНО (rerun не падает, если коммит/тег уже есть).
+#   - release (build-matrix linux / windows) собирает и публикует артефакт
 #     в DRAFT release на GitHub. Имя релиза совпадает с тегом. electron-builder
 #     создаёт `latest.yml` / `latest-mac.yml` / `latest-linux.yml` — они
 #     нужны electron-updater'у в рантайме для discovery новых версий.
 #   - publish (отдельный job) снимает draft-флаг — релиз становится виден
 #     пользователям и попадает в latest GH Releases feed.
+#
+# Архитектурное замечание: prepare НЕ полагается на secondary workflow trigger
+# по push-тегу, потому что push'ы через GITHUB_TOKEN не вызывают каскадные
+# workflows (anti-recursion). Поэтому build идёт в этом же run'е сразу после
+# prepare, через `needs: [quality, prepare]` + checkout по созданному tag-SHA.
 #
 # Secrets:
 #   - GITHUB_TOKEN — выдаётся автоматически, права contents:write для draft+publish.
@@ -31,7 +37,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Версия релиза (без префикса v, напр. 1.2.3). Создаст коммит + тег + draft."
+        description: "Версия релиза (без префикса v, напр. 1.2.3). Создаст коммит + тег + draft + опубликует."
         required: true
         type: string
 
@@ -59,14 +65,16 @@ jobs:
       - run: pnpm typecheck
 
   # workflow_dispatch only: bump версий, commit, tag, push.
-  # Push тега запустит этот же workflow повторно (но уже по 'push: tags:'),
-  # чтобы build-matrix отработала на правильном tagged-снимке репо.
+  # Идемпотентно — rerun не падает: skip bump'а если версия уже совпадает,
+  # skip git tag если тег уже существует.
   prepare:
     name: Prepare release tag
     needs: quality
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,17 +84,43 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: Bump version, commit and tag
+      - id: bump
+        name: Bump version, commit and tag (idempotent)
         shell: bash
         run: |
           set -euxo pipefail
           v="${{ inputs.version }}"
-          node -e "const f='package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
-          node -e "const f='apps/desktop/package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
-          git add package.json apps/desktop/package.json
-          git diff --cached --quiet || git commit -m "chore: release v${v}"
-          git tag "v${v}"
-          git push origin HEAD --tags
+          tag="v${v}"
+
+          # Bump версии только если она реально отличается — иначе git commit
+          # упадёт с «nothing to commit».
+          current=$(node -p "require('./package.json').version")
+          if [ "$current" != "$v" ]; then
+            node -e "const f='package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+            node -e "const f='apps/desktop/package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+            git add package.json apps/desktop/package.json
+            git commit -m "chore: release ${tag}"
+            git push origin HEAD
+          else
+            echo "Version already at ${v}, skipping bump commit."
+          fi
+
+          # Tag создаём только если его ещё нет — иначе `git tag` падает
+          # exit code 128. Сначала локально, потом на remote отдельно: если
+          # локально нет, но на remote есть (race / partial rerun) — fetch
+          # сначала покажет это.
+          git fetch origin --tags --quiet || true
+          if git rev-parse --quiet --verify "refs/tags/${tag}" >/dev/null; then
+            echo "Tag ${tag} already exists locally, skipping create."
+          elif git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists on remote, fetching."
+            git fetch origin "refs/tags/${tag}:refs/tags/${tag}"
+          else
+            git tag "${tag}"
+            git push origin "${tag}"
+          fi
+
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
   # macOS из matrix исключён намеренно — целевая аудитория хаба под Windows/Linux,
   # cross-compile под darwin без Apple Developer Program сейчас не приоритет.
@@ -94,8 +128,14 @@ jobs:
   # MAC_CSC_LINK / APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID.
   release:
     name: Build & publish (${{ matrix.os }})
-    needs: quality
-    if: ${{ github.event_name == 'push' }}
+    needs: [quality, prepare]
+    # `always()` — позволяет run'ить даже когда prepare skipped (push-event).
+    # Условие: quality прошёл И (это push-event ИЛИ prepare прошёл).
+    if: |
+      always() && needs.quality.result == 'success' && (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && needs.prepare.result == 'success')
+      )
     strategy:
       fail-fast: false
       matrix:
@@ -104,6 +144,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Для dispatch checkout-имся по созданному тегу — иначе билд пойдёт
+          # на старом HEAD без bump'а версии. Для push GITHUB_REF уже = тег.
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.prepare.outputs.tag || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -131,8 +175,8 @@ jobs:
   # дорелизнуть позже отдельным тегом. release-edit идемпотентен.
   publish:
     name: Promote draft → published
-    needs: release
-    if: ${{ github.event_name == 'push' && !cancelled() && needs.release.result != 'skipped' }}
+    needs: [release, prepare]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -143,10 +187,13 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          tag="${GITHUB_REF##*/}"
-          # Если release-черновик не создан (например, ВСЕ платформы упали),
-          # gh release edit вернёт ненулевой код — это OK, voyage завершится с
-          # явной ошибкой, тег останется без published-релиза, можно перезапустить.
+          # Выбор tag'а зависит от события: для dispatch берём output из prepare,
+          # для push — из GITHUB_REF.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ needs.prepare.outputs.tag }}"
+          else
+            tag="${GITHUB_REF##*/}"
+          fi
           gh release edit "$tag" \
             --draft=false \
             --latest \
