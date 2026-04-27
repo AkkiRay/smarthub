@@ -50,6 +50,31 @@ const IOT_DEVICES_URL = 'https://iot.quasar.yandex.ru/m/v3/user/devices';
 /** Список сценариев — без версионного префикса. */
 const IOT_SCENARIOS_URL = 'https://iot.quasar.yandex.ru/m/user/scenarios';
 
+/**
+ * UA, которому Yandex anti-bot не возражает (≈ Chrome 140 на 2026-04).
+ * Не злоупотребляем — Yandex отдаёт 403 + капчу при mismatch headers.
+ */
+const QUASAR_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+
+/**
+ * Допустимые host'ы для updates WS-URL — anti-MITM защита.
+ * Если Yandex когда-либо вернёт URL вне `*.yandex.ru/.net`, это либо ошибка
+ * парсинга, либо подмена ответа: мы отказываемся открывать соединение,
+ * потому что cookies партиции уйдут на attacker-host.
+ */
+const UPDATES_WS_HOST_SUFFIXES = ['.yandex.ru', '.yandex.net'];
+
+function isAllowedUpdatesUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'wss:') return false;
+    return UPDATES_WS_HOST_SUFFIXES.some((s) => u.hostname.endsWith(s));
+  } catch {
+    return false;
+  }
+}
+
 export interface YandexHomeDevice {
   id: string;
   name: string;
@@ -292,7 +317,7 @@ async function fetchTextWithPartitionCookies(url: string): Promise<{ body: strin
       useSessionCookies: true,
       headers: {
         'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          QUASAR_UA,
         accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
     });
@@ -339,7 +364,7 @@ async function fetchJsonWithCsrf<T>(url: string, csrfToken: string): Promise<T> 
       useSessionCookies: true,
       headers: {
         'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          QUASAR_UA,
         'x-csrf-token': csrfToken,
         accept: 'application/json',
       },
@@ -388,7 +413,7 @@ async function postJsonWithCsrf<T>(
       useSessionCookies: true,
       headers: {
         'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          QUASAR_UA,
         'x-csrf-token': csrfToken,
         accept: 'application/json',
         'content-type': 'application/json',
@@ -447,7 +472,7 @@ async function jsonWithBody<T>(
       useSessionCookies: true,
       headers: {
         'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          QUASAR_UA,
         'x-csrf-token': csrfToken,
         accept: 'application/json',
         'content-type': 'application/json',
@@ -843,28 +868,51 @@ export class YandexIotClient {
     updatesUrl: string,
     onUpdate: (externalId: string, partial: RawDevice) => void,
   ): () => void {
+    // Anti-MITM: cookies партиции уйдут на любой host из URL — категорически
+    // отказываемся открывать non-yandex/non-wss endpoint.
+    if (!isAllowedUpdatesUrl(updatesUrl)) {
+      log.error(`YandexIot: refusing updates WS to non-yandex URL: ${updatesUrl}`);
+      return () => undefined;
+    }
+
     const sess = session.fromPartition(YANDEX_OAUTH_PARTITION);
     let socket: WebSocket | null = null;
     let manuallyClosed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
     let reconnectAttempt = 0;
 
     const RECONNECT_DELAYS_MS = [1_000, 3_000, 8_000, 20_000, 60_000];
+    /** AlexxIT держит keepalive 60s — без него ALB рвёт idle-WS, выглядит как flake. */
+    const PING_INTERVAL_MS = 60_000;
+
+    const stopPing = (): void => {
+      if (pingTimer) {
+        clearInterval(pingTimer);
+        pingTimer = null;
+      }
+    };
 
     const open = (): void => {
       if (manuallyClosed) return;
+      // Сброс reconnect-таймера: open() может вызваться по двум путям
+      // (initial + scheduleReconnect), не должен оставаться зависший таймер.
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
 
       // `ws` не поддерживает session cookies — собираем Cookie-header вручную
       // через session.cookies.get().
       void sess.cookies
         .get({ url: 'https://iot.quasar.yandex.ru' })
         .then((cookies) => {
+          if (manuallyClosed) return;
           const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
           const ws = new WebSocket(updatesUrl, {
             headers: {
               cookie: cookieHeader,
-              'user-agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+              'user-agent': QUASAR_UA,
             },
             handshakeTimeout: 10_000,
           });
@@ -873,6 +921,15 @@ export class YandexIotClient {
           ws.on('open', () => {
             reconnectAttempt = 0;
             log.info(`YandexIot: updates WS connected`);
+            stopPing();
+            pingTimer = setInterval(() => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              try {
+                ws.ping();
+              } catch (e) {
+                log.debug(`YandexIot: updates WS ping failed: ${(e as Error).message}`);
+              }
+            }, PING_INTERVAL_MS);
           });
 
           ws.on('message', (raw) => {
@@ -891,6 +948,7 @@ export class YandexIotClient {
 
           ws.on('close', (code) => {
             socket = null;
+            stopPing();
             if (manuallyClosed) return;
             log.warn(`YandexIot: updates WS closed (${code}), scheduling reconnect`);
             scheduleReconnect();
@@ -908,11 +966,15 @@ export class YandexIotClient {
 
     const scheduleReconnect = (): void => {
       if (manuallyClosed) return;
+      if (reconnectTimer) return; // не плодим параллельные таймеры (close→error → дубль)
       const delay =
         RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)] ??
         RECONNECT_DELAYS_MS[RECONNECT_DELAYS_MS.length - 1]!;
       reconnectAttempt++;
-      reconnectTimer = setTimeout(open, delay);
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        open();
+      }, delay);
     };
 
     open();
@@ -921,6 +983,7 @@ export class YandexIotClient {
       manuallyClosed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = null;
+      stopPing();
       if (socket && socket.readyState !== WebSocket.CLOSED) {
         try {
           socket.removeAllListeners();

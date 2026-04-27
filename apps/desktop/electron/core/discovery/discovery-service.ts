@@ -53,7 +53,11 @@ export function createDiscoveryService(deps: {
   let running = false;
   let abortController: AbortController | null = null;
   let intervalTimer: ReturnType<typeof setInterval> | null = null;
-  let cycleInProgress = false;
+  // Promise текущего цикла — нужен для start()/stop() чтобы дождаться
+  // окончания предыдущего цикла перед стартом нового. Boolean-флаг
+  // `cycleInProgress` давал состояние гонки: stop()→start() мог застать
+  // старый цикл недоигранным, новый runCycle сразу return'ил.
+  let activeCycle: Promise<void> | null = null;
 
   let progress: DiscoveryProgress = {
     cycleActive: false,
@@ -99,9 +103,23 @@ export function createDiscoveryService(deps: {
   };
 
   const runCycle = async (): Promise<void> => {
-    if (cycleInProgress) return;
-    cycleInProgress = true;
+    // Если предыдущий цикл ещё не завершился — дождёмся, не плодим параллельные.
+    if (activeCycle) {
+      try {
+        await activeCycle;
+      } catch {
+        /* ignore — старый цикл сам залогирует ошибку */
+      }
+      // Если за это время остановили — выходим.
+      if (!running) return;
+    }
+    activeCycle = runCycleInternal().finally(() => {
+      activeCycle = null;
+    });
+    return activeCycle;
+  };
 
+  const runCycleInternal = async (): Promise<void> => {
     abortController = new AbortController();
     const drivers = deps.driverRegistry.list();
     const cycleSignal = abortController.signal;
@@ -206,7 +224,6 @@ export function createDiscoveryService(deps: {
       );
     } finally {
       clearTimeout(timeoutHandle);
-      cycleInProgress = false;
       progress = { ...progress, cycleActive: false };
       emitter.emit('progress', progress);
     }
@@ -257,6 +274,15 @@ export function createDiscoveryService(deps: {
 
     async stop(): Promise<void> {
       internalStop();
+      // Ждём, пока aborted-цикл реально завершит in-flight discover'ы драйверов —
+      // иначе следующий start() может застать недосвёрнутые AbortPromise'ы.
+      if (activeCycle) {
+        try {
+          await activeCycle;
+        } catch {
+          /* abort'нулись — нормально */
+        }
+      }
     },
 
     candidates: (): DiscoveredDevice[] => Array.from(candidates.values()),

@@ -17,6 +17,7 @@
  */
 
 import { createSocket } from 'node:dgram';
+import { randomBytes } from 'node:crypto';
 import type {
   Capability,
   Device,
@@ -58,7 +59,17 @@ interface LifxMeta extends Record<string, unknown> {
 export class LifxDriver extends BaseDriver {
   readonly id = 'lifx' as const;
   readonly displayName = 'LIFX';
-  private readonly source = Math.floor(Math.random() * 0xffffffff);
+  // Криптостойкий source — Math.random() мог давать collision у двух хабов в одной LAN
+  // (одинаковый seed → одинаковый source → ответы перепутаются).
+  private readonly source = randomBytes(4).readUInt32BE(0);
+  private sequence = 0;
+
+  /** Монотонный 8-битный sequence (LIFX header byte 23). */
+  private nextSequence(): number {
+    this.sequence = (this.sequence + 1) & 0xff;
+    if (this.sequence === 0) this.sequence = 1;
+    return this.sequence;
+  }
 
   async discover(signal: AbortSignal): Promise<DiscoveredDevice[]> {
     // GetService — header без payload, tagged=true для broadcast по всем устройствам.
@@ -215,8 +226,10 @@ export class LifxDriver extends BaseDriver {
         : [address, String(LIFX_PORT)];
       const port = Number(portStr);
       const sock = createSocket('udp4');
+      const sequence = this.nextSequence();
       const packet = buildPacket({
         source: this.source,
+        sequence,
         target: mac,
         type,
         tagged: false,
@@ -224,21 +237,28 @@ export class LifxDriver extends BaseDriver {
         payload,
       });
       let settled = false;
+      let timer: NodeJS.Timeout | null = null;
       const fail = (e: Error): void => {
         if (settled) return;
         settled = true;
+        if (timer) clearTimeout(timer);
         sock.close();
         reject(e);
       };
       const succeed = (b: Buffer): void => {
         if (settled) return;
         settled = true;
+        if (timer) clearTimeout(timer);
         sock.close();
         resolve(b);
       };
       sock.on('message', (msg) => {
         const h = parseHeader(msg);
         if (!h) return;
+        // Strict correlation: чужой LIFX в LAN тоже шлёт STATE-пакеты,
+        // принимаем ТОЛЬКО тот ответ, что эхом нашего source+sequence.
+        if (h.source !== this.source) return;
+        if (h.sequence !== sequence) return;
         if (expectType !== undefined && h.type !== expectType) return;
         succeed(msg);
       });
@@ -247,7 +267,7 @@ export class LifxDriver extends BaseDriver {
         if (e) fail(e);
         else if (expectType === undefined) succeed(Buffer.alloc(0));
       });
-      setTimeout(() => fail(new Error('LIFX timeout')), LIFX_RPC_TIMEOUT_MS);
+      timer = setTimeout(() => fail(new Error('LIFX timeout')), LIFX_RPC_TIMEOUT_MS);
     });
   }
 }
@@ -285,6 +305,7 @@ interface ParsedHeader {
   size: number;
   source: number;
   target: string;
+  sequence: number;
   type: number;
 }
 
@@ -294,12 +315,14 @@ function parseHeader(buf: Buffer): ParsedHeader | null {
   if (size > buf.length) return null;
   const source = buf.readUInt32LE(4);
   const target = buf.subarray(8, 14).toString('hex');
+  const sequence = buf.readUInt8(23);
   const type = buf.readUInt16LE(32);
-  return { size, source, target, type };
+  return { size, source, target, sequence, type };
 }
 
 function buildPacket(opts: {
   source: number;
+  sequence?: number;
   target: string;
   type: number;
   tagged: boolean;
@@ -329,7 +352,7 @@ function buildPacket(opts: {
   let flags = 0;
   if (opts.res_required) flags |= 0x01;
   buf.writeUInt8(flags, 22);
-  buf.writeUInt8(0, 23); // sequence
+  buf.writeUInt8((opts.sequence ?? 0) & 0xff, 23);
 
   buf.writeUInt16LE(opts.type, 32);
 
@@ -345,11 +368,16 @@ function parseLightState(buf: Buffer): LightState {
     brightness: buf.readUInt16LE(off + 4),
     kelvin: buf.readUInt16LE(off + 6),
     power: buf.readUInt16LE(off + 10),
-    label: buf
-      .subarray(off + 12, off + 12 + 32)
-      .toString('utf8')
-      .replace(/\0+$/, ''),
+    // Label — fixed 32-byte UTF-8 поле, padded null'ами. Cut'аем по ПЕРВОМУ null
+    // (а не только trailing), иначе при reuse'е буфера старое имя «затекает»
+    // в конец нового, на смене name через app получаем «New\x00Old».
+    label: cutAtFirstNull(buf.subarray(off + 12, off + 12 + 32)).toString('utf8'),
   };
+}
+
+function cutAtFirstNull(b: Buffer): Buffer {
+  const idx = b.indexOf(0);
+  return idx === -1 ? b : b.subarray(0, idx);
 }
 
 const clamp = (v: number, min: number, max: number): number => Math.max(min, Math.min(max, v));

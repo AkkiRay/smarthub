@@ -204,15 +204,18 @@ export class WizDriver extends BaseDriver {
       const sock: DgramSocket = createSocket('udp4');
       const payload = Buffer.from(JSON.stringify({ method, params }));
       let settled = false;
+      let timer: NodeJS.Timeout | null = null;
       const fail = (e: Error): void => {
         if (settled) return;
         settled = true;
+        if (timer) clearTimeout(timer);
         sock.close();
         reject(e);
       };
       const succeed = (v: T): void => {
         if (settled) return;
         settled = true;
+        if (timer) clearTimeout(timer);
         sock.close();
         resolve(v);
       };
@@ -232,7 +235,7 @@ export class WizDriver extends BaseDriver {
       sock.send(payload, 0, payload.length, port, host!, (e) => {
         if (e) fail(e);
       });
-      setTimeout(() => fail(new Error('WiZ timeout')), WIZ_RPC_TIMEOUT_MS);
+      timer = setTimeout(() => fail(new Error('WiZ timeout')), WIZ_RPC_TIMEOUT_MS);
     });
   }
 }

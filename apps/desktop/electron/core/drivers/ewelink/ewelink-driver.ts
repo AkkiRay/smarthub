@@ -23,7 +23,17 @@ interface EWeLinkCreds {
   appId: string;
   appSecret: string;
   region?: 'eu' | 'us' | 'cn' | 'as';
+  /** Persisted из прошлой сессии — позволяет переиспользовать refresh-token. */
+  accessToken?: string;
+  refreshToken?: string;
 }
+
+/**
+ * Callback для persist'а ротированных токенов. eWeLink на каждом /v2/user/refresh
+ * выдаёт НОВЫЕ at+rt; без сохранения мы теряем rotation на restart приложения и
+ * каждый раз re-login'имся email/password (что rate-limit'ится их anti-bot'ом).
+ */
+type PersistTokens = (tokens: { accessToken: string; refreshToken: string }) => void;
 
 interface EWeLinkDevice {
   itemData: {
@@ -50,15 +60,32 @@ export class EWeLinkDriver extends BaseCloudDriver {
   readonly id = 'ewelink' as const;
   readonly displayName = 'eWeLink (Sonoff)';
 
-  private accessToken = '';
-  private refreshTokenValue = '';
+  private accessToken: string;
+  private refreshTokenValue: string;
 
-  constructor(private readonly creds: EWeLinkCreds) {
+  constructor(
+    private readonly creds: EWeLinkCreds,
+    private readonly persist: PersistTokens = () => undefined,
+  ) {
     super({
       baseURL: `https://${creds.region ?? 'eu'}-apia.coolkit.${creds.region === 'cn' ? 'cn' : 'cc'}`,
       timeoutMs: 7000,
       defaultHeaders: { 'X-CK-Appid': creds.appId, 'Content-Type': 'application/json' },
     });
+    // Restore из persisted creds — экономит лишний email+password логин на startup'е,
+    // когда rt rotated с прошлой сессии. Если refresh упадёт, refreshToken() сделает re-login.
+    this.accessToken = creds.accessToken ?? '';
+    this.refreshTokenValue = creds.refreshToken ?? '';
+  }
+
+  private storeTokens(at: string, rt: string): void {
+    this.accessToken = at;
+    this.refreshTokenValue = rt;
+    try {
+      this.persist({ accessToken: at, refreshToken: rt });
+    } catch (e) {
+      this.logWarn('persist tokens failed', e);
+    }
   }
 
   async discover(): Promise<DiscoveredDevice[]> {
@@ -184,8 +211,7 @@ export class EWeLinkDriver extends BaseCloudDriver {
       { rt: this.refreshTokenValue },
       { headers: this.signedHeaders({ rt: this.refreshTokenValue }) },
     );
-    this.accessToken = r.data.data.at;
-    this.refreshTokenValue = r.data.data.rt;
+    this.storeTokens(r.data.data.at, r.data.data.rt);
   }
 
   private async ensureLogin(): Promise<void> {
@@ -197,13 +223,15 @@ export class EWeLinkDriver extends BaseCloudDriver {
     const r = await this.http.post<{ data: { at: string; rt: string } }>('/v2/user/login', body, {
       headers: this.signedHeaders(body),
     });
-    this.accessToken = r.data.data.at;
-    this.refreshTokenValue = r.data.data.rt;
+    this.storeTokens(r.data.data.at, r.data.data.rt);
   }
 
   private signedHeaders(body: object): Record<string, string> {
+    // Canonical JSON для HMAC: sort'им ключи по алфавиту, иначе разный порядок
+    // в JSON.stringify (insertion order) может не совпасть с серилизацией на
+    // стороне eWeLink → подпись отвергается.
     const sign = createHmac('sha256', this.creds.appSecret)
-      .update(JSON.stringify(body))
+      .update(canonicalJson(body))
       .digest('base64');
     return {
       Authorization: `Sign ${sign}`,
@@ -211,6 +239,23 @@ export class EWeLinkDriver extends BaseCloudDriver {
       'Content-Type': 'application/json',
     };
   }
+}
+
+/**
+ * Sort object keys alphabetically + recursively. Не trades — eWeLink требует
+ * deterministic JSON сериализации для проверки подписи.
+ */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_k, v) => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        sorted[k] = (v as Record<string, unknown>)[k];
+      }
+      return sorted;
+    }
+    return v;
+  });
 }
 
 function inferEwelinkType(uiid: number, params: EWeLinkDevice['itemData']['params']): DeviceType {

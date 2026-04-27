@@ -37,15 +37,54 @@ export class MqttDriver implements DeviceDriver {
 
   constructor(private creds: MqttCreds) {}
 
+  /** Single-flight connect — concurrent execute/discover не плодят несколько mqtt.connect()'ов. */
+  private connectInFlight: Promise<MqttClient> | null = null;
+
   private async connect(): Promise<MqttClient> {
     if (this.client && this.connected) return this.client;
+    // Если клиент уже создан (но временно offline mid-reconnect), mqtt.js сам
+    // ре-конектится — не плодим параллельный mqtt.connect().
+    if (this.client) {
+      // Дождёмся либо connect, либо timeout, либо reject.
+      return await this.waitForClient(this.client);
+    }
+    if (this.connectInFlight) return this.connectInFlight;
+    this.connectInFlight = this.openClient().finally(() => {
+      this.connectInFlight = null;
+    });
+    return this.connectInFlight;
+  }
+
+  private waitForClient(client: MqttClient): Promise<MqttClient> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        client.off('connect', onConnect);
+        client.off('error', onError);
+        reject(new Error('MQTT not connected within timeout'));
+      }, 5000);
+      const onConnect = (): void => {
+        clearTimeout(timer);
+        client.off('error', onError);
+        resolve(client);
+      };
+      const onError = (err: Error): void => {
+        clearTimeout(timer);
+        client.off('connect', onConnect);
+        reject(err);
+      };
+      client.once('connect', onConnect);
+      client.once('error', onError);
+    });
+  }
+
+  private openClient(): Promise<MqttClient> {
     this.client = mqtt.connect(this.creds.url, {
       username: this.creds.username,
       password: this.creds.password,
       reconnectPeriod: 5000,
       connectTimeout: 5000,
     });
-    return await new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       this.client!.once('connect', () => {
         this.connected = true;
         log.info('MQTT connected');
@@ -53,6 +92,8 @@ export class MqttDriver implements DeviceDriver {
         for (const sub of subs) {
           this.client!.subscribe(sub, { qos: 0 });
         }
+        // 'message' handler bind'ится один раз — каждый reconnect mqtt.js
+        // переиспользует тот же EventEmitter, дубли не накапливаются.
         this.client!.on('message', (topic, payload) => {
           // Skip служебных topic-ов: bridge/availability/HA discovery config — не device-state.
           if (topic.includes('/bridge/') || topic.endsWith('/availability')) return;
@@ -80,10 +121,9 @@ export class MqttDriver implements DeviceDriver {
 
   private subscriptions(): string[] {
     const subs = ['zigbee2mqtt/+', 'zigbee2mqtt/+/+'];
-    const extra = this.creds.extraTopicPrefix?.trim();
+    const extra = sanitizeTopicPrefix(this.creds.extraTopicPrefix);
     if (extra) {
-      const cleaned = extra.replace(/\/+$/, '');
-      subs.push(`${cleaned}/+`, `${cleaned}/+/+`, `${cleaned}/+/+/+`);
+      subs.push(`${extra}/+`, `${extra}/+/+`, `${extra}/+/+/+`);
     }
     return subs;
   }
@@ -199,6 +239,26 @@ export class MqttDriver implements DeviceDriver {
     this.connected = false;
     this.latestState.clear();
   }
+}
+
+/**
+ * Очищает user-supplied topic-prefix от MQTT wildcard'ов и control-символов.
+ *
+ * Без этой санитизации `extraTopicPrefix = "+"` или `"#"` подписывает нас
+ * на ВСЕ retained topics брокера (включая HA-discovery с creds-payload), а
+ * `"foo/#/bar"` в середине — даёт неожиданный broad-match. Принимаем только
+ * `[a-z0-9_/-]`, режем wildcard'ы и mqtt-spec invalid-chars.
+ */
+function sanitizeTopicPrefix(raw: string | undefined): string {
+  if (typeof raw !== 'string') return '';
+  // 1) Убираем MQTT wildcard'ы (+ и #) и null-byte (запрещён MQTT 3.1.1 §1.5.3).
+  // 2) Запрещаем `..` (ничего не значит в MQTT, но защищает от случайностей).
+  // 3) Удаляем ведущие/хвостовые слэши и пробелы.
+  const trimmed = raw.trim().replace(/[+# ]/g, '').replace(/\.\.+/g, '');
+  const cleaned = trimmed.replace(/^\/+|\/+$/g, '');
+  // Запрещаем пустые сегменты и явные whitespace-сегменты.
+  if (!cleaned || cleaned.includes('//') || /\s/.test(cleaned)) return '';
+  return cleaned;
 }
 
 function friendlyName(topic: string): string {

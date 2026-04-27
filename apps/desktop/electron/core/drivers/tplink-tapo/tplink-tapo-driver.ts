@@ -1,11 +1,19 @@
 /**
  * @fileoverview
- * TP-Link Tapo (P100/P110/L510/L530/L630): локальный KLAP/passthrough HTTP.
- * На firmware <1.1.0 работает «secure-passthrough» (RSA-1024 handshake → AES-128-CBC).
- * На новых прошивках (>=1.1.0) — KLAP v2: SHA256-handshake без RSA.
- * Здесь реализован legacy secure-passthrough; KLAP помечен TODO — для полной поддержки
- * нужно тестировать на конкретных моделях. Если local не работает — UI должен предложить
- * TP-Link Cloud (`tplink-cloud`), который покрывает обе линейки одним API.
+ * TP-Link Tapo (P100/P110/L510/L530/L630): локальный HTTP-протокол.
+ *
+ * Две версии handshake'а в полевых условиях:
+ *   - **KLAP v2** (firmware ≥ 1.1.0, default на shipping-устройствах с конца 2022):
+ *     SHA-256-handshake без RSA, два POST /app/handshake1+2 + AES-128-CBC.
+ *     auth_hash = SHA-256(SHA-1(email) || SHA-1(password)). Сессия на 24ч, привязана
+ *     к TP_SESSIONID cookie.
+ *   - **secure-passthrough** (firmware < 1.1.0): RSA-1024 handshake → AES-128-CBC.
+ *     На новых прошивках больше не работает (handshake возвращает 1003).
+ *
+ * Драйвер сначала пробует KLAP, при отказе (HTTP 404 на /handshake1) деградирует
+ * на legacy secure-passthrough. Token и session-cookie передаются ИСКЛЮЧИТЕЛЬНО
+ * в Cookie/X-headers — раньше token шёл в URL query, что светилось в access-логах
+ * и hop-by-hop кэшах.
  */
 
 import axios, { type AxiosInstance } from 'axios';
@@ -16,6 +24,7 @@ import {
   generateKeyPairSync,
   privateDecrypt,
   createHash,
+  randomBytes,
 } from 'node:crypto';
 import type {
   Capability,
@@ -47,9 +56,17 @@ interface TapoCreds {
   hosts?: string[];
 }
 
+type TapoProtocol = 'klap' | 'passthrough';
+
 interface TapoSession {
+  protocol: TapoProtocol;
   cipher: TapoCipher;
-  token: string;
+  /** TP_SESSIONID cookie (общий для KLAP/passthrough). */
+  cookie: string;
+  /** Только passthrough: token, выданный login_device. */
+  token?: string;
+  /** KLAP v2: монотонный счётчик IV (last 4 bytes IV). Растёт с каждым encrypted-запросом. */
+  seq?: number;
 }
 
 interface TapoCipher {
@@ -89,7 +106,10 @@ export class TPLinkTapoDriver extends BaseDriver {
   readonly displayName = 'TP-Link Tapo';
 
   private readonly http: AxiosInstance = axios.create({ timeout: TAPO_HTTP_TIMEOUT_MS });
-  private sessions = new Map<string, TapoSession>();
+  // Single-flight: храним Promise, не TapoSession. Два параллельных request'а на тот же
+  // host получат одну и ту же in-flight handshake-операцию вместо двух конкурентных,
+  // которые перезаписывали бы друг другу seq-counter и давали IV-collision в KLAP.
+  private sessions = new Map<string, Promise<TapoSession>>();
 
   constructor(private readonly creds: TapoCreds) {
     super();
@@ -211,35 +231,162 @@ export class TPLinkTapoDriver extends BaseDriver {
     return r.result;
   }
 
-  // Secure passthrough: RSA-keypair → handshake (получаем session key) → login → encrypted requests.
-  // Сессия кешируется per-host; при ошибке -1501 (token expired) выбрасываем кеш и retry.
+  // Secure handshake: пробуем KLAP v2 (новые firmware), при отказе fallback в legacy passthrough.
+  // Сессия кешируется per-host; при error_code -1501/-1012 выбрасываем кеш и retry.
   private async secureRequest<T = { result: unknown }>(
     host: string,
     method: string,
     params: object,
   ): Promise<T> {
-    let session = this.sessions.get(host);
-    if (!session) {
-      session = await this.handshakeAndLogin(host);
-      this.sessions.set(host, session);
-    }
+    const session = await this.getOrCreateSession(host);
     try {
       return await this.invokeWithSession<T>(host, session, method, params);
     } catch (e) {
       const msg = (e as Error).message;
-      if (msg.includes('-1501') || msg.includes('-1012') || msg.includes('expired')) {
+      const expired = /-1501|-1012|expired|HTTP 401|HTTP 403/.test(msg);
+      if (!expired) throw e;
+      // Token expired — выбрасываем кеш (только если он ссылается на ту же сессию,
+      // иначе паралельный invocation мог уже успеть refresh'нуть и нам не надо повторно).
+      if (this.sessions.get(host) && (await this.sessions.get(host)) === session) {
         this.sessions.delete(host);
-        const fresh = await this.handshakeAndLogin(host);
-        this.sessions.set(host, fresh);
-        return await this.invokeWithSession<T>(host, fresh, method, params);
+      }
+      const fresh = await this.getOrCreateSession(host);
+      return await this.invokeWithSession<T>(host, fresh, method, params);
+    }
+  }
+
+  /**
+   * Single-flight cache: возвращает существующий Promise или стартует новый
+   * handshake. Параллельные request'ы на тот же host await'ят одну
+   * in-flight операцию. На failure запись удаляется, чтобы следующий
+   * request попробовал заново.
+   */
+  private getOrCreateSession(host: string): Promise<TapoSession> {
+    const existing = this.sessions.get(host);
+    if (existing) return existing;
+    const fresh = this.handshake(host).catch((e) => {
+      // Failure → удаляем reject'нутый Promise из кеша, иначе все будущие
+      // вызовы будут получать ту же ошибку.
+      if (this.sessions.get(host) === fresh) this.sessions.delete(host);
+      throw e;
+    });
+    this.sessions.set(host, fresh);
+    return fresh;
+  }
+
+  /**
+   * Пробует KLAP v2; если устройство возвращает 404/-1003 (старая firmware),
+   * деградирует на legacy secure-passthrough.
+   */
+  private async handshake(host: string): Promise<TapoSession> {
+    try {
+      return await this.handshakeKlap(host);
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (/HTTP 404|HTTP 400|-1003|-1010|handshake1/.test(msg)) {
+        this.logWarn(`KLAP handshake unavailable on ${host} (${msg}), falling back to legacy passthrough`);
+        return this.handshakePassthrough(host);
       }
       throw e;
     }
   }
 
-  private async handshakeAndLogin(host: string): Promise<TapoSession> {
+  /**
+   * KLAP v2: shipping-протокол с конца 2022. SHA-256 handshake без RSA.
+   *
+   * 1. POST /app/handshake1 с client_nonce(16). Сервер отвечает server_nonce(16) +
+   *    auth_hash = SHA-256(SHA-1(email) || SHA-1(password)) ⊕ ...
+   * 2. POST /app/handshake2 с подтверждающим хешем.
+   * 3. session-key = SHA-256("lsk" || local_seed || remote_seed || auth_hash).slice(0,16)
+   *    iv-prefix    = SHA-256("iv"  || local_seed || remote_seed || auth_hash).slice(0,12)
+   *    seq-init     = big-endian int32 из SHA-256(...).slice(28,32)
+   *    sig          = SHA-256("ldk" || local_seed || remote_seed || auth_hash).slice(0,28)
+   * Каждый encrypted-request: IV = iv_prefix || (seq++ as int32 BE);
+   * envelope = sig || sha256(sig || seq || ciphertext) || ciphertext.
+   */
+  private async handshakeKlap(host: string): Promise<TapoSession> {
+    const baseUrl = `http://${host}:80/app`;
+    const localSeed = randomBytes(16);
+
+    let h1Resp;
+    try {
+      h1Resp = await this.http.post(`${baseUrl}/handshake1`, localSeed, {
+        responseType: 'arraybuffer',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        validateStatus: () => true,
+      });
+    } catch (e) {
+      throw new Error(`KLAP handshake1 transport failed: ${(e as Error).message}`);
+    }
+    if (h1Resp.status !== 200) {
+      throw new Error(`KLAP handshake1: HTTP ${h1Resp.status}`);
+    }
+
+    const h1Body = Buffer.from(h1Resp.data as ArrayBuffer);
+    if (h1Body.length < 48) throw new Error(`KLAP handshake1: short response (${h1Body.length}B)`);
+    const remoteSeed = h1Body.subarray(0, 16);
+    const serverHash = h1Body.subarray(16, 48);
+
+    // auth_hash = SHA256( SHA1(email) || SHA1(password) ).
+    const sha1 = (s: string) => createHash('sha1').update(s).digest();
+    const authHash = createHash('sha256')
+      .update(Buffer.concat([sha1(this.creds.email), sha1(this.creds.password)]))
+      .digest();
+
+    // Verify server's hash: SHA-256(local_seed || remote_seed || auth_hash).
+    const expectedServerHash = createHash('sha256')
+      .update(Buffer.concat([localSeed, remoteSeed, authHash]))
+      .digest();
+    if (!serverHash.equals(expectedServerHash)) {
+      throw new Error('KLAP handshake1: invalid credentials (auth_hash mismatch)');
+    }
+
+    const cookie = pickSessionCookie(h1Resp.headers['set-cookie']);
+    if (!cookie) throw new Error('KLAP handshake1: missing TP_SESSIONID cookie');
+
+    // handshake2: SHA-256(remote_seed || local_seed || auth_hash).
+    const clientHash = createHash('sha256')
+      .update(Buffer.concat([remoteSeed, localSeed, authHash]))
+      .digest();
+
+    const h2Resp = await this.http.post(`${baseUrl}/handshake2`, clientHash, {
+      responseType: 'arraybuffer',
+      headers: { 'Content-Type': 'application/octet-stream', Cookie: cookie },
+      validateStatus: () => true,
+    });
+    if (h2Resp.status !== 200) throw new Error(`KLAP handshake2: HTTP ${h2Resp.status}`);
+
+    // Derive session key + iv prefix + initial seq.
+    const lsk = createHash('sha256')
+      .update(Buffer.concat([Buffer.from('lsk'), localSeed, remoteSeed, authHash]))
+      .digest();
+    const ivBuf = createHash('sha256')
+      .update(Buffer.concat([Buffer.from('iv'), localSeed, remoteSeed, authHash]))
+      .digest();
+    const ldk = createHash('sha256')
+      .update(Buffer.concat([Buffer.from('ldk'), localSeed, remoteSeed, authHash]))
+      .digest();
+
+    const key = lsk.subarray(0, 16);
+    const ivPrefix = ivBuf.subarray(0, 12);
+    // Unsigned int32 — KLAP spec кладёт seq как uint32 BE. readInt32BE при bit31=1
+    // даёт отрицательное число, последующий writeInt32BE в IV пишет two's-complement
+    // вместо беззнакового — устройство с шансом 50% получит IV, который не совпадает
+    // с тем, что само рассчитало → AES-CBC валит расшифровку.
+    const seqInit = ivBuf.readUInt32BE(28);
+    const sig = ldk.subarray(0, 28);
+
+    return {
+      protocol: 'klap',
+      cipher: { key, iv: Buffer.concat([ivPrefix, sig]) },
+      cookie,
+      seq: seqInit,
+    };
+  }
+
+  /** Legacy secure-passthrough: RSA-1024 handshake → AES-128-CBC. */
+  private async handshakePassthrough(host: string): Promise<TapoSession> {
     const url = `http://${host}:80/app`;
-    // 1) Generate RSA key для handshake.
     const { publicKey, privateKey } = generateKeyPairSync('rsa', {
       modulusLength: 1024,
       publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -252,17 +399,15 @@ export class TPLinkTapoDriver extends BaseDriver {
       requestTimeMils: Date.now(),
     });
     const enc = handshake.data?.result?.key as string | undefined;
-    const cookie = handshake.headers['set-cookie']?.[0]?.split(';')[0];
+    const cookie = pickSessionCookie(handshake.headers['set-cookie']);
     if (!enc || !cookie) throw new Error('Tapo handshake failed');
 
-    // RSA-decrypt → 32 bytes: 16 key + 16 iv.
     const decoded = privateDecrypt(
       { key: createPrivateKey(privateKey), padding: 1 /* PKCS1 v1.5 */ },
       Buffer.from(enc, 'base64'),
     );
     const cipher: TapoCipher = { key: decoded.subarray(0, 16), iv: decoded.subarray(16, 32) };
 
-    // 2) Login encrypted с email/password.
     const loginPayload = {
       method: 'login_device',
       params: {
@@ -286,8 +431,7 @@ export class TPLinkTapoDriver extends BaseDriver {
     if (!decryptedLogin.result?.token) {
       throw new Error(`Tapo login failed: ${decryptedLogin.error_code}`);
     }
-    void publicKey; // already serialized into handshake
-    return { cipher, token: decryptedLogin.result.token };
+    return { protocol: 'passthrough', cipher, cookie, token: decryptedLogin.result.token };
   }
 
   private async invokeWithSession<T>(
@@ -297,11 +441,62 @@ export class TPLinkTapoDriver extends BaseDriver {
     params: object,
   ): Promise<T> {
     const payload = JSON.stringify({ method, params, requestTimeMils: Date.now() });
+    if (session.protocol === 'klap') return this.invokeKlap<T>(host, session, payload);
+    return this.invokePassthrough<T>(host, session, payload);
+  }
+
+  private async invokeKlap<T>(host: string, session: TapoSession, payload: string): Promise<T> {
+    // seq — uint32 с wrap'ом (после 0xFFFFFFFF мы пере-handshake'имся, но 4 млрд
+    // запросов на сессию хватает на годы). >>> 0 гарантирует unsigned-семантику.
+    const seq = ((session.seq ?? 0) + 1) >>> 0;
+    session.seq = seq;
+    const ivPrefix = session.cipher.iv.subarray(0, 12);
+    const sig = session.cipher.iv.subarray(12, 40);
+    const seqBuf = Buffer.alloc(4);
+    seqBuf.writeUInt32BE(seq, 0);
+    const iv = Buffer.concat([ivPrefix, seqBuf]);
+    const cipher = createCipheriv('aes-128-cbc', session.cipher.key, iv);
+    const ciphertext = Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()]);
+    const integrity = createHash('sha256')
+      .update(Buffer.concat([sig, seqBuf, ciphertext]))
+      .digest();
+    const body = Buffer.concat([integrity, ciphertext]);
+
+    const r = await this.http.post(`http://${host}:80/app/request?seq=${seq}`, body, {
+      responseType: 'arraybuffer',
+      headers: { 'Content-Type': 'application/octet-stream', Cookie: session.cookie },
+      validateStatus: () => true,
+    });
+    if (r.status !== 200) throw new Error(`KLAP request HTTP ${r.status}`);
+
+    const buf = Buffer.from(r.data as ArrayBuffer);
+    if (buf.length < 32) throw new Error(`KLAP response too short (${buf.length}B)`);
+    const respCiphertext = buf.subarray(32);
+    const decipher = createDecipheriv('aes-128-cbc', session.cipher.key, iv);
+    const text = Buffer.concat([decipher.update(respCiphertext), decipher.final()]).toString(
+      'utf8',
+    );
+    const dec = JSON.parse(text) as { result?: T; error_code?: number; msg?: string };
+    if (dec.error_code && dec.error_code !== 0) {
+      throw new Error(`Tapo error ${dec.error_code}: ${dec.msg ?? 'unknown'}`);
+    }
+    return dec.result as T;
+  }
+
+  private async invokePassthrough<T>(host: string, session: TapoSession, payload: string): Promise<T> {
     const encrypted = encryptAes(payload, session.cipher);
+    if (!session.token) throw new Error('Tapo passthrough: missing token');
+    // Token и cookie передаём ТОЛЬКО в заголовках — раньше token был в URL ?token=,
+    // что светилось в access-логах прокси и hop-by-hop кешах.
     const r = await this.http.post(
-      `http://${host}:80/app?token=${session.token}`,
+      `http://${host}:80/app`,
       { method: 'securePassthrough', params: { request: encrypted } },
-      { headers: { Cookie: `TP_SESSIONID=${session.token}` } },
+      {
+        headers: {
+          Cookie: session.cookie,
+          'X-Tapo-Token': session.token,
+        },
+      },
     );
     const dec = JSON.parse(decryptAes(r.data.result.response, session.cipher)) as {
       result?: T;
@@ -313,6 +508,18 @@ export class TPLinkTapoDriver extends BaseDriver {
     }
     return dec.result as T;
   }
+}
+
+function pickSessionCookie(setCookie: unknown): string {
+  if (!Array.isArray(setCookie)) return '';
+  for (const raw of setCookie) {
+    if (typeof raw !== 'string') continue;
+    const first = raw.split(';')[0];
+    if (first?.startsWith('TP_SESSIONID=')) return first;
+  }
+  // Fallback: первая cookie в массиве, если устройство шлёт её другим именем.
+  const first = (setCookie[0] as string | undefined)?.split(';')[0];
+  return first ?? '';
 }
 
 function buildTapoCaps(type: DeviceType, meta: TapoMeta, info: TapoDeviceInfo): Capability[] {
@@ -348,8 +555,17 @@ function inferMeta(info: TapoDeviceInfo): TapoMeta {
 }
 
 function decodeBase64(s: string): string {
+  if (typeof s !== 'string' || s.length === 0) return '';
   try {
-    return Buffer.from(s, 'base64').toString('utf8');
+    const buf = Buffer.from(s, 'base64');
+    const utf8 = buf.toString('utf8');
+    // Если в результате есть U+FFFD — устройство, скорее всего, шлёт latin-1.
+    // Пробуем latin-1 как fallback (Tapo прошивки до 1.0.7 выдавали именно его
+    // для не-ASCII никнеймов).
+    if (utf8.includes('�')) {
+      return buf.toString('latin1');
+    }
+    return utf8;
   } catch {
     return s;
   }

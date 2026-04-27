@@ -737,11 +737,8 @@ const marketplaceReady = useDeferredMount({ mode: 'idle', delayMs: 250 });
       }
     }
 
+    // Row → single-column. Контрол (segmented/select/button) full-width под copy.
     &__row {
-      // Action под текстом, не справа — иначе chip обрезает hint.
-      // Базово row — grid 2-кол; на mobile перевозим в single-col, контрол
-      // едет под текст с justify-self: stretch чтобы full-width control'ы
-      // (segmented, select) занимали всю ширину карточки.
       grid-template-columns: minmax(0, 1fr);
       gap: 10px;
 

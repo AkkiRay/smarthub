@@ -501,7 +501,7 @@ watch(continuousMode, (next) => {
 useViewMount({ scope: root, itemsSelector: '.scan-driver, .candidate' });
 
 // Re-stagger при смене filter'а.
-const { from } = useGsap(root.value);
+const { from } = useGsap(root);
 watch(activeFilter, () => {
   from('.candidate', {
     opacity: 0,

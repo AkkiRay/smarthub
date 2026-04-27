@@ -12,6 +12,8 @@
  */
 
 import axios, { type AxiosInstance } from 'axios';
+import https from 'node:https';
+import { createHash } from 'node:crypto';
 import type {
   Capability,
   Device,
@@ -34,6 +36,33 @@ import { BaseDriver } from '../_shared/base-driver.js';
 const HUE_HTTP_TIMEOUT_MS = 4000;
 const HUE_KELVIN: { min: number; max: number } = { min: 2000, max: 6500 };
 const HUE_BRIGHTNESS_MAX = 254;
+
+/**
+ * Hue Bridge serve'ит HTTPS на :443 с self-signed cert; CN/SAN — bridge-id
+ * (нижний регистр, hex). Pinning через bridge-id защищает от MITM в LAN
+ * (IP легко подменить ARP-spoofing'ом, bridge-id привязан к hardware).
+ */
+function buildPinnedHttpsAgent(bridgeId: string): https.Agent {
+  const expectedCN = bridgeId.toLowerCase();
+  return new https.Agent({
+    // self-signed — Web PKI неприменим, проверяем CN ниже.
+    rejectUnauthorized: false,
+    checkServerIdentity: (_host, cert) => {
+      const subject = (cert.subject as { CN?: string } | undefined)?.CN?.toLowerCase();
+      if (!subject || subject !== expectedCN) {
+        return new Error(`Hue: cert CN mismatch (expected ${expectedCN}, got ${subject})`);
+      }
+      return undefined;
+    },
+  });
+}
+
+/** SHA-256 fingerprint cert'а (для дополнительного TOFU pin'а сверху CN-check'а). */
+function fingerprintFromCert(cert: { raw?: Buffer }): string | null {
+  if (!cert.raw) return null;
+  const hex = createHash('sha256').update(cert.raw).digest('hex').toUpperCase();
+  return hex.match(/.{2}/g)!.join(':');
+}
 
 interface HueBridge {
   bridgeId: string;
@@ -71,18 +100,36 @@ export class HueDriver extends BaseDriver {
   readonly id = 'hue' as const;
   readonly displayName = 'Philips Hue';
 
-  private readonly http: AxiosInstance = axios.create({ timeout: HUE_HTTP_TIMEOUT_MS });
+  /** Per-bridge axios с pinned HTTPS-agent. */
+  private readonly httpByBridge = new Map<string, AxiosInstance>();
 
   constructor(private readonly bridges: HueBridge[]) {
     super();
+  }
+
+  private clientFor(bridge: { bridgeId: string }): AxiosInstance {
+    let client = this.httpByBridge.get(bridge.bridgeId);
+    if (!client) {
+      client = axios.create({
+        timeout: HUE_HTTP_TIMEOUT_MS,
+        httpsAgent: buildPinnedHttpsAgent(bridge.bridgeId),
+      });
+      this.httpByBridge.set(bridge.bridgeId, client);
+    }
+    return client;
+  }
+
+  private bridgeUrl(meta: { bridgeIp: string; bridgeId: string }): string {
+    return `https://${meta.bridgeIp}`;
   }
 
   async discover(_signal: AbortSignal): Promise<DiscoveredDevice[]> {
     const out: DiscoveredDevice[] = [];
     for (const b of this.bridges) {
       try {
-        const { data } = await this.http.get<Record<string, HueLight>>(
-          `http://${b.internalipaddress}/api/${b.username}/lights`,
+        const client = this.clientFor(b);
+        const { data } = await client.get<Record<string, HueLight>>(
+          `https://${b.internalipaddress}/api/${b.username}/lights`,
         );
         if (Array.isArray(data)) continue; // ошибка возвращается массивом
         for (const [id, light] of Object.entries(data)) {
@@ -93,7 +140,7 @@ export class HueDriver extends BaseDriver {
             externalId: `${b.bridgeId}:${id}`,
             type: DEVICE_TYPE.LIGHT,
             name: light.name,
-            address: b.internalipaddress,
+            address: `${b.bridgeId}@${b.internalipaddress}`,
             meta: {
               bridgeId: b.bridgeId,
               bridgeIp: b.internalipaddress,
@@ -116,8 +163,9 @@ export class HueDriver extends BaseDriver {
     const now = new Date().toISOString();
     let initial: HueLight | null = null;
     try {
-      const { data } = await this.http.get<HueLight>(
-        `http://${meta.bridgeIp}/api/${meta.username}/lights/${meta.lightId}`,
+      const client = this.clientFor(meta);
+      const { data } = await client.get<HueLight>(
+        `${this.bridgeUrl(meta)}/api/${meta.username}/lights/${meta.lightId}`,
       );
       initial = data;
     } catch {
@@ -145,8 +193,9 @@ export class HueDriver extends BaseDriver {
   async readState(device: Device): Promise<Device> {
     const meta = device.meta as HueMeta;
     try {
-      const { data } = await this.http.get<HueLight>(
-        `http://${meta.bridgeIp}/api/${meta.username}/lights/${meta.lightId}`,
+      const client = this.clientFor(meta);
+      const { data } = await client.get<HueLight>(
+        `${this.bridgeUrl(meta)}/api/${meta.username}/lights/${meta.lightId}`,
       );
       return {
         ...device,
@@ -161,7 +210,8 @@ export class HueDriver extends BaseDriver {
 
   async execute(device: Device, command: DeviceCommand): Promise<DeviceCommandResult> {
     const meta = device.meta as HueMeta;
-    const url = `http://${meta.bridgeIp}/api/${meta.username}/lights/${meta.lightId}/state`;
+    const client = this.clientFor(meta);
+    const url = `${this.bridgeUrl(meta)}/api/${meta.username}/lights/${meta.lightId}/state`;
 
     let body: Record<string, unknown> | null = null;
     if (command.capability === CAPABILITY.ON_OFF) {
@@ -188,11 +238,19 @@ export class HueDriver extends BaseDriver {
     }
 
     try {
-      await this.http.put(url, body);
+      // Hue v1 PUT не имеет idempotency — на network glitch (TCP RST в полёте)
+      // axios НЕ retry'ит и команда не дублируется. Это безопасно. На v2 CLIP
+      // (TODO миграция к 2027 — v1 username deprecated) появляется hue-application-id
+      // header для idempotency.
+      await client.put(url, body);
       return this.ok(device, command.capability, command.instance);
     } catch (e) {
       return this.err(device, command, 'DEVICE_UNREACHABLE', (e as Error).message);
     }
+  }
+
+  override async shutdown(): Promise<void> {
+    this.httpByBridge.clear();
   }
 }
 
@@ -222,17 +280,37 @@ function buildHueCaps(meta: HueMeta, state: HueLight['state']): Capability[] {
   return caps;
 }
 
-/** Pairing helper для UI. Жмётся кнопка на мосту → POST /api → username. */
+/**
+ * Pairing helper для UI. Жмётся кнопка на мосту → POST /api → username.
+ *
+ * Pre-pairing у нас ещё нет bridge-id, поэтому проверяем cert по факту fetch'а
+ * и возвращаем (username, cert-fingerprint) — caller должен сохранить fingerprint
+ * в creds для последующего pinning'а.
+ */
 export async function hueLinkBridge(
   bridgeIp: string,
   deviceType = 'smarthome-hub',
-): Promise<string> {
+): Promise<{ username: string; certFingerprint: string | null }> {
+  let observedFingerprint: string | null = null;
+  const agent = new https.Agent({
+    rejectUnauthorized: false,
+    checkServerIdentity: (_h, cert) => {
+      observedFingerprint = fingerprintFromCert(cert);
+      return undefined;
+    },
+  });
   const r = await axios.post<
     Array<{ success?: { username: string }; error?: { description: string } }>
-  >(`http://${bridgeIp}/api`, { devicetype: deviceType }, { timeout: HUE_HTTP_TIMEOUT_MS });
+  >(
+    `https://${bridgeIp}/api`,
+    { devicetype: deviceType },
+    { timeout: HUE_HTTP_TIMEOUT_MS, httpsAgent: agent },
+  );
   const item = r.data[0];
   if (item?.error) throw new Error(item.error.description);
-  if (item?.success?.username) return item.success.username;
+  if (item?.success?.username) {
+    return { username: item.success.username, certFingerprint: observedFingerprint };
+  }
   throw new Error('Hue: empty response');
 }
 

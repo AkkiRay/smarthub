@@ -45,13 +45,24 @@ export const aqaraCloudModule: DriverModule = {
       region?: 'cn' | 'usa' | 'eu' | 'sg' | 'kr' | 'ru';
     };
     if (!c.appId || !c.appKey || !c.keyId || !c.accessToken) return null;
-    return new AqaraCloudDriver({
-      appId: c.appId,
-      appKey: c.appKey,
-      keyId: c.keyId,
-      accessToken: c.accessToken,
-      refreshToken: c.refreshToken,
-      region: c.region ?? 'eu',
-    });
+    return new AqaraCloudDriver(
+      {
+        appId: c.appId,
+        appKey: c.appKey,
+        keyId: c.keyId,
+        accessToken: c.accessToken,
+        refreshToken: c.refreshToken,
+        region: c.region ?? 'eu',
+      },
+      // Persist refreshed tokens — Aqara open-api ротирует и at, и rt на каждый refresh.
+      ({ accessToken, refreshToken }) => {
+        const existing = settings.getDriverCredentials('aqara-cloud');
+        settings.setDriverCredentials('aqara-cloud', {
+          ...existing,
+          accessToken,
+          ...(refreshToken ? { refreshToken } : {}),
+        } as never);
+      },
+    );
   },
 };

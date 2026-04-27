@@ -33,6 +33,13 @@ const STATE_URL = (skillId: string): string =>
 const DISCOVERY_URL = (skillId: string): string =>
   `https://dialogs.yandex.net/api/v1/skills/${skillId}/callback/discovery`;
 
+/**
+ * Cap на pending-Map. Если flush() висит (cloudflared down, сеть упала), enqueue
+ * продолжает копить — без cap'а на час offline получаем тысячи Device-объектов
+ * в памяти. При превышении дроп'аем самый старый (FIFO).
+ */
+const MAX_PENDING = 256;
+
 export interface StatePusherDeps {
   /** Получить актуальный config (skillId, dialogsOauthToken). null если не настроено. */
   getConfig: () => { skillId: string; oauthToken: string } | null;
@@ -57,6 +64,13 @@ export class StatePusher {
   /** Помечает устройство как изменённое — пуш уйдёт после debounce-окна. */
   enqueue(device: Device): void {
     this.pending.set(device.id, device);
+    // Map.set replace'ит существующий ключ → размер растёт только если разные
+    // device-id. При size > MAX_PENDING дроп'аем самый старый (FIFO через
+    // delete + re-set: V8 Map preserves insertion order).
+    if (this.pending.size > MAX_PENDING) {
+      const oldestKey = this.pending.keys().next().value;
+      if (oldestKey !== undefined) this.pending.delete(oldestKey);
+    }
     if (!this.timer) {
       this.timer = setTimeout(() => void this.flush(), DEBOUNCE_MS);
     }

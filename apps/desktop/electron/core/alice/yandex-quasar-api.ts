@@ -11,6 +11,7 @@
  */
 
 import axios, { type AxiosInstance } from 'axios';
+import { createHash } from 'node:crypto';
 import {
   ALICE_TIMEOUT,
   QUASAR_API_BASE_URL,
@@ -116,4 +117,23 @@ function decodeJwtExp(jwt: string): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * SHA-256 fingerprint cert'а в формате `XX:YY:...` (как Node tls.getPeerCertificate
+ * возвращает в `fingerprint256`). Подаётся на yandex-station-client TOFU pin.
+ *
+ * Колонки Алисы используют self-signed cert; cloud-side `server_certificate`
+ * — единственный надёжный канал получения отпечатка ДО первого WS-handshake'а.
+ * Pin'инг через cloud закрывает MITM в LAN'е (TOFU имеет TOCTOU-окно при
+ * первом подключении).
+ */
+export function fingerprintFromPem(pem: string | undefined | null): string | null {
+  if (typeof pem !== 'string') return null;
+  const match = pem.match(/-----BEGIN CERTIFICATE-----([\s\S]+?)-----END CERTIFICATE-----/);
+  if (!match) return null;
+  const der = Buffer.from(match[1]!.replace(/\s+/g, ''), 'base64');
+  const hash = createHash('sha256').update(der).digest('hex').toUpperCase();
+  // Node возвращает в формате `XX:YY:...` — приводим к нему для прямого сравнения.
+  return hash.match(/.{2}/g)!.join(':');
 }

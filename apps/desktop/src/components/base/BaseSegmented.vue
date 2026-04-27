@@ -132,12 +132,12 @@ onBeforeUnmount(() => resizeObs?.disconnect());
     bottom: var(--space-1);
     left: 0;
     border-radius: var(--radius-pill);
-    background: var(--color-brand-violet);
-    box-shadow: 0 6px 18px rgba(var(--color-brand-violet-rgb), 0.36);
+    background: var(--gradient-brand-soft);
+    border: var(--border-thin) solid rgba(var(--color-brand-violet-rgb), 0.32);
+    box-shadow: 0 4px 14px rgba(var(--color-brand-violet-rgb), 0.18);
     z-index: 0;
     pointer-events: none;
     will-change: transform, width;
-    // Initial mount без animation. После `is-ready` — smooth slide.
     transition: none;
 
     &.is-ready {
@@ -158,13 +158,13 @@ onBeforeUnmount(() => resizeObs?.disconnect());
     padding: 0 var(--space-4);
     border: 0;
     background: transparent;
-    color: var(--color-text-secondary);
+    color: var(--color-text-muted);
     font-family: inherit;
     font-size: var(--font-size-small);
-    font-weight: 600;
+    font-weight: 500;
     border-radius: var(--radius-pill);
     cursor: pointer;
-    transition: color var(--dur-medium) var(--ease-out);
+    transition: color var(--dur-fast) var(--ease-out);
     white-space: nowrap;
 
     &:hover:not(.is-active) {
@@ -177,7 +177,8 @@ onBeforeUnmount(() => resizeObs?.disconnect());
     }
 
     &.is-active {
-      color: #fff;
+      color: var(--color-text-primary);
+      font-weight: 600;
     }
   }
 
@@ -189,21 +190,21 @@ onBeforeUnmount(() => resizeObs?.disconnect());
 
   &__count {
     @include numeric-badge(6px);
-    min-width: 20px;
-    height: 18px;
-    border-radius: 9px;
-    background: rgba(255, 255, 255, 0.1);
-    color: currentColor;
-    font-size: 10.5px;
-    font-weight: 700;
+    min-width: 18px;
+    height: 16px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-muted);
+    font-size: 10px;
+    font-weight: 600;
     letter-spacing: 0;
     flex-shrink: 0;
-    transition: background var(--dur-fast) var(--ease-out);
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
   }
 
-  // Active count: прозрачнее, чтобы badge читался поверх pill'а.
   &__item.is-active &__count {
-    background: rgba(255, 255, 255, 0.22);
+    background: rgba(var(--color-brand-violet-rgb), 0.22);
+    color: var(--color-text-primary);
   }
 
   &--sm &__item {

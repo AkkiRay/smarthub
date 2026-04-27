@@ -103,7 +103,7 @@ onBeforeUnmount(() => resizeObs?.disconnect());
   z-index: var(--z-drawer);
   isolation: isolate;
   // Glass + top brand-tint hairline.
-  background: rgba(15, 15, 26, 0.78);
+  background: rgba(var(--color-bg-rgb), 0.78);
   backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturation));
   border-top: 1px solid var(--color-border-subtle);

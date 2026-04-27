@@ -284,7 +284,10 @@ const station = useYandexStationStore();
 const toaster = useToasterStore();
 const root = useTemplateRef<HTMLElement>('root');
 
-const alicesScenarios = computed(() => station.home?.scenarios ?? []);
+// Используем homeFiltered, не home: при нескольких household'ах home содержит
+// сценарии всех домов, кнопка «Запустить» из одного household'а на сценарий
+// другого вернёт 404 от quasar.
+const alicesScenarios = computed(() => station.homeFiltered?.scenarios ?? []);
 const runningId = ref<string | null>(null);
 const togglingId = ref<string | null>(null);
 

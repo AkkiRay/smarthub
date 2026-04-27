@@ -79,6 +79,11 @@ export class TunnelManager extends EventEmitter {
   }
 
   async stop(): Promise<AliceTunnelStatus> {
+    // opts → null до клиринга таймеров, иначе scheduleReconnect, который
+    // уже пошёл setTimeout, может вернуться и spawn'ить новый cloudflared
+    // после явного stop().
+    this.opts = null;
+    this.retryCount = 0;
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
@@ -136,7 +141,9 @@ export class TunnelManager extends EventEmitter {
       ? ['tunnel', 'run', opts.customDomain]
       : ['tunnel', '--url', `http://127.0.0.1:${opts.localPort}`, '--no-autoupdate'];
 
-    log.info(`[tunnel] spawning cloudflared ${args.join(' ')}`);
+    // Безопасное логирование — если в будущем добавится `--token <jwt>` или
+    // `--credentials-file` (кастомные args от юзера), они не должны утечь в main.log.
+    log.info(`[tunnel] spawning cloudflared ${redactArgs(args).join(' ')}`);
 
     return new Promise((resolve) => {
       const child = spawn(binary, args, {
@@ -263,6 +270,16 @@ export class TunnelManager extends EventEmitter {
 
 function defaultCloudflaredBinary(): string {
   return process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared';
+}
+
+/** Маскирует значения секретных флагов cloudflared перед логированием. */
+const SECRET_FLAGS = new Set(['--token', '-t', '--credentials-file', '--cred-file']);
+function redactArgs(args: string[]): string[] {
+  const out = [...args];
+  for (let i = 0; i < out.length - 1; i++) {
+    if (SECRET_FLAGS.has(out[i]!)) out[i + 1] = '***';
+  }
+  return out;
 }
 
 function isExecutableAccessible(binary: string): boolean {

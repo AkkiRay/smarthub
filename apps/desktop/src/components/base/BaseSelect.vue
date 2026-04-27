@@ -385,7 +385,7 @@ void root;
   list-style: none;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(31, 33, 56, 0.96);
+  background: rgba(var(--color-bg-elevated-rgb), 0.96);
   backdrop-filter: blur(28px) saturate(150%);
   -webkit-backdrop-filter: blur(28px) saturate(150%);
   box-shadow:

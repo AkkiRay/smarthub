@@ -23,6 +23,13 @@ export function safeOpenExternal(rawUrl: unknown): boolean {
     log.warn(`shell.openExternal blocked: scheme=${parsed.protocol}`);
     return false;
   }
+  // Strip query/hash из mailto: — Outlook исторически парсил `?attach=` как
+  // путь к файлу, что превращает mailto: в local-file include для пользователя,
+  // кликнувшего «Написать в поддержку».
+  if (parsed.protocol === 'mailto:') {
+    parsed.search = '';
+    parsed.hash = '';
+  }
   void shell.openExternal(parsed.toString());
   return true;
 }

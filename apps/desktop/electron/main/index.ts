@@ -46,32 +46,20 @@ import { loadRuntimeEnv } from '@main/env-loader.js';
 import { resolveAppIcon } from '@main/app-icon.js';
 import type { Platform } from '@smarthome/shared';
 
-// КРИТИЧНО: setName ДО `app.getPath('userData')` — иначе Electron зафиксирует
-// путь по `name` из package.json (`@smarthome/desktop`) и не пере-резолвит.
+// setName до `app.getPath('userData')` — Electron фиксирует путь по `name` при первом обращении.
 app.setName('SmartHome Hub');
 
-// AppUserModelId обязателен на Windows для нормальных уведомлений и taskbar-grouping.
-// Должен совпадать с `build.appId` в package.json.
+// AppUserModelId на Windows для notifications и taskbar-grouping; совпадает с `build.appId`.
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.smarthome.hub');
 }
 
-// GPU / render-флаги — обязательно ДО app.whenReady(): Chromium читает их при
-// инициализации composit'а, поздняя установка молча игнорируется.
-//
-// Зачем каждый:
-//   - disable-features=CalculateNativeWinOcclusion (Windows): Chromium тротлит
-//     rendering когда считает окно перекрытым; ложные срабатывания тормозят
-//     WebGL и GSAP rAF до 1Hz при работе других окон поверх.
-//   - disable-backgrounding-occluded-windows / disable-renderer-backgrounding:
-//     рекдер-процесс не понижается в приоритете при потере фокуса (для hub'а
-//     в трее это критично — иначе orb «замерзает» когда пользователь в браузере).
-//   - enable-gpu-rasterization + enable-zero-copy: WebGL и compositor-кадры
-//     обрабатываются на GPU без промежуточного копирования через shared mem.
-//   - ignore-gpu-blocklist: на старых драйверах Chromium иногда выключает
-//     hardware-acceleration по консервативному списку — для desktop'а смело
-//     включаем (фоллбэк ANGLE остаётся).
-//   - use-angle=d3d11 (Windows): нативный D3D11 backend стабильнее OpenGL.
+// Chromium command-line флаги. Применяются до app.whenReady():
+//   - disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling — отключение occlusion-throttle и wake-up throttle.
+//   - disable-backgrounding-occluded-windows / disable-renderer-backgrounding — renderer-process сохраняет приоритет при потере focus.
+//   - enable-gpu-rasterization + enable-zero-copy — GPU compositor без промежуточных copy через shared memory.
+//   - ignore-gpu-blocklist — hardware-acceleration на драйверах из консервативного blocklist.
+//   - use-angle=d3d11 (Windows) — D3D11 backend для ANGLE.
 app.commandLine.appendSwitch(
   'disable-features',
   'CalculateNativeWinOcclusion,IntensiveWakeUpThrottling',
@@ -85,25 +73,23 @@ if (process.platform === 'win32') {
   app.commandLine.appendSwitch('use-angle', 'd3d11');
 }
 
-// ПОСЛЕ setName: использует app.getPath('userData') для приоритетного кандидата.
+// Использует app.getPath('userData') для приоритетного кандидата env-файла.
 const _envLoad = loadRuntimeEnv(app);
 
-// Локальная константа вместо process.env['APP_ROOT'] — с noUncheckedIndexedAccess
-// последняя имеет тип `string | undefined`.
+// APP_ROOT как локальная константа: с noUncheckedIndexedAccess process.env[k] имеет тип `string | undefined`.
 const APP_ROOT = join(__dirname, '..', '..');
 process.env['APP_ROOT'] = APP_ROOT;
 
-// IS_DEV строго через `app.isPackaged` — env-flag из `userData/.env` не должен
-// включать dev-CSP / DevTools в production.
+// IS_DEV определяется через `app.isPackaged`, не через env-flag.
 const IS_DEV = !app.isPackaged;
 const VITE_DEV_SERVER_URL = IS_DEV ? process.env['VITE_DEV_SERVER_URL'] : undefined;
 const RENDERER_DIST = join(APP_ROOT, 'dist');
 const PRELOAD = join(__dirname, '..', 'preload', 'index.js');
 
-// Single-instance lock: иначе SQLite WAL побьётся и multicast-сокеты подерутся за порт.
+// Single-instance lock: SQLite WAL и multicast-сокеты разделяются между процессами одного приложения.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  // log ещё не инициализирован — пишем напрямую в stdout.
+  // log ещё не инициализирован — stdout напрямую.
   // eslint-disable-next-line no-console
   console.warn('[SmartHome Hub] Already running — focusing existing window and exiting.');
   app.quit();
@@ -124,7 +110,7 @@ log.info(
   `Config: LOG_LEVEL=${LOG_LEVEL} | mock=${process.env['HUB_ENABLE_MOCK'] ?? 'false'} | discovery=${process.env['HUB_DISCOVERY_INTERVAL_MS'] ?? '15000'}ms | poll=${process.env['HUB_POLL_INTERVAL_MS'] ?? '30000'}ms`,
 );
 
-// В Electron unhandled rejection молчаливые → production-вылет = чёрный экран без причины.
+// Логирование uncaught exceptions и unhandled rejections.
 process.on('uncaughtException', (err) => {
   log.error('uncaughtException', err);
 });
@@ -158,15 +144,13 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
-    // Поддержка mobile-first: 360px (iPhone SE портрет) — минимум для удобной работы,
-    // компактнее уже не имеет смысла. UI ниже 720 переходит в drawer-режим
-    // sidebar'а. Высота 480 — landscape phone.
+    // Минимальный viewport: 360x480 для mobile-портрета и landscape phone.
     minWidth: 360,
     minHeight: 480,
     show: false,
     title: 'SmartHome Hub',
     icon,
-    // Custom titlebar; на macOS hiddenInset чтобы native traffic-lights остались.
+    // Custom titlebar; macOS — hiddenInset для native traffic-lights.
     frame: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     backgroundColor: '#0F0F1A',
@@ -174,21 +158,21 @@ async function createWindow(): Promise<void> {
       preload: PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
-      // sandbox: false — переход на true возможен после аудита preload-импортов.
-      sandbox: false,
+      // sandbox: true бесплатно повышает изоляцию — preload использует только
+      // electron (contextBridge/ipcRenderer), что разрешено sandbox-policy'ей.
+      // RCE в renderer'е не эскалирует в host-process.
+      sandbox: true,
       webSecurity: true,
       spellcheck: false,
-      // Весь network — через main process, единая точка контроля доступа.
+      // Network-доступ из renderer ходит через main process IPC.
       allowRunningInsecureContent: false,
       webviewTag: false,
-      // Hub-resident в трее: пользователь сворачивает окно, GSAP-таймлайн в
-      // Welcome / Alice продолжает крутиться без замедления. Дефолтно Chromium
-      // дропает RAF до 1Hz для unfocused windows.
+      // RAF не дропается до 1Hz при unfocused window — orb и GSAP-таймлайны держат frame-rate.
       backgroundThrottling: false,
     },
   });
 
-  // Defence-in-depth: deny attach даже если webviewTag окажется включён.
+  // Deny attach для webview-тега независимо от webviewTag-флага.
   mainWindow.webContents.on('will-attach-webview', (event) => {
     event.preventDefault();
     log.warn('main-window: blocked will-attach-webview');
@@ -214,8 +198,7 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' };
   });
 
-  // Renderer навигирует только внутри своего bundle / vite-dev-сервера.
-  // Origin-точное сравнение (не startsWith) — `http://localhost:5173.evil.com` не пройдёт.
+  // Renderer-навигация ограничена origin'ом bundle / vite-dev-сервера. Origin-точное сравнение.
   mainWindow.webContents.on('will-navigate', (event, url) => {
     let allowed = false;
     try {
@@ -255,8 +238,7 @@ async function bootstrap(): Promise<SmartHomeHub> {
   const yandexStation = createYandexStationClient();
   const yandexStationDiscovery = createYandexStationDiscovery();
 
-  // AliceBridge инстанцируется ДО hub'а: он не зависит от него, но hub держит на него ref.
-  // Колбэки замкнуты лениво на deviceRegistry/sceneService → не зависят от hub-фасада.
+  // AliceBridge инстанцируется до hub'а; колбэки замкнуты на deviceRegistry/sceneService.
   const aliceBridge = new AliceBridge({
     settings,
     listDevices: () => deviceRegistry.list(),
@@ -269,7 +251,7 @@ async function bootstrap(): Promise<SmartHomeHub> {
 
   const created = createSmartHomeHub({
     appVersion: app.getVersion(),
-    // process.platform содержит экзотические значения (android/cygwin/...) — сужаем до Platform.
+    // process.platform сужается до Platform (исключает android/cygwin/...).
     platform: process.platform as Platform,
     settings,
     deviceStore,
@@ -315,13 +297,13 @@ app.whenReady().then(async () => {
     });
     await createWindow();
 
-    // Tray ПОСЛЕ окна, чтобы getMainWindow() уже возвращал инстанс.
+    // Tray создаётся после окна — getMainWindow() возвращает инстанс.
     tray = createTray({
       getMainWindow: () => mainWindow,
       showMainWindow,
       triggerDiscovery: async () => {
         await showMainWindow();
-        // Канал общий с IpcEvents — renderer подписывается типизированно через smarthome.events.on().
+        // IpcEvents-канал; renderer подписывается через smarthome.events.on().
         mainWindow?.webContents.send('event:tray:navigate', { path: '/discovery?scan=1' });
       },
     });
@@ -341,8 +323,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  // Hub-resident: остаёмся в трее, выход только через «Выйти» в меню.
-  // На macOS dock-convention — тоже не квитим.
+  // Hub-resident: процесс остаётся в трее, выход через «Выйти» в tray-меню.
   if (!tray) app.quit();
 });
 
@@ -352,7 +333,10 @@ app.on('activate', () => {
   }
 });
 
-// Таймаут — чтобы не висеть в трее если driver-сокет не закрылся.
+// Graceful shutdown с 8-секундным timeout-protection.
+// Cloud-драйверы (Aqara/Sber/eWeLink) могут держать HTTP-коннект до 6с при
+// прогрессирующем 5xx; 5с давало преждевременный timeout посреди execute()
+// → state в SQLite/storage оставался несогласованный.
 let shuttingDown = false;
 app.on('before-quit', async (event) => {
   if (shuttingDown || !hub) return;
@@ -360,17 +344,20 @@ app.on('before-quit', async (event) => {
   shuttingDown = true;
   log.info('App shutdown — graceful');
   try {
-    await Promise.race([hub.shutdown(), new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    await Promise.race([
+      hub.shutdown(),
+      new Promise((resolve) => setTimeout(resolve, 8_000)),
+    ]);
   } catch (e) {
     log.warn(`shutdown timeout: ${(e as Error).message}`);
   }
-  // Tray уничтожаем ДО app.exit — иначе на Windows иконка висит в трее до hover'а.
+  // Tray.destroy() до app.exit — на Windows иначе icon остаётся в трее до hover'а.
   tray?.destroy();
   tray = null;
   app.exit(0);
 });
 
-// Window-controls для frameless titlebar.
+// IPC-handlers для window-controls frameless titlebar.
 ipcMain.handle('window:minimize', () => mainWindow?.minimize());
 ipcMain.handle('window:toggle-maximize', () => {
   if (!mainWindow) return;

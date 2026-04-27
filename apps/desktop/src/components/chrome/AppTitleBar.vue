@@ -167,7 +167,7 @@ onBeforeUnmount(() => {
   grid-template-columns: auto 1fr auto;
   align-items: stretch;
   height: var(--titlebar-height);
-  background: rgba(15, 15, 26, 0.78);
+  background: rgba(var(--color-bg-rgb), 0.78);
   backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturation));
   // Separator строится разницей яркости + blur, без border-bottom.
@@ -177,7 +177,7 @@ onBeforeUnmount(() => {
 
   // Window blur: dimmed bg.
   &--blurred {
-    background: rgba(15, 15, 26, 0.55);
+    background: rgba(var(--color-bg-rgb), 0.55);
     .title-bar__wordmark-name {
       color: var(--color-text-secondary);
     }

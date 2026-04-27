@@ -34,6 +34,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { randomBytes } from 'node:crypto';
 import log from 'electron-log/main.js';
 import type {
   AliceSkillConfig,
@@ -46,6 +47,7 @@ import type {
 import { buildExposedDeviceList, isSceneYandexId, sceneIdFromYandexId } from './device-mapper.js';
 import { TokenIssuer } from './token-issuer.js';
 import type { SettingsStore } from '../../storage/settings-store.js';
+import { isYandexWebhookSource, noteWebhookRequestId } from './webhook-trust.js';
 
 const RESPONSE_BUDGET_MS = 2_500; // Алиса даёт 3с total → оставляем 500мс на сеть
 
@@ -55,6 +57,27 @@ const ALLOWED_REDIRECT_PREFIXES = [
   'https://social.yandex.ru/',
   'https://dialogs.yandex.ru/',
 ];
+
+/** TTL HTML-формы /oauth/authorize (CSRF-nonce живёт ровно столько). */
+const AUTHORIZE_FORM_TTL_MS = 10 * 60 * 1000;
+/** Максимум одновременно «висящих» CSRF-nonce'ов. */
+const AUTHORIZE_FORM_MAX = 64;
+
+/** Hardening-заголовки HTML/JSON-ответов. */
+function applySecurityHeaders(res: ServerResponse, kind: 'html' | 'json'): void {
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'interest-cohort=()');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  if (kind === 'html') {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    );
+  }
+}
 
 function isAllowedRedirectUri(uri: string): boolean {
   if (typeof uri !== 'string' || uri.length === 0 || uri.length > 1024) return false;
@@ -90,13 +113,51 @@ export interface WebhookServerDeps {
   onActivity?: (event: WebhookActivityEvent) => void;
 }
 
+interface AuthorizeFormState {
+  clientId: string;
+  redirectUri: string;
+  state: string;
+  expiresAt: number;
+}
+
 export class SkillWebhookServer {
   private server: Server | null = null;
   private port = 0;
   private readonly tokens: TokenIssuer;
+  /** CSRF-nonce → snapshot полей /authorize. Только эти nonce принимаются POST-ом. */
+  private readonly authorizeForms = new Map<string, AuthorizeFormState>();
 
   constructor(private readonly deps: WebhookServerDeps) {
     this.tokens = new TokenIssuer(deps.settings);
+  }
+
+  private issueAuthorizeNonce(state: Omit<AuthorizeFormState, 'expiresAt'>): string {
+    const nonce = randomBytes(24).toString('base64url');
+    this.pruneAuthorizeForms();
+    this.authorizeForms.set(nonce, { ...state, expiresAt: Date.now() + AUTHORIZE_FORM_TTL_MS });
+    return nonce;
+  }
+
+  private consumeAuthorizeNonce(nonce: string): AuthorizeFormState | null {
+    if (typeof nonce !== 'string' || nonce.length === 0) return null;
+    const record = this.authorizeForms.get(nonce);
+    if (!record) return null;
+    this.authorizeForms.delete(nonce);
+    if (record.expiresAt < Date.now()) return null;
+    return record;
+  }
+
+  private pruneAuthorizeForms(): void {
+    const now = Date.now();
+    for (const [k, v] of this.authorizeForms) {
+      if (v.expiresAt < now) this.authorizeForms.delete(k);
+    }
+    if (this.authorizeForms.size <= AUTHORIZE_FORM_MAX) return;
+    const sorted = [...this.authorizeForms.entries()].sort(
+      (a, b) => a[1].expiresAt - b[1].expiresAt,
+    );
+    const drop = sorted.length - AUTHORIZE_FORM_MAX;
+    for (let i = 0; i < drop; i++) this.authorizeForms.delete(sorted[i]![0]);
   }
 
   async start(): Promise<{ port: number }> {
@@ -148,12 +209,11 @@ export class SkillWebhookServer {
     const path = url.pathname;
     const method = req.method ?? 'GET';
 
-    // CORS-preflight только для OAuth-страницы; webhook'и Алисы не используют CORS.
+    // CORS не нужен: Yandex шлёт server-to-server, OAuth-form — same-origin.
+    // На preflight отвечаем без Access-Control-Allow-Origin — браузер блокирует cross-origin сам.
     if (method === 'OPTIONS') {
       res.statusCode = 204;
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Request-Id');
+      applySecurityHeaders(res, 'json');
       res.end();
       return;
     }
@@ -211,7 +271,10 @@ export class SkillWebhookServer {
     res.statusCode = errors.length ? 400 : 200;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
-    res.end(renderAuthorizePage({ clientId, redirectUri, state, errors }));
+    applySecurityHeaders(res, 'html');
+    // CSRF-nonce выдаётся ТОЛЬКО при отсутствии ошибок — иначе формы нет.
+    const nonce = errors.length ? '' : this.issueAuthorizeNonce({ clientId, redirectUri, state });
+    res.end(renderAuthorizePage({ clientId, redirectUri, state, errors, nonce }));
   }
 
   private async handleAuthorizePost(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -221,28 +284,36 @@ export class SkillWebhookServer {
     const clientId = body.get('client_id') ?? '';
     const redirectUri = body.get('redirect_uri') ?? '';
     const state = body.get('state') ?? '';
+    const nonce = body.get('csrf_nonce') ?? '';
+
+    const reject = (status: number, error: string): void => {
+      res.statusCode = status;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      applySecurityHeaders(res, 'html');
+      res.end(renderAuthorizePage({ clientId, redirectUri, state, errors: [error], nonce: '' }));
+    };
+
+    // CSRF-защита: nonce должен матчить запись, выданную текущим GET'ом.
+    // Это блокирует form-submit'ы из произвольных origin'ов даже при weak-CORS прокси.
+    const formState = this.consumeAuthorizeNonce(nonce);
+    if (!formState) {
+      return reject(403, 'Сессия привязки устарела. Обновите страницу и подтвердите снова.');
+    }
+    // Сверяем поля с тем, что выдавали в GET — иначе attacker мог бы подменить
+    // redirect_uri/state на свои, оставив выданный nonce.
+    if (
+      formState.clientId !== clientId ||
+      formState.redirectUri !== redirectUri ||
+      formState.state !== state
+    ) {
+      return reject(403, 'Параметры формы изменились — отказ.');
+    }
 
     if (!config || clientId !== config.oauthClientId) {
-      res.statusCode = 400;
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.end(
-        renderAuthorizePage({ clientId, redirectUri, state, errors: ['Неверный client_id.'] }),
-      );
-      return;
+      return reject(400, 'Неверный client_id.');
     }
     if (!isAllowedRedirectUri(redirectUri)) {
-      // Никогда не делаем 302 на произвольный URL.
-      res.statusCode = 400;
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.end(
-        renderAuthorizePage({
-          clientId,
-          redirectUri,
-          state,
-          errors: ['redirect_uri вне allow-list — отказ в редиректе.'],
-        }),
-      );
-      return;
+      return reject(400, 'redirect_uri вне allow-list — отказ в редиректе.');
     }
 
     const internalUserId = this.deps.settings.get('hubId');
@@ -254,6 +325,7 @@ export class SkillWebhookServer {
 
     res.statusCode = 302;
     res.setHeader('Location', target.toString());
+    applySecurityHeaders(res, 'json');
     res.end();
   }
 
@@ -270,11 +342,17 @@ export class SkillWebhookServer {
     const fail = (status: number, error: string, description?: string): void => {
       res.statusCode = status;
       res.setHeader('Content-Type', 'application/json');
+      applySecurityHeaders(res, 'json');
       res.end(JSON.stringify({ error, error_description: description }));
     };
 
     if (!config) return fail(400, 'invalid_client', 'Skill not configured');
-    if (clientId !== config.oauthClientId || clientSecret !== config.oauthClientSecret) {
+    // Constant-time comparison: байтовые `===` пускают timing-side-channel,
+    // через который cloud-attacker за серию запросов извлекает clientSecret.
+    if (
+      !constantTimeEqualString(clientId, config.oauthClientId) ||
+      !constantTimeEqualString(clientSecret, config.oauthClientSecret)
+    ) {
       return fail(401, 'invalid_client');
     }
 
@@ -327,6 +405,10 @@ export class SkillWebhookServer {
   // ============== Webhook helpers ==============
 
   private authorize(req: IncomingMessage): { internalUserId: string } | null {
+    if (!isYandexWebhookSource(req)) {
+      log.warn('[skill-webhook] rejected request: missing or invalid trust header');
+      return null;
+    }
     const header = req.headers['authorization'];
     if (typeof header !== 'string' || !header.startsWith('Bearer ')) return null;
     const token = header.slice('Bearer '.length).trim();
@@ -340,9 +422,21 @@ export class SkillWebhookServer {
     return typeof id === 'string' ? id : '';
   }
 
+  /**
+   * Replay-protection: возвращает true если request_id уже видели в TTL-окне.
+   * Action handler должен пропускать обработку с 200 + cached-style ответом
+   * (Yandex повторяет ровно при 5xx, но мы перестраховываемся).
+   */
+  private isReplayedRequest(req: IncomingMessage): boolean {
+    const id = this.requestId(req);
+    if (!id) return false;
+    return !noteWebhookRequestId(id);
+  }
+
   private writeJson(res: ServerResponse, status: number, payload: unknown): void {
     res.statusCode = status;
     res.setHeader('Content-Type', 'application/json');
+    applySecurityHeaders(res, 'json');
     res.end(JSON.stringify(payload));
   }
 
@@ -379,6 +473,12 @@ export class SkillWebhookServer {
     if (!this.authorize(req)) {
       this.writeJson(res, 401, { error: 'unauthorized' });
       this.reportActivity('unlink', false, startedAt);
+      return;
+    }
+    // Unlink — non-idempotent. Повторный вызов после 5xx должен no-op'нуть.
+    if (this.isReplayedRequest(req)) {
+      log.info(`[skill-webhook] dropped replayed unlink request_id=${requestId}`);
+      this.writeJson(res, 200, { request_id: requestId });
       return;
     }
     this.tokens.revokeAll();
@@ -473,6 +573,14 @@ export class SkillWebhookServer {
       return;
     }
     const requestId = this.requestId(req);
+    // Action — non-idempotent (включить таймер, открыть штору).
+    // Дубликат с тем же request_id отдаём «успехом» без повторного вызова executeCommand.
+    if (this.isReplayedRequest(req)) {
+      log.info(`[skill-webhook] dropped replayed action request_id=${requestId}`);
+      this.writeJson(res, 200, { request_id: requestId, payload: { devices: [] } });
+      this.reportActivity('action', true, startedAt);
+      return;
+    }
     interface ActionRequest {
       payload?: {
         devices?: Array<{
@@ -600,17 +708,35 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
+    let settled = false;
+    const fail = (err: Error): void => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
     req.on('data', (chunk: Buffer) => {
+      if (settled) return;
       total += chunk.length;
-      // 256KiB — Алиса сама не шлёт больше; защита от случайного flood.
+      // 256KiB — Алиса сама не шлёт больше; защита от случайного flood и slow-loris.
       if (total > 256 * 1024) {
-        req.destroy(new Error('payload too large'));
+        const err = new Error('payload too large');
+        try {
+          req.destroy(err);
+        } catch {
+          /* socket already gone */
+        }
+        fail(err);
         return;
       }
       chunks.push(chunk);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    req.on('end', () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks));
+    });
+    req.on('error', fail);
+    req.on('close', () => fail(new Error('socket closed before body completed')));
   });
 }
 
@@ -631,16 +757,19 @@ function renderAuthorizePage(args: {
   redirectUri: string;
   state: string;
   errors: string[];
+  /** CSRF-nonce из issueAuthorizeNonce. Без него POST отбрасывается. */
+  nonce: string;
 }): string {
   const errorBlock = args.errors.length
     ? `<div class="errors">${args.errors.map((e) => `<p>⚠ ${escapeHtml(e)}</p>`).join('')}</div>`
     : '';
-  const formBlock = args.errors.length
+  const formBlock = args.errors.length || !args.nonce
     ? ''
-    : `<form method="POST" action="/oauth/authorize">
+    : `<form method="POST" action="/oauth/authorize" autocomplete="off">
          <input type="hidden" name="client_id" value="${escapeHtml(args.clientId)}" />
          <input type="hidden" name="redirect_uri" value="${escapeHtml(args.redirectUri)}" />
          <input type="hidden" name="state" value="${escapeHtml(args.state)}" />
+         <input type="hidden" name="csrf_nonce" value="${escapeHtml(args.nonce)}" />
          <button type="submit">Привязать Алису к моему хабу</button>
        </form>`;
   return `<!doctype html>
@@ -680,4 +809,18 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
   );
+}
+
+/** Constant-time string compare (без раннего выхода по длине, отличие маскируется). */
+function constantTimeEqualString(a: string, b: string): boolean {
+  const la = a.length;
+  const lb = b.length;
+  const max = Math.max(la, lb);
+  let diff = la ^ lb;
+  for (let i = 0; i < max; i++) {
+    const ca = i < la ? a.charCodeAt(i) : 0;
+    const cb = i < lb ? b.charCodeAt(i) : 0;
+    diff |= ca ^ cb;
+  }
+  return diff === 0;
 }

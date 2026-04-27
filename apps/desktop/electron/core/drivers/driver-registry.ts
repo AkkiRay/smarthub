@@ -116,8 +116,11 @@ export function createDriverRegistry(deps: { settings: SettingsStore }) {
 
   return {
     async init(): Promise<void> {
-      // Параллельная init — драйверы независимы, последовательная съедает ~2-3s старта.
-      await Promise.all(DRIVER_MODULES.map(initOne));
+      // Параллельная init с лимитом 4 — драйверы независимы, но full-Promise.all даёт
+      // burst из ~30 одновременных HTTP/MQTT/SSDP-сокетов (Hue + Tuya + MQTT + cloud-rest).
+      // На медленной сети это даёт каскад timeout'ов и DNS-флуд.
+      const limit = (await import('p-limit')).default(4);
+      await Promise.all(DRIVER_MODULES.map((m) => limit(() => initOne(m))));
       log.info(`DriverRegistry: ${drivers.size}/${DRIVER_MODULES.length} drivers active`);
     },
 

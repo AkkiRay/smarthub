@@ -39,7 +39,9 @@ function lockdownOauthWindow(win: BrowserWindow): void {
     let allowed = false;
     try {
       const target = new URL(url);
-      allowed = (target.protocol === 'https:' || target.protocol === 'http:') && isYandexHost(target.hostname);
+      // SSL-strip защита: http://-OAuth flow открывает access-token MITM'у
+      // на той же LAN. Yandex давно возвращает HSTS, но блок'ируем явно.
+      allowed = target.protocol === 'https:' && isYandexHost(target.hostname);
     } catch {
       allowed = false;
     }

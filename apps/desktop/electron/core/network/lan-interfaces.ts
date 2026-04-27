@@ -86,7 +86,7 @@ function ipInSubnet(ip: string, address: string, netmask: string): boolean {
 let cache: { value: LanInterface[]; at: number } | null = null;
 const CACHE_TTL_MS = 30_000;
 
-/** Сбросить cache (вызывается при старте discovery cycle и смене Wi-Fi). */
+/** Сбрасывает cache. Вызывается при старте discovery cycle и смене Wi-Fi. */
 export function invalidateInterfaceCache(): void {
   cache = null;
 }

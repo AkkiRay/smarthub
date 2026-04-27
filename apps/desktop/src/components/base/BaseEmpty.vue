@@ -72,7 +72,7 @@ withDefaults(
   color: var(--color-text-secondary);
   border: 1px dashed var(--color-border-soft);
   border-radius: var(--radius-xl);
-  background: rgba(15, 15, 26, 0.32);
+  background: rgba(var(--color-bg-rgb), 0.32);
 }
 
 .empty__glyph {

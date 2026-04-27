@@ -14,7 +14,9 @@ export const shellyModule: DriverModule = {
     maturity: 'stable',
     docsUrl: 'https://shelly-api-docs.shelly.cloud/',
   },
-  async create() {
-    return new ShellyDriver();
+  async create({ settings }) {
+    // Опциональный password — для устройств с auth_en=true (Gen2+).
+    const creds = settings.getDriverCredentials('shelly') as { password?: string };
+    return new ShellyDriver({ ...(creds.password ? { password: creds.password } : {}) });
   },
 };

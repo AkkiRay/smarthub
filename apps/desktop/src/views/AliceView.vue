@@ -1054,35 +1054,52 @@ useViewMount({ scope: root, itemsSelector: '.alice__card' });
 // === Connected success banner ============================================
 .alice__connected {
   position: relative;
-  border-radius: var(--radius-lg);
-  padding: clamp(20px, 2vw, 28px) clamp(20px, 2vw, 32px);
-  background:
-    linear-gradient(
-      120deg,
-      color-mix(in srgb, var(--color-brand-purple) 14%, transparent),
-      color-mix(in srgb, var(--color-brand-pink) 10%, transparent)
-    ),
-    rgba(255, 255, 255, 0.025);
-  border: 1px solid color-mix(in srgb, var(--color-brand-purple) 30%, transparent);
+  border-radius: var(--radius-xl);
+  padding: clamp(22px, 2.2vw, 32px);
+  background: var(--color-bg-surface);
+  border: var(--border-thin) solid var(--color-border-subtle);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: clamp(20px, 2.4vw, 36px);
   overflow: hidden;
+  isolation: isolate;
+  box-shadow: 0 18px 48px -24px rgba(0, 0, 0, 0.45);
 
+  // Animated brand accent — top hairline, тонкий gradient flow.
   &::before {
     content: '';
     position: absolute;
-    inset: -40% -10% auto auto;
-    width: 320px;
-    height: 320px;
-    background: radial-gradient(
-      circle,
-      color-mix(in srgb, var(--color-brand-purple) 22%, transparent),
-      transparent 60%
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(var(--color-brand-violet-rgb), 0.5) 25%,
+      rgba(var(--color-brand-pink-rgb), 0.6) 55%,
+      rgba(var(--color-brand-amber-rgb), 0.4) 80%,
+      transparent 100%
     );
     pointer-events: none;
-    filter: blur(20px);
+  }
+
+  // Soft ambient glow в верхнем углу — придаёт глубину без bubble-glass.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -20% -10% auto auto;
+    width: 280px;
+    height: 280px;
+    background: radial-gradient(
+      circle,
+      rgba(var(--color-brand-violet-rgb), 0.12) 0%,
+      transparent 65%
+    );
+    pointer-events: none;
+    filter: blur(24px);
+    z-index: -1;
   }
 
   &-body {

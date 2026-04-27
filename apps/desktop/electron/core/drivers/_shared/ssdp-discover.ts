@@ -117,7 +117,7 @@ export async function ssdpDiscover(opts: SsdpDiscoverOptions): Promise<void> {
             try {
               sock.addMembership(mcastAddr);
             } catch {
-              /* fallback: unicast-ответы всё равно дойдут */
+              /* unicast-ответы доходят без membership */
             }
           }
         } catch (e) {

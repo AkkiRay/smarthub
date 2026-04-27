@@ -56,8 +56,7 @@ export async function browseMdns(opts: BrowseOptions): Promise<MdnsServiceLite[]
   for (const target of targets) {
     let bonjour: Bonjour;
     try {
-      // `interface` отсутствует в типе ServiceConfig, но Bonjour прокидывает
-      // opts в `multicast-dns(opts)`, который понимает `opts.interface`.
+      // `interface` пробрасывается через Bonjour-opts в `multicast-dns(opts)`.
       const ctorOpts = (target.ip ? { interface: target.ip } : {}) as Record<string, unknown>;
       bonjour = new Bonjour(
         ctorOpts as never,

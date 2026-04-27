@@ -27,11 +27,10 @@ function killTweens(): void {
 function startDrift(): void {
   killTweens();
   if (!root.value) return;
-  // off / reduced — никакого drift'а: на reduced backdrop-filter уже выключен в _motion.scss,
-  // плюс animated-translate через blur(140px) даёт реальный hit по FPS на iGPU.
+  // off / reduced — drift отключён.
   if (motionLevel.value === 'off' || motionLevel.value === 'reduced') return;
   const blobs = root.value.querySelectorAll('.aura__blob');
-  // На full — slightly faster + amplified amplitude для «живой» dynamic background.
+  // full — увеличенная амплитуда и speed.
   const amp = motionLevel.value === 'full' ? 1.2 : 1;
   const speed = motionLevel.value === 'full' ? 0.85 : 1;
   blobs.forEach((blob, idx) => {
@@ -49,8 +48,7 @@ function startDrift(): void {
   });
 }
 
-// Реагируем на смену motionLevel в runtime (settings -> кнопка) — тут же стартуем
-// или останавливаем drift, без F5.
+// Runtime-reaction на смену motionLevel: рестарт drift'а без перезагрузки.
 watch(motionLevel, () => startDrift(), { immediate: true, flush: 'post' });
 
 onBeforeUnmount(killTweens);
@@ -65,8 +63,8 @@ onBeforeUnmount(killTweens);
   // z-deep — под app__shell и titlebar.
   z-index: var(--z-deep);
 
-  // Цвета блобов идут из `--aura-blob-*` токенов — темы свапают палитру.
-  // Имена `&--violet/--pink/--blue` остались как «слоты 1/2/3».
+  // Цвета блобов из `--aura-blob-*` токенов; темы свапают палитру.
+  // Имена `&--violet/--pink/--blue` — слоты 1/2/3.
   &__blob {
     position: absolute;
     border-radius: 50%;

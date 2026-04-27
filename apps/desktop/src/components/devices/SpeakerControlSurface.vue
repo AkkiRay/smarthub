@@ -689,13 +689,15 @@ const timerCommands: QuickCommand[] = [
   { label: 'Будильник на 7', icon: 'clock', text: 'поставь будильник на 7 утра' },
 ];
 
+// Yandex station eq presets через voice request: префикс «включи эквалайзер»
+// требуется для распознавания, иначе station отвечает «не понимаю».
 const eqCommands: QuickCommand[] = [
-  { label: 'Бас', icon: 'equalizer', text: 'эквалайзер бас' },
-  { label: 'Вокал', icon: 'equalizer', text: 'эквалайзер вокал' },
-  { label: 'Поп', icon: 'equalizer', text: 'эквалайзер поп' },
-  { label: 'Рок', icon: 'equalizer', text: 'эквалайзер рок' },
-  { label: 'Ночь', icon: 'equalizer', text: 'эквалайзер ночь' },
-  { label: 'Сбросить', icon: 'refresh', text: 'сбрось эквалайзер' },
+  { label: 'Бас', icon: 'equalizer', text: 'включи эквалайзер бас' },
+  { label: 'Вокал', icon: 'equalizer', text: 'включи эквалайзер вокал' },
+  { label: 'Поп', icon: 'equalizer', text: 'включи эквалайзер поп' },
+  { label: 'Рок', icon: 'equalizer', text: 'включи эквалайзер рок' },
+  { label: 'Ночь', icon: 'equalizer', text: 'включи эквалайзер ночь' },
+  { label: 'Сбросить', icon: 'refresh', text: 'выключи эквалайзер' },
 ];
 
 // ---- State + actions -------------------------------------------------------
@@ -1106,51 +1108,78 @@ async function onYandexMusicVoice(): Promise<void> {
 // =============================================================================
 .speaker-card {
   container-type: inline-size;
+  position: relative;
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.022);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--color-bg-surface);
+  border: var(--border-thin) solid var(--color-border-subtle);
   padding: clamp(20px, 2vw, 28px) clamp(20px, 2vw, 30px);
   display: flex;
   flex-direction: column;
   gap: clamp(14px, 1.4vw, 20px);
+  overflow: hidden;
+  isolation: isolate;
   transition:
-    background-color 280ms var(--ease-out),
-    border-color 280ms var(--ease-out);
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+
+  // Brand accent hairline сверху — flat plane без bubble-glass.
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(var(--color-brand-violet-rgb), 0.32) 30%,
+      rgba(var(--color-brand-pink-rgb), 0.28) 70%,
+      transparent 100%
+    );
+    pointer-events: none;
+    opacity: 0.7;
+    transition: opacity var(--dur-medium) var(--ease-out);
+  }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.03);
-    border-color: rgba(255, 255, 255, 0.07);
+    background: var(--color-bg-elevated);
+    border-color: var(--color-border-soft);
+
+    &::before {
+      opacity: 1;
+    }
   }
 
   &--stream {
     background:
       linear-gradient(
-        130deg,
-        color-mix(in srgb, var(--color-brand-purple) 6%, transparent),
-        color-mix(in srgb, var(--color-brand-pink) 5%, transparent)
+        135deg,
+        rgba(var(--color-brand-violet-rgb), 0.06) 0%,
+        rgba(var(--color-brand-pink-rgb), 0.04) 100%
       ),
-      rgba(255, 255, 255, 0.022);
+      var(--color-bg-surface);
   }
 
   &__head {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-columns: 40px minmax(0, 1fr);
     gap: 14px;
     align-items: start;
   }
 
   &__icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
     display: grid;
     place-items: center;
-    background: rgba(255, 255, 255, 0.045);
+    background: rgba(255, 255, 255, 0.05);
     color: var(--color-text-secondary);
 
     &--accent {
-      background: color-mix(in srgb, var(--color-brand-purple) 18%, transparent);
-      color: var(--color-brand-purple);
+      background: rgba(var(--color-brand-violet-rgb), 0.14);
+      color: var(--color-brand-violet);
     }
   }
 
@@ -1203,22 +1232,33 @@ async function onYandexMusicVoice(): Promise<void> {
     align-items: center;
     gap: 6px;
     padding: 8px 14px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--color-text-primary);
+    border-radius: var(--radius-pill);
+    border: var(--border-thin) solid var(--color-border-subtle);
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--color-text-secondary);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     transition:
-      transform 200ms var(--ease-out),
-      background-color 200ms var(--ease-out),
-      border-color 200ms var(--ease-out);
+      transform var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+
+    :deep(.icon) {
+      color: var(--color-text-muted);
+      transition: color var(--dur-fast) var(--ease-out);
+    }
 
     &:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.09);
-      border-color: color-mix(in srgb, var(--color-brand-purple) 35%, transparent);
+      background: var(--gradient-brand-soft);
+      border-color: rgba(var(--color-brand-violet-rgb), 0.32);
+      color: var(--color-text-primary);
       transform: translateY(-1px);
+
+      :deep(.icon) {
+        color: var(--color-brand-violet);
+      }
     }
     &:active:not(:disabled) {
       transform: translateY(0);

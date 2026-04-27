@@ -408,9 +408,6 @@ useViewMount({
       }
     }
 
-    &__title {
-      // __title наследует --font-size-display token (mobile clamp 22→28px).
-
     &__lead {
       font-size: var(--font-size-small);
     }

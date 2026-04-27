@@ -14,6 +14,7 @@ import type {
 import { CAPABILITY, DEVICE_TYPE, INSTANCE, capOnOff } from '@smarthome/shared';
 import { BaseDriver } from '../_shared/base-driver.js';
 import { ssdpDiscover } from '../_shared/ssdp-discover.js';
+import { assertPrivateLanUrl } from '../_shared/net-guard.js';
 
 const WEMO_DISCOVER_TIMEOUT_MS = 3000;
 const WEMO_SETUP_TIMEOUT_MS = 2000;
@@ -44,15 +45,18 @@ export class WemoDriver extends BaseDriver {
     });
 
     // setup.xml у каждого кандидата параллельно — оттуда читаем friendlyName.
+    // SSRF guard: SSDP-LOCATION приходит из multicast и контролируется любым
+    // хостом в LAN — `http://internal-admin:8080/secret` тоже валидный URL.
+    // Ограничиваем egress до private CIDR'ов.
     await Promise.allSettled(
       pendingFetches.map(async ({ udn, loc }) => {
         try {
-          const setup = await axios.get<string>(loc, {
+          const url = assertPrivateLanUrl(loc);
+          const setup = await axios.get<string>(url.toString(), {
             timeout: WEMO_SETUP_TIMEOUT_MS,
             responseType: 'text',
           });
           const friendly = /<friendlyName>([^<]+)<\/friendlyName>/.exec(setup.data)?.[1];
-          const url = new URL(loc);
           found.set(udn, {
             driver: 'wemo',
             externalId: udn,

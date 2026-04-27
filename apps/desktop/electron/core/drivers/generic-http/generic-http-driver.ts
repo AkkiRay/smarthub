@@ -6,10 +6,16 @@ import type {
   DeviceDriver,
   DiscoveredDevice,
 } from '@smarthome/shared';
+import { assertPrivateLanUrl } from '../_shared/net-guard.js';
 
 /**
  * Generic HTTP driver — для устройств с простым REST endpoint. Конфиг в `device.meta`:
  *   statusUrl (GET → `{ on: boolean }` или строка on/off), onUrl, offUrl, method?, bearer?.
+ *
+ * SSRF guard: URL'ы юзера ВСЕГДА прогоняются через assertPrivateLanUrl.
+ * Без guard'а compromised renderer / импорт чужого scene-set может зашить
+ * `http://169.254.169.254/` (cloud metadata) или `http://localhost:5000/admin`,
+ * а Bearer-token уйдёт на attacker-controlled host.
  */
 export class GenericHttpDriver implements DeviceDriver {
   readonly id = 'generic-http' as const;
@@ -52,6 +58,7 @@ export class GenericHttpDriver implements DeviceDriver {
     const meta = device.meta as { statusUrl?: string; bearer?: string };
     if (!meta.statusUrl) return device;
     try {
+      assertPrivateLanUrl(meta.statusUrl);
       const { data } = await this.http.get(meta.statusUrl, {
         headers: meta.bearer ? { Authorization: `Bearer ${meta.bearer}` } : undefined,
       });
@@ -94,6 +101,7 @@ export class GenericHttpDriver implements DeviceDriver {
     }
     try {
       const url = command.value ? meta.onUrl : meta.offUrl;
+      assertPrivateLanUrl(url);
       const method = meta.method ?? 'GET';
       await this.http.request({
         url,
