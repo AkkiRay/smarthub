@@ -1040,12 +1040,12 @@ onMounted(() => {
   }
 }
 
-// Devices tile grid. content-visibility:auto — auto-skip render off-screen
-// rows на лонг-листе устройств (>30); contain-intrinsic-size держит layout.
+// Devices tile grid. На Home `topDevices = slice(0, 6)` — короткий ряд,
+// content-visibility не используется: intrinsic-size больше реальной высоты,
+// при попадании в viewport layout схлопывается на десятки px и mount-stagger
+// видится как «прыжок». Для длинных листов (DevicesView) есть utility .cv-auto.
 .home__device-grid {
   @include auto-grid(var(--cell-md), var(--space-3));
-  content-visibility: auto;
-  contain-intrinsic-size: 1px 320px;
 }
 
 .home-fade-enter-active,
