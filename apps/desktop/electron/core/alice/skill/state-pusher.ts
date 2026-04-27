@@ -47,6 +47,8 @@ export interface StatePusherDeps {
   getInternalUserId: () => string;
   /** На каждом успешном пуше дёргаем для статус-панели. */
   onSuccess?: () => void;
+  /** 401 от dialogs.yandex.net — токен отозван или выдан не от того аккаунта. */
+  onUnauthorized?: () => void;
 }
 
 export class StatePusher {
@@ -105,6 +107,8 @@ export class StatePusher {
       return { ok: true };
     } catch (e) {
       log.warn('[state-pusher] discovery callback failed', e);
+      const err = e as { response?: { status?: number } };
+      if (err.response?.status === 401) this.deps.onUnauthorized?.();
       return { ok: false, error: (e as Error).message };
     }
   }
@@ -142,6 +146,8 @@ export class StatePusher {
       this.deps.onSuccess?.();
     } catch (e) {
       log.warn('[state-pusher] state callback failed', e);
+      const err = e as { response?: { status?: number } };
+      if (err.response?.status === 401) this.deps.onUnauthorized?.();
       // Не ретраим — Алиса всё равно поллит query при следующем взаимодействии.
     }
   }

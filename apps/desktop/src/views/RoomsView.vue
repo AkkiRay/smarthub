@@ -230,6 +230,7 @@
       v-else
       title="У вас ещё нет комнат"
       text="Добавьте «Гостиную», «Спальню», «Кухню» — и закрепите за ними устройства."
+      data-anim="block"
     >
       <template #glyph>
         <BaseIcon name="rooms" :size="64" />

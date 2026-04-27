@@ -1,0 +1,96 @@
+# SmartHome Hub — CI pipeline.
+#
+# Триггерится на каждый push в main и на любой PR. Прогон в порядке:
+#   1. lint (eslint + prettier-check)
+#   2. typecheck (vue-tsc + tsc по всему монорепо)
+#   3. matrix build (windows / macos / ubuntu) — собирает packaged-артефакт без
+#      публикации. Артефакты загружаются в GH Actions для skim-проверки PR'а.
+#
+# Не публикует ничего — релизы только из release.yml по тегам v*.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Параллельные пуши в одну ветку отменяют предыдущий run — экономим minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, format, typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prettier check
+        run: pnpm format:check
+      - name: ESLint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build (no publish)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # CSC_IDENTITY_AUTO_DISCOVERY=false — без подписи на CI; релиз/sign отдельно.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        shell: bash
+        run: |
+          case "${{ matrix.os }}" in
+            ubuntu-latest)  pnpm build:linux ;;
+            windows-latest) pnpm build:win ;;
+            macos-latest)   pnpm build:mac ;;
+          esac
+      - name: Upload artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: smarthub-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            apps/desktop/release/**/*.exe
+            apps/desktop/release/**/*.dmg
+            apps/desktop/release/**/*.zip
+            apps/desktop/release/**/*.AppImage
+            apps/desktop/release/**/*.deb
+            apps/desktop/release/**/*.yml
+            apps/desktop/release/**/*.blockmap
+          if-no-files-found: warn
+          retention-days: 7

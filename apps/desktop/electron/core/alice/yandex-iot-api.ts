@@ -1127,6 +1127,115 @@ export class YandexIotClient {
   }
 
   /**
+   * Создать новый сценарий — POST /m/v4/user/scenarios.
+   * Возвращает id созданного сценария.
+   *
+   * Минимальное body:
+   *   { name, icon, triggers: [], steps: [...] }
+   * `triggers` может быть пустым (manual-only сценарий, запускается через
+   * /actions). `steps` — массив RawStep (`{type:"scenarios.steps.actions", parameters: {launch_devices: [...]}}`).
+   */
+  async createScenario(input: {
+    name: string;
+    icon?: string;
+    triggers?: unknown[];
+    steps: unknown[];
+    settings?: Record<string, unknown>;
+    isActive?: boolean;
+  }): Promise<{ ok: boolean; scenarioId?: string; error?: string }> {
+    try {
+      const url = 'https://iot.quasar.yandex.ru/m/v4/user/scenarios';
+      const payload: Record<string, unknown> = {
+        name: input.name,
+        icon: input.icon ?? '',
+        triggers: input.triggers ?? [],
+        steps: input.steps,
+        ...(input.settings ? { settings: input.settings } : {}),
+        ...(typeof input.isActive === 'boolean' ? { is_active: input.isActive } : {}),
+      };
+      const raw = await this.withCsrfRetry((csrf) =>
+        postJsonWithCsrf<{ status?: string; message?: string; scenario_id?: string }>(
+          url,
+          csrf,
+          payload,
+        ),
+      );
+      if (raw.status && raw.status !== 'ok') {
+        return { ok: false, error: raw.message ?? 'iot.quasar отклонил создание сценария' };
+      }
+      return { ok: true, ...(raw.scenario_id ? { scenarioId: raw.scenario_id } : {}) };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  /**
+   * Переименовать устройство/группу — POST /m/v3/user/devices/{id}/configuration/quasar.
+   *
+   * Endpoint специально для name + room rebind. Принимает body
+   *   { name, room: <roomId>|"" }
+   * Возвращает 200 + { status: 'ok' } если сохранилось.
+   */
+  async renameDevice(
+    itemType: 'device' | 'group',
+    deviceId: string,
+    name: string,
+    roomId?: string,
+  ): Promise<YandexIotActionResult> {
+    try {
+      const collection = itemType === 'group' ? 'groups' : 'devices';
+      const url = `https://iot.quasar.yandex.ru/m/v3/user/${collection}/${encodeURIComponent(deviceId)}/configuration/quasar`;
+      const payload = {
+        name,
+        ...(roomId !== undefined ? { room: roomId } : {}),
+      };
+      const raw = await this.withCsrfRetry((csrf) =>
+        postJsonWithCsrf<{ status?: string; message?: string }>(url, csrf, payload),
+      );
+      if (raw.status && raw.status !== 'ok') {
+        return { ok: false, status: raw.status, error: raw.message ?? 'rename отклонён' };
+      }
+      return { ok: true, status: 'DONE' };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  /**
+   * Configuration устройства — GET /m/user/devices/{id}/configuration.
+   * Содержит effects (lighting scenes), schedules, sensor settings — поля,
+   * которые не приходят в обычном snapshot'е.
+   */
+  async fetchDeviceConfiguration(deviceId: string): Promise<{
+    effects?: Array<{ id: string; name: string }>;
+    schedules?: unknown[];
+    raw?: Record<string, unknown>;
+  } | null> {
+    try {
+      const url = `https://iot.quasar.yandex.ru/m/user/devices/${encodeURIComponent(deviceId)}/configuration`;
+      const raw = await this.withCsrfRetry((csrf) =>
+        fetchJsonWithCsrf<{
+          status?: string;
+          configuration?: {
+            effects?: Array<{ id: string; name: string }>;
+            schedules?: unknown[];
+          };
+        }>(url, csrf),
+      );
+      if (raw.status && raw.status !== 'ok') return null;
+      const cfg = raw.configuration ?? {};
+      return {
+        ...(cfg.effects ? { effects: cfg.effects } : {}),
+        ...(cfg.schedules ? { schedules: cfg.schedules } : {}),
+        raw: cfg as Record<string, unknown>,
+      };
+    } catch (e) {
+      log.warn(`YandexIot.fetchDeviceConfiguration(${deviceId}): ${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
    * Свежие capabilities/properties одного устройства/группы.
    * GET /m/user/{itemType}s/{id} (без /v3-префикса).
    */

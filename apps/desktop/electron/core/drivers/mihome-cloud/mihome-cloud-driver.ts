@@ -66,7 +66,10 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
       baseURL: `https://${creds.region ?? 'cn'}.api.io.mi.com/app`,
       timeoutMs: 8000,
       defaultHeaders: {
-        'User-Agent': 'Android-7.1.1-1.0.0-ONEPLUS A3010-136-AndroidApp',
+        // Mi Home 2026: Android 14, app v9.x. Старый UA (Android-7.1.1) Xiaomi
+        // anti-bot уже блокирует с конца 2024 (login возвращает code -7).
+        'User-Agent':
+          'Android-14-9.6.108-com.xiaomi.smarthome-AndroidApp APP/com.xiaomi.smarthome APPV/9.6.108',
         'x-xiaomi-protocal-flag-cli': 'PROTOCAL-HTTP2',
         'Content-Type': 'application/x-www-form-urlencoded',
       },

@@ -7,6 +7,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import type {
+  AliceCloudflaredInstall,
   AliceDeviceExposure,
   AliceDevicePreview,
   AliceSceneExposure,
@@ -44,17 +45,34 @@ export const useAliceStore = defineStore('alice', () => {
   const nextActionHint = computed<string>(() => {
     const s = status.value;
     if (!s) return '';
-    if (!s.skill.configured) return 'Создайте skill в dialogs.yandex.ru и вставьте 3 поля ниже';
-    if (!s.tunnel.running) return 'Запустите туннель — хаб получит публичный HTTPS-URL';
-    if (s.skill.stage !== 'linked')
-      return 'Откройте «Дом с Алисой» → Добавить → По производителю → ваш skill';
-    return 'Алиса подключена и видит ваш хаб';
+    switch (s.skill.stage) {
+      case 'idle':
+        return 'Заполните поля ниже — хаб сгенерирует креды и сам откроет консоль навыка';
+      case 'configured':
+        return 'Запустите туннель — хаб получит публичный HTTPS-URL';
+      case 'tunnel-up':
+        return 'Туннель поднят, но достижимость ещё не подтверждена. Нажмите «Проверить достижимость»';
+      case 'awaiting-link':
+        return 'Алиса может достучаться. Откройте «Дом с Алисой» → Добавить → По производителю';
+      case 'linked':
+        return 'Алиса видит ваш хаб. Управляйте устройствами голосом или из приложения';
+      case 'linked-stale':
+        return 'Алиса не дёргала хаб > 7 дней. Возможно, привязка отозвана — переподключите';
+      case 'error':
+        return s.skill.lastError ?? 'Что-то пошло не так. Перезапустите туннель';
+      default:
+        return '';
+    }
   });
 
   const isLinked = computed(() => status.value?.skill.stage === 'linked');
+  const isReachable = computed(() => status.value?.tunnel.reachability?.ok === true);
   const isConfigured = computed(() => status.value?.skill.configured ?? false);
   const tunnelRunning = computed(() => status.value?.tunnel.running ?? false);
   const publicUrl = computed(() => status.value?.tunnel.publicUrl ?? null);
+  const reachability = computed(() => status.value?.tunnel.reachability ?? null);
+  const dialogsTokenOwner = computed(() => status.value?.skill.dialogsTokenOwner ?? null);
+  const stage = computed(() => status.value?.skill.stage ?? 'idle');
 
   // === Actions ===
   // HMR-safe guard: App.vue:onMounted может вызвать bootstrap повторно при
@@ -66,6 +84,7 @@ export const useAliceStore = defineStore('alice', () => {
       window.smarthome.alice.getStatus(),
       window.smarthome.alice.getSkillConfig(),
     ]);
+    if (status.value?.cloudflared) cloudflaredInstall.value = status.value.cloudflared;
     const exposures = await window.smarthome.alice.getExposures();
     deviceExposures.value = exposures.devices;
     sceneExposures.value = exposures.scenes;
@@ -74,6 +93,14 @@ export const useAliceStore = defineStore('alice', () => {
     // Push-апдейты статуса прилетают на каждый webhook-hit и tunnel-state-change.
     window.smarthome.events.on('alice:status', (s) => {
       status.value = s;
+    });
+    // Прогресс авто-инсталляции cloudflared — летит fire-hose'ом во время скачивания.
+    window.smarthome.events.on('alice:cloudflared-install', (state) => {
+      cloudflaredInstall.value = state;
+      // Когда скачка завершилась — обновим статус, чтобы кнопка «Запустить туннель» оживилась.
+      if (state.kind === 'managed' && status.value) {
+        status.value = { ...status.value, cloudflared: state };
+      }
     });
   }
 
@@ -112,6 +139,11 @@ export const useAliceStore = defineStore('alice', () => {
     const toaster = useToasterStore();
     tunnelStarting.value = true;
     try {
+      // Прозрачная авто-инсталляция: если cloudflared нет, скачиваем сначала.
+      // Юзер видит inline-прогресс через cloudflaredInstall, без отдельной кнопки.
+      if (cloudflaredInstall.value.kind !== 'managed') {
+        await ensureCloudflared();
+      }
       await toaster.run(
         async () => {
           status.value = await window.smarthome.alice.startTunnel();
@@ -158,9 +190,26 @@ export const useAliceStore = defineStore('alice', () => {
     version?: string;
     error?: string;
   } | null>(null);
+  /** Состояние авто-инсталлера. Источник истины для UI «Запустить туннель»-кнопки. */
+  const cloudflaredInstall = ref<AliceCloudflaredInstall>({ kind: 'missing' });
 
   async function probeCloudflared(): Promise<void> {
     cloudflaredStatus.value = await window.smarthome.alice.probeCloudflared();
+  }
+
+  /** Запустить авто-инсталляцию cloudflared. Возвращается, когда managed-бинарник готов. */
+  async function ensureCloudflared(): Promise<void> {
+    const toaster = useToasterStore();
+    try {
+      cloudflaredInstall.value = await window.smarthome.alice.ensureCloudflared();
+    } catch (e) {
+      cloudflaredInstall.value = { kind: 'error', error: (e as Error).message };
+      toaster.push({
+        kind: 'error',
+        message: `Не удалось скачать cloudflared: ${(e as Error).message}`,
+      });
+      throw e;
+    }
   }
 
   async function generateOauthCredentials(): Promise<{
@@ -176,15 +225,93 @@ export const useAliceStore = defineStore('alice', () => {
     if (result.ok) {
       // Re-load skill config — backend сам сохранил.
       skillConfig.value = await window.smarthome.alice.getSkillConfig();
+      // Backend уже дёрнул verifyDialogsToken — owner появится в alice:status push.
+      const owner = status.value?.skill.dialogsTokenOwner;
       toaster.push({
         kind: 'success',
-        message: 'Токен получен — push-обновления Алисы включены',
+        message: owner?.displayName
+          ? `Токен получен для ${owner.displayName}. Убедитесь, что это владелец скилла`
+          : 'Токен получен — push-обновления Алисы включены',
+        ttlMs: 5500,
       });
     } else {
       toaster.push({
         kind: 'error',
         message: result.error ?? 'Не удалось получить токен',
       });
+    }
+  }
+
+  /** Forced reachability-probe — UI кнопка «Проверить достижимость». */
+  async function probeReachability(): Promise<void> {
+    const toaster = useToasterStore();
+    status.value = await window.smarthome.alice.probeReachability();
+    const r = status.value.tunnel.reachability;
+    if (!r) {
+      toaster.push({ kind: 'error', message: 'Туннель не запущен — нечего проверять' });
+      return;
+    }
+    if (r.ok) {
+      toaster.push({
+        kind: 'success',
+        message: `Алиса достучится — HEAD /v1.0 ответил ${r.status} за ${r.latencyMs}мс`,
+        ttlMs: 4000,
+      });
+    } else {
+      toaster.push({
+        kind: 'error',
+        message: r.error ?? `HEAD /v1.0 вернул ${r.status}`,
+        ttlMs: 6000,
+      });
+    }
+  }
+
+  /** Сверить владельца dialogsOauthToken — display_name из login.yandex.ru/info. */
+  async function verifyDialogsToken(): Promise<void> {
+    const toaster = useToasterStore();
+    status.value = await window.smarthome.alice.verifyDialogsToken();
+    const owner = status.value.skill.dialogsTokenOwner;
+    if (owner?.rejected) {
+      toaster.push({
+        kind: 'error',
+        message: 'Токен отозван или принадлежит другому аккаунту. Получите заново',
+      });
+    } else if (owner?.displayName) {
+      toaster.push({ kind: 'success', message: `Токен валиден · ${owner.displayName}` });
+    }
+  }
+
+  /**
+   * Один-клик: открыть консоль навыка в браузере + положить в clipboard все
+   * URL'ы, которые юзер должен вставить (endpoint, /authorize, /token).
+   * Вместо «скопируй три раза», юзер копирует один раз и вставляет в три поля.
+   */
+  async function copyConsoleConfig(): Promise<void> {
+    const toaster = useToasterStore();
+    const url = publicUrl.value;
+    if (!url) {
+      toaster.push({ kind: 'error', message: 'Сначала запустите туннель' });
+      return;
+    }
+    const config = skillConfig.value;
+    const lines: string[] = [
+      `Endpoint URL:    ${url}/v1.0`,
+      `Authorize URL:   ${url}/oauth/authorize`,
+      `Token URL:       ${url}/oauth/token`,
+      `Refresh URL:     ${url}/oauth/token`,
+    ];
+    if (config?.oauthClientId) lines.push(`client_id:       ${config.oauthClientId}`);
+    if (config?.oauthClientSecret) lines.push(`client_secret:   ${config.oauthClientSecret}`);
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      await window.smarthome.app.openExternal('https://dialogs.yandex.ru/developer/skills');
+      toaster.push({
+        kind: 'success',
+        message: 'Все 4 URL и креды скопированы — вставьте в консоль навыка',
+        ttlMs: 5000,
+      });
+    } catch {
+      toaster.push({ kind: 'error', message: 'Не удалось скопировать в буфер' });
     }
   }
 
@@ -198,14 +325,19 @@ export const useAliceStore = defineStore('alice', () => {
     tunnelStarting,
     previewsLoading,
     cloudflaredStatus,
+    cloudflaredInstall,
     // derived
     deviceExposureById,
     sceneExposureById,
     nextActionHint,
     isLinked,
+    isReachable,
     isConfigured,
     tunnelRunning,
     publicUrl,
+    reachability,
+    dialogsTokenOwner,
+    stage,
     // actions
     bootstrap,
     loadPreviews,
@@ -217,7 +349,11 @@ export const useAliceStore = defineStore('alice', () => {
     setSceneExposure,
     triggerDiscoveryCallback,
     probeCloudflared,
+    ensureCloudflared,
     generateOauthCredentials,
     fetchDialogsCallbackToken,
+    probeReachability,
+    verifyDialogsToken,
+    copyConsoleConfig,
   };
 });

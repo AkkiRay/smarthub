@@ -1,0 +1,165 @@
+# SmartHome Hub — Release pipeline.
+#
+# Сценарии запуска:
+#   1. Push тега `v*.*.*` (например, `v1.2.3`) — production-релиз.
+#   2. workflow_dispatch с input `version` — ручной релиз без тега
+#      (использует текущий HEAD; полезно для повторного выпуска артефактов).
+#
+# Поток:
+#   - quality-job (lint + typecheck) на ubuntu — fail-fast перед сборкой.
+#   - build-matrix (win/mac/linux) собирает и публикует artefact в DRAFT release
+#     на GitHub. Имя релиза = тег. electron-builder создаёт `latest.yml`,
+#     `latest-mac.yml`, `latest-linux.yml` — они нужны electron-updater'у в
+#     рантайме для discovery новых версий.
+#   - publish-job снимает draft-флаг — релиз становится виден пользователям
+#     и активируется в GH Releases feed (отсюда electron-updater и тянет).
+#
+# Secrets:
+#   - GITHUB_TOKEN — автоматический, права contents:write для draft+publish.
+#   - (опционально) APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID для
+#     notarization. CSC_LINK / CSC_KEY_PASSWORD для Windows code-signing.
+#     Если их нет — сборка проходит без подписи (verifyUpdateCodeSignature=false).
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия релиза (без префикса v, напр. 1.2.3). Создаст тег и draft.'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Lint & typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  release:
+    name: Build & publish (${{ matrix.os }})
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # workflow_dispatch без тега — таг создаётся локально и пушится перед публикацией.
+      # Без таги GH-Releases-publisher в electron-builder не сматчит draft по имени.
+      - name: Configure git
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync version & tag (workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' && matrix.os == 'ubuntu-latest' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          v="${{ inputs.version }}"
+          # bump root + apps/desktop версий — electron-builder читает apps/desktop/package.json
+          node -e "const f='package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+          node -e "const f='apps/desktop/package.json';const p=require('./'+f);p.version='${v}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+          git add package.json apps/desktop/package.json
+          git commit -m "chore: release v${v}" || true
+          git tag "v${v}" || true
+          git push origin HEAD --tags
+
+      - name: Build & publish — Linux
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm release:linux
+
+      - name: Build & publish — Windows
+        if: matrix.os == 'windows-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: pnpm release:win
+
+      - name: Build & publish — macOS
+        if: matrix.os == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm release:mac
+
+  publish:
+    name: Promote draft → published
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Promote release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
+          # Снимаем draft и помечаем как latest. GitHub автоматически генерирует
+          # release notes из коммитов между предыдущим тегом и этим.
+          gh release edit "$tag" \
+            --draft=false \
+            --latest \
+            --generate-notes \
+            --repo "$GITHUB_REPOSITORY"

@@ -1,10 +1,20 @@
 /**
  * @fileoverview
- * Aqara Cloud (open API) — региональный endpoint, OAuth code+secret.
- * /v3.0/open/auth.refresh — refresh token; /v3.0/open/resource/query — list devices;
- * /v3.0/open/resource/value/update — write attribute.
+ * Aqara Cloud (open API v3) — региональный endpoint, OAuth code+secret.
+ * /v3.0/open/access_token — refresh token; /v3.0/open/api — universal POST с
+ * `intent`-дискриминатором (query.device.info, query.resource.value,
+ * write.resource.device, config.auth.refreshToken).
+ *
+ * Authentication (на 2026-04, актуально):
+ *   Каждый request требует headers:
+ *     - Accesstoken, Appid, Keyid, Nonce, Time
+ *     - Sign = MD5(lower("Accesstoken=<token>&Appid=<appId>&Keyid=<keyId>&Nonce=<nonce>&Time=<ts>" + appKey))
+ *   Без Sign cloud отвечает {code: 108, message: "Sign error"}. Старая
+ *   имплементация без Sign работала только до 2024 на legacy-эндпоинтах;
+ *   на open-api-v3 требуется обязательно.
  */
 
+import { createHash, randomBytes } from 'node:crypto';
 import type { AxiosRequestConfig } from 'axios';
 import type {
   Device,
@@ -72,12 +82,20 @@ export class AqaraCloudDriver extends BaseCloudDriver {
   }
 
   protected applyAuth(config: AxiosRequestConfig): AxiosRequestConfig {
+    const time = String(Date.now());
+    const nonce = randomBytes(8).toString('hex');
+    const signSrc =
+      `Accesstoken=${this.creds.accessToken}&Appid=${this.creds.appId}` +
+      `&Keyid=${this.creds.keyId}&Nonce=${nonce}&Time=${time}${this.creds.appKey}`;
+    const sign = createHash('md5').update(signSrc.toLowerCase()).digest('hex');
     config.headers = {
       ...(config.headers as Record<string, unknown>),
       Accesstoken: this.creds.accessToken,
       Appid: this.creds.appId,
       Keyid: this.creds.keyId,
-      Time: String(Date.now()),
+      Nonce: nonce,
+      Time: time,
+      Sign: sign,
       'Content-Type': 'application/json',
     };
     return config;
@@ -85,13 +103,30 @@ export class AqaraCloudDriver extends BaseCloudDriver {
 
   protected async refreshToken(): Promise<void> {
     if (!this.creds.refreshToken) throw new Error('Aqara: no refresh_token');
+    // Refresh-токен endpoint тоже требует Sign — но без Accesstoken (его в этот
+    // момент нет). Sign-формула: lower(Appid=...&Keyid=...&Nonce=...&Time=... + appKey).
+    const time = String(Date.now());
+    const nonce = randomBytes(8).toString('hex');
+    const signSrc =
+      `Appid=${this.creds.appId}&Keyid=${this.creds.keyId}` +
+      `&Nonce=${nonce}&Time=${time}${this.creds.appKey}`;
+    const sign = createHash('md5').update(signSrc.toLowerCase()).digest('hex');
     const r = await this.http.post<{ result: { accessToken: string; refreshToken: string } }>(
       '/v3.0/open/access_token',
       {
         intent: 'config.auth.refreshToken',
         data: { refreshToken: this.creds.refreshToken },
       },
-      { headers: { Appid: this.creds.appId, Keyid: this.creds.keyId } },
+      {
+        headers: {
+          Appid: this.creds.appId,
+          Keyid: this.creds.keyId,
+          Nonce: nonce,
+          Time: time,
+          Sign: sign,
+          'Content-Type': 'application/json',
+        },
+      },
     );
     this.creds.accessToken = r.data.result.accessToken;
     this.creds.refreshToken = r.data.result.refreshToken;

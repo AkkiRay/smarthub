@@ -2,6 +2,15 @@
  * @fileoverview Belkin WeMo driver. Discovery — SSDP M-SEARCH `urn:Belkin:device:*`,
  * control — SOAP `/upnp/control/basicevent1`. XML парсим regexp'ом по
  * `<BinaryState>` и `<friendlyName>` (без зависимости от xml2js).
+ *
+ * **Production status (2025-2026):** Belkin прекратила производство WeMo (Jan
+ * 2024); legacy-устройства продолжают работать локально, но cloud-side
+ * (Belkin app, Alexa cloud-integration) отключён с июля 2025. Cert-цепочки
+ * на старых устройствах (firmware <2.x) могут не пройти валидацию на iOS 17+/
+ * Android 14+ — наш local SOAP идёт по plain HTTP и не зависит от этого.
+ *
+ * Если discovery возвращает устройство с `firmwareVersion` < 2 — log warning
+ * (юзер увидит в main.log), но driver продолжает работать.
  */
 
 import axios from 'axios';
@@ -57,6 +66,17 @@ export class WemoDriver extends BaseDriver {
             responseType: 'text',
           });
           const friendly = /<friendlyName>([^<]+)<\/friendlyName>/.exec(setup.data)?.[1];
+          // Firmware version из setup.xml: <firmwareVersion>WeMo_WW_2.00.11451.PVT</firmwareVersion>
+          // Major < 2 → legacy device, log warning (cloud-pairing уже не работает).
+          const fwMatch = /<firmwareVersion>(?:WeMo_[A-Z_]+_)?(\d+)\.(\d+)/.exec(setup.data);
+          if (fwMatch) {
+            const major = Number(fwMatch[1]);
+            if (Number.isFinite(major) && major < 2) {
+              this.logWarn(
+                `device ${udn} runs legacy firmware ${fwMatch[0]} — cloud features (Belkin app, Alexa) disabled by Belkin in 2025; local control продолжает работать`,
+              );
+            }
+          }
           found.set(udn, {
             driver: 'wemo',
             externalId: udn,

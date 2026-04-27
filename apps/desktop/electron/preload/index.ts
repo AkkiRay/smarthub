@@ -101,6 +101,12 @@ const api: IpcApi = {
       invoke('yandexStation:set-home-scenario-active', id, active),
     connectStation: (input) => invoke('yandexStation:connect-station', input),
   },
+  updater: {
+    getStatus: () => invoke('updater:get-status'),
+    check: () => invoke('updater:check'),
+    download: () => invoke('updater:download'),
+    install: () => invoke('updater:install'),
+  },
   alice: {
     getStatus: () => invoke('alice:get-status'),
     saveSkillConfig: (config) => invoke('alice:save-skill-config', config),
@@ -119,6 +125,9 @@ const api: IpcApi = {
     generateOauthCredentials: () => invoke('alice:generate-oauth-credentials'),
     probeCloudflared: () => invoke('alice:probe-cloudflared'),
     fetchDialogsCallbackToken: () => invoke('alice:fetch-dialogs-callback-token'),
+    probeReachability: () => invoke('alice:probe-reachability'),
+    verifyDialogsToken: () => invoke('alice:verify-dialogs-token'),
+    ensureCloudflared: () => invoke('alice:ensure-cloudflared'),
   },
   events: {
     on(event, listener) {

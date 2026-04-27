@@ -79,6 +79,7 @@ export interface HubEvents {
   'yandexStation:event': (event: YandexStationEvent) => void;
   'alice:status': (status: AliceStatus) => void;
   'alice:webhook-activity': (event: WebhookActivityEvent) => void;
+  'alice:cloudflared-install': (state: import('@smarthome/shared').AliceCloudflaredInstall) => void;
 }
 
 export interface SmartHomeHubDeps {
@@ -135,6 +136,7 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
   // Alice skill bridge: статус → renderer; device-change → push в Алису.
   deps.aliceBridge.on('status', (status) => emitter.emit('alice:status', status));
   deps.aliceBridge.on('webhook-activity', (event) => emitter.emit('alice:webhook-activity', event));
+  deps.aliceBridge.on('cloudflared-install', (state) => emitter.emit('alice:cloudflared-install', state));
   deps.deviceRegistry.on('device:updated', (device) => {
     deps.aliceBridge.notifyDeviceUpdated(device);
   });
@@ -620,7 +622,8 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
     /**
      * Embedded OAuth: открывает passport.yandex.ru с client_id Я.Диалогов и
      * сохраняет access_token в config.dialogsOauthToken — заменяет ручной квест
-     * с oauth.yandex.com.
+     * с oauth.yandex.com. После сохранения сразу дёргает verifyDialogsToken,
+     * чтобы UI показал «токен принадлежит логину Х» — анти-foot-gun.
      */
     async fetchDialogsCallbackToken(): Promise<{ ok: boolean; error?: string }> {
       try {
@@ -637,10 +640,29 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
           ...current,
           dialogsOauthToken: result.accessToken,
         });
+        await deps.aliceBridge.verifyDialogsToken();
         return { ok: true };
       } catch (e) {
         return { ok: false, error: (e as Error).message };
       }
+    },
+
+    /** Forced reachability-probe + cache в AliceStatus. UI вызывает на «Проверить». */
+    async probeReachability(): Promise<AliceStatus> {
+      await deps.aliceBridge.probeReachability();
+      return deps.aliceBridge.getStatus();
+    },
+
+    /** Авто-инсталляция cloudflared. Если уже установлен — мгновенно отдаёт «managed». */
+    async ensureCloudflared() {
+      await deps.aliceBridge.ensureCloudflared();
+      return deps.aliceBridge.getCloudflaredInstall();
+    },
+
+    /** Сверка владельца dialogsOauthToken — display_name + login. */
+    async verifyDialogsToken(): Promise<AliceStatus> {
+      await deps.aliceBridge.verifyDialogsToken();
+      return deps.aliceBridge.getStatus();
     },
     // Glagol-pairing — пока stub: основной flow остаётся через yandexStation.signIn + connectStation.
     // TODO: вынести в отдельный wizard-state-machine, см. AliceView.glagol-pairing.

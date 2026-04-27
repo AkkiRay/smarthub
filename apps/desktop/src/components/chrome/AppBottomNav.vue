@@ -137,8 +137,8 @@ onBeforeUnmount(() => resizeObs?.disconnect());
     pointer-events: none;
     z-index: 0;
     opacity: 0;
-    will-change: transform, width, opacity;
-    // Initial mount без animation, transition включается через `is-ready`.
+    // Transform пилл'а — short-lived (320ms), GPU-promote отдаём браузеру.
+    // Width — layout-свойство, will-change-hint бесполезен.
     transition: none;
 
     &.is-ready {

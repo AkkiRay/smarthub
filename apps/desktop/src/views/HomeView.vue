@@ -431,25 +431,44 @@ async function runQuick(quick: QuickScene): Promise<void> {
   }
 }
 
-const { from } = useGsap(root);
+const { timeline } = useGsap(root);
 
-onMounted(async () => {
-  if (!scenes.scenes.length) await scenes.bootstrap();
+onMounted(() => {
+  // Async data — параллельно, не блокируем mount-анимацию IPC-задержкой.
+  // Раньше cascade ждал `await drivers.list()` (~50-200ms IPC) → видимый
+  // лаг на старте. Теперь bootstrap + IPC текут отдельно, store-обновления
+  // pop-in'ят элементы безболезненно через Vue reactivity.
+  void (async () => {
+    if (!scenes.scenes.length) await scenes.bootstrap();
+    try {
+      const drivers = await window.smarthome.drivers.list();
+      hasAnyIntegration.value = drivers.some(
+        (d) => d.active && d.id !== 'mock' && d.id !== 'yandex-station',
+      );
+    } catch {
+      /* ничего */
+    }
+  })();
 
-  try {
-    const drivers = await window.smarthome.drivers.list();
-    hasAnyIntegration.value = drivers.some(
-      (d) => d.active && d.id !== 'mock' && d.id !== 'yandex-station',
+  // Единый timeline вместо 5 параллельных from()-вызовов:
+  // 1) общий ease/clearProps + один пул tween'ов меньше нагружает GSAP-ticker;
+  // 2) hero-stagger горизонтальный (x), tiles-stagger вертикальный (y) —
+  //    визуальная иерархия "shoulder → cards" сохраняется.
+  // СИНХРОННО в onMounted: immediateRender (default для from()) ставит
+  // opacity:0 inline ДО первого paint'а — fade-in полностью видим, без
+  // flash'а natural-state'а на frame'е 0.
+  const tl = timeline({
+    defaults: { ease: 'power3.out', force3D: true, clearProps: 'opacity,transform' },
+  });
+  tl.from('.home__hero-copy > *', { opacity: 0, x: -16, stagger: 0.06, duration: 0.5 }, 0)
+    .from('.home__kpi', { opacity: 0, y: 14, stagger: 0.04, duration: 0.45 }, 0.12)
+    // Comma-selector: квик-плитки + Alice-плитки + device-карты — одной волной.
+    // stagger.amount шапит общее время волны независимо от числа элементов.
+    .from(
+      '.quick-tile, .alice-tile, .home__device-grid > *',
+      { opacity: 0, y: 12, stagger: { each: 0.04, amount: 0.42, from: 'start' }, duration: 0.42 },
+      0.22,
     );
-  } catch {
-    /* ничего */
-  }
-
-  from('.home__hero-copy > *', { opacity: 0, x: -16, stagger: 0.07, duration: 0.5 });
-  from('.home__kpi', { opacity: 0, y: 14, stagger: 0.05, duration: 0.5, delay: 0.2 });
-  from('.quick-tile', { opacity: 0, y: 12, stagger: 0.05, duration: 0.45, delay: 0.4 });
-  from('.alice-tile', { opacity: 0, y: 12, stagger: 0.05, duration: 0.45, delay: 0.45 });
-  from('.home__device-grid > *', { opacity: 0, y: 12, stagger: 0.05, duration: 0.4, delay: 0.5 });
 });
 </script>
 

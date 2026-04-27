@@ -70,6 +70,7 @@
       v-else
       title="Сценарии не созданы"
       text="Создайте «Доброе утро», «Кино», «Сон» — и запускайте всё одним тапом."
+      data-anim="block"
     >
       <template #glyph>
         <BaseIcon name="scenes" :size="64" />
@@ -82,7 +83,7 @@
     </BaseEmpty>
 
     <!-- ===================== Сценарии Алисы ===================== -->
-    <section v-if="alicesScenarios.length" class="scenes__alice">
+    <section v-if="alicesScenarios.length" class="scenes__alice" data-anim="block">
       <header class="scenes__alice-head">
         <h3 class="scenes__alice-title">Сценарии Алисы</h3>
         <p class="text--small scenes__alice-sub">

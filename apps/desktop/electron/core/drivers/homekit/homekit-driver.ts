@@ -4,10 +4,13 @@
  * category-id; `execute()` возвращает `CONTROLLER_MISSING` до установки
  * `hap-controller`.
  *
- * TXT schema:
+ * TXT schema (HAP spec § 6.4):
  *   id   accessory ID (MAC-формат `aa:bb:cc:dd:ee:ff`)
  *   ci   category id (см. `HAP_CATEGORIES`)
- *   sf   status flags: bit0 = unpaired discoverable
+ *   sf   status flags (uint): bit0=1 → не сопряжён (pairing required),
+ *        bit0=0 → сопряжён. Остальные биты — software/hardware-issues,
+ *        не влияют на pairing-статус. Поэтому проверяем именно bit0,
+ *        а не равенство '0' — sf может быть '4' (бит2 set), но всё ещё paired.
  *   sh   setup hash
  *   c#   config number (incrementится при изменении схемы)
  */
@@ -59,7 +62,9 @@ export class HomeKitDriver implements DeviceDriver {
     for (const svc of services) {
       const txt = svc.txt;
       const ci = String(txt['ci'] ?? '');
-      const sf = String(txt['sf'] ?? '0');
+      const sfRaw = String(txt['sf'] ?? '0');
+      const sfNum = Number.parseInt(sfRaw, 10);
+      const sfBits = Number.isFinite(sfNum) ? sfNum : 0;
       const type = HAP_CATEGORIES[ci] ?? 'devices.types.other';
       found.set(svc.name, {
         driver: 'homekit',
@@ -69,7 +74,7 @@ export class HomeKitDriver implements DeviceDriver {
         address: `${svc.host}:${svc.port ?? 0}`,
         meta: {
           categoryId: ci,
-          paired: sf === '0',
+          paired: (sfBits & 1) === 0,
           ...(txt['sh'] ? { setupHash: txt['sh'] } : {}),
           ...(txt['c#'] ? { configNumber: txt['c#'] } : {}),
         } satisfies HomeKitMeta,

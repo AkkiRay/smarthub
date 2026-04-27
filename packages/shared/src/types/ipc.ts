@@ -37,10 +37,12 @@ import type {
   AliceDeviceExposure,
   AliceDevicePreview,
   AliceSceneExposure,
+  AliceCloudflaredInstall,
   AliceSkillConfig,
   AliceStatus,
   GlagolPairingState,
 } from './alice.js';
+import type { UpdateStatus } from './updater.js';
 
 /** Значения Node os.platform() / process.platform. */
 export type Platform = 'aix' | 'darwin' | 'freebsd' | 'linux' | 'openbsd' | 'sunos' | 'win32';
@@ -262,6 +264,37 @@ export interface IpcApi {
     }>;
     /** Embedded OAuth для dialogsOauthToken — заменяет ручной квест с oauth.yandex.com. */
     fetchDialogsCallbackToken: () => Promise<{ ok: boolean; error?: string }>;
+
+    /**
+     * Honest reachability-probe: HEAD на `${publicUrl}/v1.0` снаружи.
+     * Проверяет, действительно ли Алиса физически может достучаться, а не просто
+     * что cloudflared subprocess жив.
+     */
+    probeReachability: () => Promise<AliceStatus>;
+
+    /**
+     * Сверить владельца dialogsOauthToken — дёрнуть login.yandex.ru/info.
+     * Если токен валиден, в AliceStatus.skill.dialogsTokenOwner появится display_name.
+     * Это защита от типичной ошибки «вошёл не тем аккаунтом».
+     */
+    verifyDialogsToken: () => Promise<AliceStatus>;
+
+    /**
+     * Гарантирует, что cloudflared доступен. Если PATH-версии нет —
+     * скачивает managed-бинарник в `userData/bin/`. Прогресс летит
+     * push-каналом `alice:cloudflared-install`.
+     */
+    ensureCloudflared: () => Promise<AliceCloudflaredInstall>;
+  };
+  updater: {
+    /** Снимок состояния updater'а — UI читает на mount, далее push через `update:status`. */
+    getStatus: () => Promise<UpdateStatus>;
+    /** Pull GitHub-feed; не скачивает. Push'ит `update:status`. */
+    check: () => Promise<UpdateStatus>;
+    /** Скачать update в фон; прогресс в push'ах. */
+    download: () => Promise<UpdateStatus>;
+    /** Применить update — quit + restart. Только из state='downloaded'. */
+    install: () => Promise<void>;
   };
   events: {
     /** Подписка на push от main. Возвращает unsubscribe. */
@@ -329,7 +362,11 @@ export interface IpcEvents {
     durationMs: number;
     at: string;
   };
+  /** Прогресс авто-инсталляции cloudflared — UI показывает inline-прогресс. */
+  'alice:cloudflared-install': AliceCloudflaredInstall;
   /** Навигационная команда (например, из tray «Найти устройства») → renderer делает router.push. */
   'tray:navigate': { path: string };
+  /** Auto-update lifecycle — discriminated UpdateStatus union. */
+  'update:status': UpdateStatus;
   log: { level: 'info' | 'warn' | 'error'; message: string; ts: number };
 }

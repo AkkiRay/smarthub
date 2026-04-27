@@ -219,7 +219,17 @@ export class EWeLinkDriver extends BaseCloudDriver {
   }
 
   private async login(): Promise<void> {
-    const body = { email: this.creds.email, password: this.creds.password, countryCode: '+0' };
+    // countryCode на 2025+: eWeLink API rejects '+0' (legacy fallback) и требует
+    // dialing-code, соответствующий региону (иначе получаем code 401, error
+    // "the email or country code is invalid"). Маппинг — представительная страна
+    // региона; юзер всегда может ввести email из любой страны, прокси на сервере eWeLink
+    // разрулит по самому email'у.
+    const countryCode = REGION_TO_COUNTRY_CODE[this.creds.region ?? 'eu'];
+    const body = {
+      email: this.creds.email,
+      password: this.creds.password,
+      countryCode,
+    };
     const r = await this.http.post<{ data: { at: string; rt: string } }>('/v2/user/login', body, {
       headers: this.signedHeaders(body),
     });
@@ -257,6 +267,14 @@ function canonicalJson(value: unknown): string {
     return v;
   });
 }
+
+/** Dialing-code по умолчанию для каждого региона; нужен в /v2/user/login на 2025+. */
+const REGION_TO_COUNTRY_CODE: Record<NonNullable<EWeLinkCreds['region']>, string> = {
+  eu: '+49', // Germany — eWeLink EU primary
+  us: '+1',
+  cn: '+86',
+  as: '+65', // Singapore as Asia anchor
+};
 
 function inferEwelinkType(uiid: number, params: EWeLinkDevice['itemData']['params']): DeviceType {
   // https://coolkit-technologies.github.io/eWeLink-API/#/en/UIIDProtocol

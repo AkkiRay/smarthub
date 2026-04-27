@@ -28,6 +28,10 @@ const DEV_CSP = [
   "font-src 'self' data:",
   "object-src 'none'",
   "base-uri 'self'",
+  // frame-ancestors 'none' — даже в dev. Защита от случайного embed'а в сторонний
+  // iframe (если когда-то будет dev-server proxied через cloudflared/ngrok для отладки).
+  "frame-ancestors 'none'",
+  "form-action 'none'",
 ].join('; ');
 
 export function installCsp(isDev: boolean): void {

@@ -24,6 +24,7 @@ import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import log from 'electron-log/main.js';
 import type { DriverCredentials, DriverId } from '@smarthome/shared';
 import type { SmartHomeHub } from '@core/hub/smart-home-hub.js';
+import type { UpdaterController } from '@main/auto-updater.js';
 import { safeOpenExternal } from '@main/security/open-external.js';
 
 /** Поля, которые НИКОГДА не возвращаются renderer'у (bcrypt-style маска). */
@@ -35,6 +36,41 @@ const SECRET_KEY_PATTERNS = [
   /private[_-]?key/i,
   /^pin$/i,
 ];
+
+// ---- Primitive arg validators (без zod-deps) ----
+//
+// Hand-rolled: проверяют типы args с понятными ошибками. Renderer'у возвращается
+// `Error('IPC <channel>: arg <i> ожидает <type>, получен <actual>')` — это видно
+// в DevTools и явно указывает, что протокол сломался (vs молчаливый TypeError).
+
+class IpcValidationError extends Error {
+  constructor(channel: string, message: string) {
+    super(`IPC ${channel}: ${message}`);
+    this.name = 'IpcValidationError';
+  }
+}
+
+function assertString(channel: string, name: string, v: unknown, opts: { maxLen?: number } = {}): string {
+  if (typeof v !== 'string') {
+    throw new IpcValidationError(channel, `${name} ожидает string, получен ${typeof v}`);
+  }
+  if (opts.maxLen && v.length > opts.maxLen) {
+    throw new IpcValidationError(channel, `${name} превышает ${opts.maxLen} символов`);
+  }
+  return v;
+}
+
+function assertStringOrNull(channel: string, name: string, v: unknown): string | null {
+  if (v === null) return null;
+  return assertString(channel, name, v);
+}
+
+function assertObject(channel: string, name: string, v: unknown): Record<string, unknown> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) {
+    throw new IpcValidationError(channel, `${name} ожидает object, получен ${typeof v}`);
+  }
+  return v as Record<string, unknown>;
+}
 
 /**
  * Маскирует sensitive-поля creds: оставляет последние 4 символа, остальное — `***`.
@@ -61,6 +97,7 @@ function redactCredentials(creds: Record<string, unknown> | null | undefined): R
 export interface IpcHandlerDeps {
   ipcMain: IpcMain;
   hub: SmartHomeHub;
+  updater: UpdaterController;
   getMainWindow: () => BrowserWindow | null;
 }
 
@@ -77,12 +114,13 @@ const HUB_EVENTS = [
   'yandexStation:event',
   'alice:status',
   'alice:webhook-activity',
+  'alice:cloudflared-install',
 ] as const;
 
 type HandlerFn = (...args: unknown[]) => unknown | Promise<unknown>;
 
 /** invoke-каналы → функция. Аргументы приходят БЕЗ IpcMainInvokeEvent (он отбрасывается в wrap'e). */
-function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
+function buildHandlers(hub: SmartHomeHub, updater: UpdaterController): Record<string, HandlerFn> {
   return {
     // app
     'app:get-version': () => app.getVersion(),
@@ -90,16 +128,35 @@ function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
     'app:get-hub-info': () => hub.getInfo(),
     'app:open-external': (url) => safeOpenExternal(url),
 
+    // updater
+    'updater:get-status': () => updater.getStatus(),
+    'updater:check': () => updater.checkForUpdates({ silent: false }),
+    'updater:download': () => updater.download(),
+    'updater:install': () => updater.install(),
+
     // devices
     'devices:list': () => hub.devices.list(),
-    'devices:get': (id) => hub.devices.get(id as string),
-    'devices:rename': (id, name) => hub.devices.rename(id as string, name as string),
-    'devices:set-room': (id, roomId) => hub.devices.setRoom(id as string, roomId as string | null),
-    'devices:remove': (id) => hub.devices.remove(id as string),
-    'devices:refresh': (id) => hub.devices.refresh(id as string),
+    'devices:get': (id) => hub.devices.get(assertString('devices:get', 'id', id)),
+    'devices:rename': (id, name) =>
+      hub.devices.rename(
+        assertString('devices:rename', 'id', id),
+        assertString('devices:rename', 'name', name, { maxLen: 128 }),
+      ),
+    'devices:set-room': (id, roomId) =>
+      hub.devices.setRoom(
+        assertString('devices:set-room', 'id', id),
+        assertStringOrNull('devices:set-room', 'roomId', roomId),
+      ),
+    'devices:remove': (id) => hub.devices.remove(assertString('devices:remove', 'id', id)),
+    'devices:refresh': (id) => hub.devices.refresh(assertString('devices:refresh', 'id', id)),
     'devices:refresh-all': () => hub.devices.refreshAll(),
-    'devices:execute': (cmd) =>
-      hub.devices.execute(cmd as Parameters<typeof hub.devices.execute>[0]),
+    'devices:execute': (cmd) => {
+      const o = assertObject('devices:execute', 'cmd', cmd);
+      assertString('devices:execute', 'cmd.deviceId', o['deviceId']);
+      assertString('devices:execute', 'cmd.capability', o['capability']);
+      assertString('devices:execute', 'cmd.instance', o['instance']);
+      return hub.devices.execute(cmd as Parameters<typeof hub.devices.execute>[0]);
+    },
 
     // discovery
     'discovery:start': (opts) =>
@@ -113,23 +170,40 @@ function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
 
     // rooms
     'rooms:list': () => hub.rooms.list(),
-    'rooms:create': (input) => hub.rooms.create(input as Parameters<typeof hub.rooms.create>[0]),
+    'rooms:create': (input) => {
+      const o = assertObject('rooms:create', 'input', input);
+      assertString('rooms:create', 'input.name', o['name'], { maxLen: 64 });
+      return hub.rooms.create(input as Parameters<typeof hub.rooms.create>[0]);
+    },
     'rooms:update': (id, patch) =>
-      hub.rooms.update(id as string, patch as Parameters<typeof hub.rooms.update>[1]),
-    'rooms:remove': (id) => hub.rooms.remove(id as string),
+      hub.rooms.update(
+        assertString('rooms:update', 'id', id),
+        assertObject('rooms:update', 'patch', patch) as Parameters<typeof hub.rooms.update>[1],
+      ),
+    'rooms:remove': (id) => hub.rooms.remove(assertString('rooms:remove', 'id', id)),
 
     // scenes
     'scenes:list': () => hub.scenes.list(),
-    'scenes:create': (input) => hub.scenes.create(input as Parameters<typeof hub.scenes.create>[0]),
+    'scenes:create': (input) => {
+      const o = assertObject('scenes:create', 'input', input);
+      assertString('scenes:create', 'input.name', o['name'], { maxLen: 128 });
+      return hub.scenes.create(input as Parameters<typeof hub.scenes.create>[0]);
+    },
     'scenes:update': (id, patch) =>
-      hub.scenes.update(id as string, patch as Parameters<typeof hub.scenes.update>[1]),
-    'scenes:remove': (id) => hub.scenes.remove(id as string),
-    'scenes:run': (id) => hub.scenes.run(id as string),
+      hub.scenes.update(
+        assertString('scenes:update', 'id', id),
+        assertObject('scenes:update', 'patch', patch) as Parameters<typeof hub.scenes.update>[1],
+      ),
+    'scenes:remove': (id) => hub.scenes.remove(assertString('scenes:remove', 'id', id)),
+    'scenes:run': (id) => hub.scenes.run(assertString('scenes:run', 'id', id)),
 
     // drivers
     'drivers:list': () => hub.drivers.list(),
-    'drivers:set-credentials': (driverId, creds) =>
-      hub.drivers.setCredentials(driverId as DriverId, creds as DriverCredentials<DriverId>),
+    'drivers:set-credentials': (driverId, creds) => {
+      const id = assertString('drivers:set-credentials', 'driverId', driverId, { maxLen: 64 });
+      const c = assertObject('drivers:set-credentials', 'creds', creds);
+      return hub.drivers.setCredentials(id as DriverId, c as DriverCredentials<DriverId>);
+    },
     // Redact: sensitive-поля (password/token/secret/key) маскируются —
     // raw secret в renderer'е не нужен, UI показывает только «●●●●1234».
     // Это закрывает leak через DevTools heap-snapshot и crash-reports.
@@ -197,6 +271,9 @@ function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
     'alice:generate-oauth-credentials': () => hub.alice.generateOauthCredentials(),
     'alice:probe-cloudflared': () => hub.alice.probeCloudflared(),
     'alice:fetch-dialogs-callback-token': () => hub.alice.fetchDialogsCallbackToken(),
+    'alice:probe-reachability': () => hub.alice.probeReachability(),
+    'alice:verify-dialogs-token': () => hub.alice.verifyDialogsToken(),
+    'alice:ensure-cloudflared': () => hub.alice.ensureCloudflared(),
 
     // Glagol embedded-OAuth pairing — пока перенаправлено в существующий yandexStation.signIn flow.
     // UI вызывает sign-in напрямую, но IPC контракт публикует и эти каналы для будущей доработки.
@@ -253,7 +330,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     };
   };
 
-  for (const [channel, fn] of Object.entries(buildHandlers(hub))) {
+  for (const [channel, fn] of Object.entries(buildHandlers(hub, deps.updater))) {
     ipcMain.handle(channel, wrap(channel, fn));
   }
 

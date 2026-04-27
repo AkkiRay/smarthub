@@ -1,0 +1,27 @@
+# GitHub-managed dependency-review action. На каждый PR блокирует merge, если
+# в lockfile появилась зависимость с known-vulnerability >= moderate или с
+# несовместимой лицензией (см. allowlist ниже). Лучше отлавливать это в PR,
+# чем после merge.
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
+          allow-licenses: >-
+            MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, CC0-1.0,
+            Unlicense, MPL-2.0, BlueOak-1.0.0, Python-2.0

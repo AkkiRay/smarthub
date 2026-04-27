@@ -1,0 +1,37 @@
+# CodeQL static analysis. Параллельно сканит JS/TS bundle (renderer + main +
+# shared) на типовые vulnerability-классы (XSS, SSRF, prototype-pollution и т.д.).
+# Запуск: на push в main, PR против main и еженедельно — чтобы догонять
+# обновления QL-rules без правки кода.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 5 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'

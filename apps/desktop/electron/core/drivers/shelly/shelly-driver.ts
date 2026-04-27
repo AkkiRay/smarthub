@@ -122,14 +122,26 @@ export class ShellyDriver extends BaseDriver {
 
   async probe(candidate: DiscoveredDevice): Promise<Device | null> {
     try {
-      const data = await this.rpc<{ id: string; model: string; gen: number; name?: string }>(
-        candidate.address,
-        'Shelly.GetDeviceInfo',
-      );
+      const data = await this.rpc<{
+        id: string;
+        model: string;
+        gen: number;
+        name?: string;
+        auth_en?: boolean;
+      }>(candidate.address, 'Shelly.GetDeviceInfo');
       const model = data.model ?? (candidate.meta as ShellyMeta).model ?? '';
       const isLight = isLightModel(model);
       const type: DeviceType = isLight ? DEVICE_TYPE.LIGHT : DEVICE_TYPE.SOCKET;
       const component: ShellyMeta['component'] = isLight ? 'light' : 'switch';
+
+      // auth_en=true (включена защита паролем) + у нас нет creds.password = pairing
+      // не пройдёт. Логируем actionable warning сразу при probe, а не на каждом
+      // execute с generic DEVICE_UNREACHABLE.
+      if (data.auth_en && !this.creds.password) {
+        this.logWarn(
+          `device ${data.id} (${model}) защищён паролем (auth_en), но в creds его нет — добавьте Shelly password в настройках интеграции`,
+        );
+      }
 
       const now = new Date().toISOString();
       const meta: ShellyMeta = {

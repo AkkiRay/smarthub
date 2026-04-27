@@ -1,0 +1,32 @@
+name: ✨ Feature request
+description: Предложить улучшение или новый интеграционный драйвер
+title: '[feat] '
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какая проблема решается
+      description: Какое использование сейчас неудобно или невозможно?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предложение
+      description: Что именно должно появиться или измениться
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы
+      description: Какие workaround'ы вы пробовали или рассматривали
+
+  - type: input
+    id: vendor
+    attributes:
+      label: (для нового драйвера) Вендор / протокол
+      placeholder: 'например, Aqara M3 / Matter local'

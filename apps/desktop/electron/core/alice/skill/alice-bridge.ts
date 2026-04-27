@@ -22,13 +22,17 @@
 import { EventEmitter } from 'node:events';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import axios from 'axios';
 import log from 'electron-log/main.js';
 import type {
   AliceDeviceExposure,
   AliceDevicePreview,
+  AliceDialogsTokenOwner,
+  AliceReachabilityResult,
   AliceSceneExposure,
   AliceSkillActivity,
   AliceSkillConfig,
+  AliceSkillStage,
   AliceStatus,
   Device,
   DeviceCommand,
@@ -42,8 +46,15 @@ import { buildDevicePreviews } from './device-mapper.js';
 import { SkillWebhookServer, type WebhookActivityEvent } from './webhook-server.js';
 import { StatePusher } from './state-pusher.js';
 import { TunnelManager } from './tunnel-manager.js';
+import { probeWebhookReachability } from './reachability-probe.js';
+import { CloudflaredInstaller } from './cloudflared-installer.js';
+import type { AliceCloudflaredInstall } from '@smarthome/shared';
 
 const ACTIVITY_RETENTION_HOURS = 24;
+/** «Свежий» webhook от Алисы — после которого считаем привязку живой. */
+const LINK_FRESHNESS_MS = 7 * 24 * 60 * 60 * 1000;
+/** Авто-проба достижимости каждые 90с пока туннель up — кэш для UI. */
+const REACHABILITY_REFRESH_MS = 90_000;
 
 export interface AliceBridgeDeps {
   settings: SettingsStore;
@@ -58,6 +69,7 @@ export interface AliceBridgeDeps {
 export interface AliceBridgeEvents {
   status: (status: AliceStatus) => void;
   'webhook-activity': (event: WebhookActivityEvent) => void;
+  'cloudflared-install': (state: AliceCloudflaredInstall) => void;
 }
 
 export class AliceBridge extends EventEmitter {
@@ -67,6 +79,17 @@ export class AliceBridge extends EventEmitter {
 
   /** Кольцевой лог webhook-вызовов за 24ч — для status-панели. */
   private activityLog: WebhookActivityEvent[] = [];
+
+  /** Последняя внешняя проба достижимости publicUrl. Источник истины для stage. */
+  private lastReachability: AliceReachabilityResult | null = null;
+  private reachabilityTimer: NodeJS.Timeout | null = null;
+
+  /** Владелец dialogsOauthToken (display_name) — после verifyDialogsToken. */
+  private dialogsTokenOwner: AliceDialogsTokenOwner | null = null;
+
+  /** Авто-инсталлер cloudflared. UI больше не показывает «Скачать» / «Проверить». */
+  private readonly installer = new CloudflaredInstaller();
+  private installState: AliceCloudflaredInstall = { kind: 'missing' };
 
   constructor(private readonly deps: AliceBridgeDeps) {
     super();
@@ -83,7 +106,15 @@ export class AliceBridge extends EventEmitter {
     });
 
     this.tunnel = new TunnelManager();
-    this.tunnel.on('status', () => this.emitStatus());
+    this.tunnel.on('status', (status: { running: boolean }) => {
+      if (status.running) {
+        this.scheduleReachabilityProbe(0);
+      } else {
+        this.lastReachability = null;
+        this.clearReachabilityTimer();
+      }
+      this.emitStatus();
+    });
 
     this.statePusher = new StatePusher({
       getConfig: () => {
@@ -93,7 +124,19 @@ export class AliceBridge extends EventEmitter {
       },
       getInternalUserId: () => deps.settings.get('hubId'),
       onSuccess: () => {
-        // Активность не логируем — только пометим last callback at в getStatus().
+        if (this.dialogsTokenOwner?.rejected) {
+          this.dialogsTokenOwner = { ...this.dialogsTokenOwner, rejected: false };
+        }
+        this.emitStatus();
+      },
+      onUnauthorized: () => {
+        // 401 от dialogs.yandex.net = токен отозван или выдан не от того аккаунта.
+        // Помечаем — UI поднимет prompt «получите токен заново под владельцем скилла».
+        this.dialogsTokenOwner = {
+          ...(this.dialogsTokenOwner ?? {}),
+          checkedAt: new Date().toISOString(),
+          rejected: true,
+        };
         this.emitStatus();
       },
     });
@@ -105,9 +148,11 @@ export class AliceBridge extends EventEmitter {
     // Webhook стартуем всегда — слушает 127.0.0.1, ничего не светит без туннеля.
     await this.webhook.start();
     log.info(`[alice] webhook on 127.0.0.1:${this.webhook.getPort()}`);
+    this.installState = this.installer.getStatus();
   }
 
   async shutdown(): Promise<void> {
+    this.clearReachabilityTimer();
     await this.tunnel.stop();
     await this.webhook.stop();
   }
@@ -127,15 +172,25 @@ export class AliceBridge extends EventEmitter {
     const config = alice.config;
     const tunnelStatus = this.tunnel.getStatus();
     const station = this.deps.getStationStatus();
+    const activity = this.computeActivity();
+    const reachability = this.lastReachability ?? undefined;
 
     return {
       station,
       skill: {
-        stage: this.computeStage(config, tunnelStatus.running, alice.issuedTokens),
+        stage: this.computeStage({
+          config,
+          tunnelRunning: tunnelStatus.running,
+          reachability,
+          activity,
+          issuedTokens: alice.issuedTokens,
+        }),
         configured: !!config,
+        ...(this.dialogsTokenOwner ? { dialogsTokenOwner: this.dialogsTokenOwner } : {}),
       },
-      tunnel: tunnelStatus,
-      activity: this.computeActivity(),
+      tunnel: { ...tunnelStatus, ...(reachability ? { reachability } : {}) },
+      activity,
+      cloudflared: this.installState,
       exposedDeviceCount: countExposedDevices(this.deps.listDevices(), alice.deviceExposures),
       exposedSceneCount: countExposedScenes(this.deps.listScenes(), alice.sceneExposures),
     };
@@ -164,10 +219,66 @@ export class AliceBridge extends EventEmitter {
   }
 
   /**
-   * Однократная проверка наличия cloudflared в PATH. Дёшево (sync exec --version),
-   * вызывается из IPC при mount AliceView. Не кешируем — юзер мог установить пока хаб работал.
+   * Возвращает путь к cloudflared, который мы будем использовать.
+   * Приоритет: managed (userData/bin) → PATH-версия (`brew`/`winget` юзер уже поставил).
+   * `null` — нигде нет, нужен `ensureCloudflared()`.
    */
-  probeCloudflared(): { installed: boolean; version?: string; error?: string } {
+  resolveCloudflaredBinary(): string | null {
+    const managed = this.installer.getStatus();
+    if (managed.kind === 'managed') return managed.path;
+    if (this.isPathBinaryUsable()) {
+      return process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared';
+    }
+    return null;
+  }
+
+  /** Текущее состояние managed-бинарника — UI показывает inline-прогресс при downloading. */
+  getCloudflaredInstall(): AliceCloudflaredInstall {
+    return this.installState;
+  }
+
+  /**
+   * Гарантирует, что cloudflared можно вызвать. Если PATH-версия есть — оставляет;
+   * иначе скачивает managed-бинарник в userData/bin/. Эмитит progress-events.
+   */
+  async ensureCloudflared(): Promise<string> {
+    if (this.isPathBinaryUsable()) {
+      return process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared';
+    }
+    const current = this.installer.getStatus();
+    if (current.kind === 'managed') {
+      this.installState = current;
+      return current.path;
+    }
+    // Скачиваем — UI будет получать события через `cloudflared-install`.
+    this.setInstallState({ kind: 'downloading', ratio: 0, bytesDone: 0, bytesTotal: null });
+    try {
+      const finalPath = await this.installer.ensureInstalled({
+        onProgress: (p) => {
+          this.setInstallState({
+            kind: 'downloading',
+            ratio: p.ratio,
+            bytesDone: p.bytesDone,
+            bytesTotal: p.bytesTotal,
+          });
+        },
+      });
+      this.setInstallState({ kind: 'managed', path: finalPath });
+      return finalPath;
+    } catch (e) {
+      const msg = (e as Error).message;
+      this.setInstallState({ kind: 'error', error: msg });
+      throw new Error(`Не удалось скачать cloudflared: ${msg}`);
+    }
+  }
+
+  private setInstallState(state: AliceCloudflaredInstall): void {
+    this.installState = state;
+    this.emit('cloudflared-install', state);
+    this.emitStatus();
+  }
+
+  private isPathBinaryUsable(): boolean {
     const binary = process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared';
     try {
       const result = spawnSync(binary, ['--version'], {
@@ -175,18 +286,18 @@ export class AliceBridge extends EventEmitter {
         windowsHide: true,
         encoding: 'utf8',
       });
-      if (result.error) {
-        return { installed: false, error: result.error.message };
-      }
-      if (result.status !== 0) {
-        return { installed: false, error: `exit code ${result.status}` };
-      }
-      // Output: «cloudflared version 2024.x.x (...)» — берём первую строку.
-      const versionLine = (result.stdout || result.stderr || '').split('\n')[0]?.trim();
-      return { installed: true, version: versionLine };
-    } catch (e) {
-      return { installed: false, error: (e as Error).message };
+      return !result.error && result.status === 0;
+    } catch {
+      return false;
     }
+  }
+
+  /** @deprecated UI больше не вызывает — оставлен для обратной совместимости IPC. */
+  probeCloudflared(): { installed: boolean; version?: string; error?: string } {
+    if (this.isPathBinaryUsable()) return { installed: true };
+    const managed = this.installer.getStatus();
+    if (managed.kind === 'managed') return { installed: true, version: 'managed' };
+    return { installed: false };
   }
 
   clearSkillConfig(): AliceStatus {
@@ -205,9 +316,12 @@ export class AliceBridge extends EventEmitter {
       log.warn('[alice] startTunnel without skill config — refusing');
       return this.getStatus();
     }
+    // Гарантия наличия бинарника — если его нет, скачаем сначала.
+    const binaryPath = await this.ensureCloudflared();
     await this.tunnel.start({
       localPort: this.webhook.getPort(),
-      customDomain: config.customDomain,
+      ...(config.customDomain ? { customDomain: config.customDomain } : {}),
+      binaryPath,
     });
     return this.getStatus();
   }
@@ -292,15 +406,111 @@ export class AliceBridge extends EventEmitter {
     };
   }
 
-  private computeStage(
-    config: AliceSkillConfig | null,
-    tunnelRunning: boolean,
-    issuedTokens: Record<string, unknown>,
-  ): AliceStatus['skill']['stage'] {
-    if (!config) return 'idle';
-    if (Object.keys(issuedTokens).length > 0) return 'linked';
-    if (tunnelRunning) return 'tunnel-up';
-    return 'configured';
+  /**
+   * Честный stage-resolver. Источник истины — внешняя проба и lastRequestAt,
+   * а НЕ сам факт «issuedTokens непустые» (так оно остаётся «linked» вечно
+   * после первого OAuth, даже если юзер давно отвязал в приложении).
+   */
+  private computeStage(args: {
+    config: AliceSkillConfig | null;
+    tunnelRunning: boolean;
+    reachability: AliceReachabilityResult | undefined;
+    activity: AliceSkillActivity;
+    issuedTokens: Record<string, unknown>;
+  }): AliceSkillStage {
+    if (!args.config) return 'idle';
+    if (!args.tunnelRunning) return 'configured';
+
+    const lastRequestAge = args.activity.lastRequestAt
+      ? Date.now() - Date.parse(args.activity.lastRequestAt)
+      : Number.POSITIVE_INFINITY;
+    const fresh = lastRequestAge <= LINK_FRESHNESS_MS;
+    const hasTokens = Object.keys(args.issuedTokens).length > 0;
+
+    if (fresh) return 'linked';
+    if (hasTokens) return 'linked-stale';
+    if (!args.reachability) return 'tunnel-up';
+    if (!args.reachability.ok) return 'tunnel-up';
+    return 'awaiting-link';
+  }
+
+  // ===== Reachability =====
+
+  /** Forced probe + cache. UI вызывает на каждый клик «Проверить». */
+  async probeReachability(): Promise<AliceReachabilityResult | null> {
+    const tunnel = this.tunnel.getStatus();
+    if (!tunnel.running || !tunnel.publicUrl) return null;
+    const config = this.deps.settings.getAlice().config;
+    const result = await probeWebhookReachability({
+      publicUrl: tunnel.publicUrl,
+      ...(config?.customDomain ? { customDomain: config.customDomain } : {}),
+    });
+    this.lastReachability = result;
+    this.emitStatus();
+    return result;
+  }
+
+  private scheduleReachabilityProbe(delay: number): void {
+    this.clearReachabilityTimer();
+    this.reachabilityTimer = setTimeout(() => {
+      void this.probeReachability().finally(() => {
+        // Перезапланировать только если туннель всё ещё up.
+        if (this.tunnel.getStatus().running) {
+          this.scheduleReachabilityProbe(REACHABILITY_REFRESH_MS);
+        }
+      });
+    }, delay);
+    this.reachabilityTimer.unref?.();
+  }
+
+  private clearReachabilityTimer(): void {
+    if (this.reachabilityTimer) {
+      clearTimeout(this.reachabilityTimer);
+      this.reachabilityTimer = null;
+    }
+  }
+
+  // ===== Dialogs token verification =====
+
+  /**
+   * Дёргает login.yandex.ru/info — узнаёт display_name владельца токена.
+   * Защита от типичной ошибки «вошёл не тем аккаунтом» — если токен валиден,
+   * но display_name != владельца скилла, callback API вернёт 401 на push.
+   */
+  async verifyDialogsToken(): Promise<AliceDialogsTokenOwner | null> {
+    const config = this.deps.settings.getAlice().config;
+    if (!config?.dialogsOauthToken) {
+      this.dialogsTokenOwner = null;
+      this.emitStatus();
+      return null;
+    }
+    try {
+      const response = await axios.get<{ display_name?: string; login?: string }>(
+        'https://login.yandex.ru/info',
+        {
+          params: { format: 'json' },
+          headers: { Authorization: `OAuth ${config.dialogsOauthToken}` },
+          timeout: 5_000,
+        },
+      );
+      this.dialogsTokenOwner = {
+        ...(response.data.display_name ? { displayName: response.data.display_name } : {}),
+        ...(response.data.login ? { login: response.data.login } : {}),
+        checkedAt: new Date().toISOString(),
+        rejected: false,
+      };
+    } catch (e) {
+      const err = e as { response?: { status?: number }; message?: string };
+      const status = err.response?.status;
+      this.dialogsTokenOwner = {
+        ...(this.dialogsTokenOwner ?? {}),
+        checkedAt: new Date().toISOString(),
+        rejected: status === 401,
+      };
+      log.warn(`[alice] verifyDialogsToken failed: ${status ?? err.message ?? 'network'}`);
+    }
+    this.emitStatus();
+    return this.dialogsTokenOwner;
   }
 
   private emitStatus(): void {

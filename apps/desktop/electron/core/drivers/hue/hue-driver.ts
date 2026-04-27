@@ -102,6 +102,8 @@ export class HueDriver extends BaseDriver {
 
   /** Per-bridge axios с pinned HTTPS-agent. */
   private readonly httpByBridge = new Map<string, AxiosInstance>();
+  /** bridges, у которых пр successful CLIP v2 probe. Один-shot per session. */
+  private readonly v2SupportedByBridge = new Set<string>();
 
   constructor(private readonly bridges: HueBridge[]) {
     super();
@@ -123,11 +125,41 @@ export class HueDriver extends BaseDriver {
     return `https://${meta.bridgeIp}`;
   }
 
+  private async detectClipV2(
+    bridge: { bridgeId: string; internalipaddress: string; username: string },
+    client: AxiosInstance,
+  ): Promise<void> {
+    try {
+      const resp = await client.get(
+        `https://${bridge.internalipaddress}/clip/v2/resource/light`,
+        {
+          headers: { 'hue-application-key': bridge.username },
+          validateStatus: () => true,
+          timeout: 2000,
+        },
+      );
+      if (resp.status === 200 || resp.status === 207) {
+        this.v2SupportedByBridge.add(bridge.bridgeId);
+        this.logInfo(
+          `bridge ${bridge.bridgeId} supports CLIP v2 — рекомендуется миграция (v1 deprecated 2027)`,
+        );
+      }
+    } catch {
+      /* v2 not supported — silent */
+    }
+  }
+
   async discover(_signal: AbortSignal): Promise<DiscoveredDevice[]> {
     const out: DiscoveredDevice[] = [];
     for (const b of this.bridges) {
       try {
         const client = this.clientFor(b);
+        // CLIP v2 detect: бесшумно пробуем `/clip/v2/resource/light`. Если bridge
+        // отвечает 200 — он поддерживает v2 (Hue v1 username deprecated с 2027).
+        // Пока оставляем v1-flow рабочим, но flag'аем в логе для миграции.
+        if (!this.v2SupportedByBridge.has(b.bridgeId)) {
+          await this.detectClipV2(b, client);
+        }
         const { data } = await client.get<Record<string, HueLight>>(
           `https://${b.internalipaddress}/api/${b.username}/lights`,
         );
