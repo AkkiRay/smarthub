@@ -17,7 +17,7 @@
           class="marketplace__item"
           :class="{
             'is-active': d.active,
-            'is-expanded': expanded === d.id,
+            'is-expanded': expandLayoutId === d.id,
             [`maturity--${d.maturity}`]: true,
           }"
           data-anim="item"
@@ -26,19 +26,22 @@
             <DriverIcon :driver="d.id as DriverId" size="md" :active="d.active" />
 
             <div class="marketplace__copy">
-              <strong class="marketplace__name">
-                {{ d.displayName }}
+              <div class="marketplace__title-row">
+                <strong class="marketplace__name">{{ d.displayName }}</strong>
                 <span class="marketplace__region" :class="`region--${d.region}`">{{
                   regionLabel(d.region)
                 }}</span>
-              </strong>
+                <span
+                  v-if="d.maturity === 'planned'"
+                  class="marketplace__beta"
+                >Beta</span>
+              </div>
               <span class="marketplace__desc">{{ d.description }}</span>
+              <span class="chip marketplace__status" :class="statusChip(d)">
+                <span class="chip__dot" />
+                {{ statusLabel(d) }}
+              </span>
             </div>
-
-            <span class="chip marketplace__status" :class="statusChip(d)">
-              <span class="chip__dot" />
-              {{ statusLabel(d) }}
-            </span>
 
             <button
               v-if="d.requiresCredentials || d.maturity === 'planned'"
@@ -60,7 +63,12 @@
             </button>
           </div>
 
-          <Transition name="marketplace-expand">
+          <Transition
+            :css="false"
+            @before-enter="onPanelBeforeEnter"
+            @enter="onPanelEnter"
+            @leave="onPanelLeave"
+          >
             <div v-if="expanded === d.id" class="marketplace__panel">
               <DriverCredentialsForm
                 v-if="d.requiresCredentials && d.credentialsSchema"
@@ -88,20 +96,33 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue';
+import { gsap } from 'gsap';
+import { storeToRefs } from 'pinia';
 import type { DriverCategory, DriverDescriptor, DriverId } from '@smarthome/shared';
 import { useToasterStore } from '@/stores/toaster';
+import { useUiStore } from '@/stores/ui';
 import { useViewMount } from '@/composables/useViewMount';
 import { useGsap } from '@/composables/useGsap';
 import DriverIcon from '@/components/visuals/DriverIcon.vue';
 import DriverCredentialsForm from './DriverCredentialsForm.vue';
 
 const toaster = useToasterStore();
+const ui = useUiStore();
+const { motionLevel } = storeToRefs(ui);
 
 const rootEl = useTemplateRef<HTMLElement>('rootEl');
 const drivers = ref<DriverDescriptor[]>([]);
 const expanded = ref<string | null>(null);
+// Lock на `.is-expanded` класс до завершения leave-анимации panel'а. Без него
+// grid-column родителя меняется instantly при collapse → item «сжимается»
+// рядом с ещё открытой панелью.
+const expandLayoutId = ref<string | null>(null);
 const busyId = ref<string | null>(null);
 const savedCreds = ref<Record<string, Record<string, unknown>>>({});
+
+watch(expanded, (id) => {
+  if (id) expandLayoutId.value = id;
+});
 
 const CATEGORY_TITLES: Record<DriverCategory, string> = {
   'lan-russian': 'Российские (локально)',
@@ -157,6 +178,95 @@ function toggleExpand(d: DriverDescriptor): void {
   expanded.value = expanded.value === d.id ? null : d.id;
 }
 
+// =====================================================================
+// Panel expand/collapse — GSAP JS-hooks вместо CSS transition.
+//
+// Высота `height: auto` не интерполируется CSS-движком, fixed `max-height`
+// (старая реализация) даёт snap-эффект при collapse: 600px→0 проходит за
+// долю длительности когда реальная высота 80px. GSAP измеряет scrollHeight
+// перед animation'ом, animates до точного значения, ставит auto в onComplete.
+//
+// padding 14px 18px 18px → 0 анимируется параллельно — без этого panel
+// «обрывается» с padding'ом видимым на 0-height.
+// =====================================================================
+const PANEL_PAD_TOP_OPEN = 14;
+const PANEL_PAD_BOTTOM_OPEN = 18;
+
+function panelDuration(base: number): number {
+  if (motionLevel.value === 'off') return 0;
+  if (motionLevel.value === 'reduced') return base * 0.6;
+  return base;
+}
+
+function onPanelBeforeEnter(el: Element): void {
+  const node = el as HTMLElement;
+  gsap.set(node, {
+    height: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    opacity: 0,
+    overflow: 'hidden',
+  });
+}
+
+function onPanelEnter(el: Element, done: () => void): void {
+  const node = el as HTMLElement;
+  if (motionLevel.value === 'off') {
+    gsap.set(node, {
+      clearProps: 'height,paddingTop,paddingBottom,opacity,overflow',
+    });
+    done();
+    return;
+  }
+  // Замеряем естественную высоту: временно выставляем auto, читаем scrollHeight,
+  // возвращаем 0, анимируем до измеренного значения.
+  gsap.set(node, { height: 'auto' });
+  const target = node.scrollHeight;
+  gsap.set(node, { height: 0 });
+
+  gsap.to(node, {
+    height: target,
+    paddingTop: PANEL_PAD_TOP_OPEN,
+    paddingBottom: PANEL_PAD_BOTTOM_OPEN,
+    opacity: 1,
+    duration: panelDuration(0.36),
+    ease: 'power2.out',
+    onComplete: () => {
+      // Auto-height снимает фиксированный pixel-lock — content внутри может
+      // расти/сжиматься (resize, async-render формы, error-сообщения).
+      gsap.set(node, { clearProps: 'height,overflow' });
+      done();
+    },
+  });
+}
+
+function onPanelLeave(el: Element, done: () => void): void {
+  const node = el as HTMLElement;
+  if (motionLevel.value === 'off') {
+    expandLayoutId.value = null;
+    done();
+    return;
+  }
+  // Фиксируем текущую высоту перед animation'ом — без этого браузер
+  // интерполирует от `auto` и transition сразу схлопывается в snap.
+  const startHeight = node.offsetHeight;
+  gsap.set(node, { height: startHeight, overflow: 'hidden' });
+  gsap.to(node, {
+    height: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    opacity: 0,
+    duration: panelDuration(0.3),
+    ease: 'power2.in',
+    onComplete: () => {
+      // Сбрасываем grid-column lock после animation'а — item возвращается
+      // в обычный grid-track плавно, без «срыва» под открытой панелью.
+      expandLayoutId.value = null;
+      done();
+    },
+  });
+}
+
 function regionLabel(r: DriverDescriptor['region']): string {
   return r === 'ru' ? 'РФ' : r === 'ru-cis' ? 'РФ+СНГ' : 'Global';
 }
@@ -208,10 +318,8 @@ async function saveCreds(d: DriverDescriptor, values: Record<string, string>): P
 
 onMounted(load);
 
-// Mount-cascade: group-блоки → driver-ряды одной волной (stagger из useViewMount).
-// `load()` асинхронный — драйверы появляются через tick, поэтому повторно
-// прогоняем stagger когда массив наполнился (иначе на первом mount'е
-// querySelectorAll('[data-anim="item"]') вернёт пусто).
+// Initial mount-cascade — header → блоки. Items появляются после `load()`,
+// re-stagger по first-fill watch'у.
 useViewMount({ scope: rootEl });
 const { from } = useGsap(rootEl.value);
 watch(
@@ -275,13 +383,13 @@ defineExpose({ reload: load });
 
   &__item {
     position: relative;
-    border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.022);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-surface);
+    border: var(--border-thin) solid var(--color-border-subtle);
     overflow: hidden;
     transition:
-      background-color 200ms var(--ease-out),
-      border-color 200ms var(--ease-out);
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
 
     &::before {
       content: '';
@@ -290,23 +398,27 @@ defineExpose({ reload: load });
       width: 2px;
       background: var(--gradient-brand);
       opacity: 0;
-      transition: opacity 240ms var(--ease-out);
+      transition: opacity var(--dur-medium) var(--ease-out);
       pointer-events: none;
     }
 
     &:has(.marketplace__row:hover) {
-      background: rgba(255, 255, 255, 0.04);
-      border-color: rgba(255, 255, 255, 0.08);
+      background: var(--color-bg-elevated);
+      border-color: var(--color-border-soft);
     }
 
-    &.is-active::before {
-      opacity: 0.7;
+    &.is-active {
+      border-color: rgba(var(--color-brand-violet-rgb), 0.28);
+
+      &::before {
+        opacity: 0.85;
+      }
     }
 
     &.is-expanded {
       grid-column: 1 / -1;
-      background: rgba(255, 255, 255, 0.035);
-      border-color: rgba(var(--color-brand-purple-rgb), 0.22);
+      background: var(--color-bg-elevated);
+      border-color: rgba(var(--color-brand-violet-rgb), 0.32);
 
       &::before {
         opacity: 1;
@@ -317,32 +429,19 @@ defineExpose({ reload: load });
         color: var(--color-text-primary);
       }
     }
-
-    &.maturity--planned .marketplace__name::after {
-      content: 'beta';
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: rgba(255, 181, 71, 0.12);
-      color: #ffb547;
-      margin-left: 8px;
-    }
   }
 
   &__row {
     display: grid;
-    grid-template-columns: auto 1fr auto auto;
-    align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: flex-start;
     gap: 14px;
     padding: 14px 18px;
     cursor: pointer;
-    transition: background-color 160ms var(--ease-out);
+    transition: background-color var(--dur-fast) var(--ease-out);
 
     &:active {
-      background: rgba(255, 255, 255, 0.07);
+      background: rgba(255, 255, 255, 0.04);
       transition-duration: 0ms;
     }
   }
@@ -350,7 +449,16 @@ defineExpose({ reload: load });
   &__copy {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+    min-width: 0;
+    padding-top: 2px;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
     min-width: 0;
   }
 
@@ -359,9 +467,10 @@ defineExpose({ reload: load });
     font-weight: 600;
     color: var(--color-text-primary);
     letter-spacing: -0.005em;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   &__region {
@@ -369,31 +478,46 @@ defineExpose({ reload: load });
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    padding: 1.5px 6px;
+    padding: 2px 6px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--color-text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
 
-    &.region--ru {
-      background: rgba(33, 160, 56, 0.16);
-      color: #4ad072;
-    }
+    &.region--ru,
     &.region--ru-cis {
-      background: rgba(33, 160, 56, 0.12);
-      color: #4ad072;
+      background: rgba(var(--color-brand-mint-rgb), 0.14);
+      color: var(--color-brand-mint);
     }
+  }
+
+  &__beta {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(var(--color-brand-amber-rgb), 0.16);
+    color: var(--color-brand-amber);
+    flex-shrink: 0;
   }
 
   &__desc {
     font-size: 12.5px;
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    text-wrap: pretty;
   }
 
   &__status {
-    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+    width: fit-content;
   }
 
   &__chevron {
@@ -425,6 +549,9 @@ defineExpose({ reload: load });
   &__panel {
     padding: 14px 18px 18px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
+    // height / padding управляются GSAP-хуками (см. onPanelEnter/Leave).
+    // will-change промоутит panel в свой compositor-слой — ресайз без layout-thrash.
+    will-change: height, opacity;
   }
 
   &__note {
@@ -446,22 +573,4 @@ defineExpose({ reload: load });
   }
 }
 
-.marketplace-expand-enter-active,
-.marketplace-expand-leave-active {
-  overflow: hidden;
-  transition:
-    max-height 360ms var(--ease-out),
-    opacity 240ms var(--ease-out),
-    padding 280ms var(--ease-out);
-}
-.marketplace-expand-enter-from,
-.marketplace-expand-leave-to {
-  max-height: 0 !important;
-  opacity: 0;
-}
-.marketplace-expand-enter-to,
-.marketplace-expand-leave-from {
-  max-height: 600px;
-  opacity: 1;
-}
 </style>

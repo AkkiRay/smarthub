@@ -238,20 +238,28 @@ export class MiIODriver extends BaseDriver {
       const packet = Buffer.concat([hdr, enc]);
 
       let settled = false;
+      let timer: NodeJS.Timeout | null = null;
       const fail = (e: Error): void => {
         if (settled) return;
         settled = true;
+        if (timer) clearTimeout(timer);
         sock.close();
         reject(e);
       };
       const succeed = (v: T): void => {
         if (settled) return;
         settled = true;
+        if (timer) clearTimeout(timer);
         sock.close();
         resolve(v);
       };
       sock.on('message', (msg) => {
+        // Magic + did-фильтр ДО decrypt: иначе любой UDP-пакет на наш ephemeral
+        // порт идёт через AES, и невалидный пакет валит process «bad decrypt».
         if (msg.length < 32) return;
+        if (msg.readUInt16BE(0) !== 0x2131) return;
+        const respDid = msg.readUInt32BE(8);
+        if (respDid !== 0 && respDid !== meta.did) return;
         const enc2 = msg.subarray(32);
         if (!enc2.length) return;
         try {
@@ -262,14 +270,16 @@ export class MiIODriver extends BaseDriver {
           if (obj.error) fail(new Error(obj.error.message));
           else succeed((obj.result ?? []) as T);
         } catch (e) {
-          fail(e as Error);
+          // НЕ fail — пакет может быть от чужого устройства с нашим did
+          // (collision вероятна на 32-bit), просто игнорируем.
+          this.logWarn(`miIO decrypt skipped: ${(e as Error).message}`);
         }
       });
       sock.on('error', fail);
       sock.send(packet, 0, packet.length, port, host!, (e) => {
         if (e) fail(e);
       });
-      setTimeout(() => fail(new Error('miIO timeout')), MIIO_RPC_TIMEOUT_MS);
+      timer = setTimeout(() => fail(new Error('miIO timeout')), MIIO_RPC_TIMEOUT_MS);
     });
   }
 }

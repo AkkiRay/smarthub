@@ -21,7 +21,14 @@
 import Store from 'electron-store';
 import { app, safeStorage } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import log from 'electron-log/main.js';
 import type {
@@ -137,30 +144,94 @@ export type SettingsStore = Awaited<ReturnType<typeof createSettingsStore>>;
 const LEGACY_ENCRYPTION_KEY = 'smarthome-hub-local-key';
 const KEY_FILE_NAME = '.store-key';
 
-/** Per-install random ключ, шифруется через `safeStorage` (DPAPI/Keychain/libsecret). */
+/**
+ * Per-install random ключ, шифруется через `safeStorage` (DPAPI/Keychain/libsecret).
+ *
+ * Anti-data-loss policy:
+ *   - Один transient DPAPI-сбой НЕ regener'ит ключ — это бы стёрло OAuth-токены,
+ *     driver creds, выданные Алисе bearer'ы. Вместо этого throw'аем — main выйдет
+ *     с диалогом «не удалось расшифровать профиль, перезапустите от того же пользователя»,
+ *     юзер чинит OS-credstore-проблему вручную.
+ *   - Если safeStorage недоступен (Linux без libsecret), startup отказываем целиком:
+ *     plain-text-ключ на диске даёт false sense of security и не уважает NTFS-ACL.
+ *     Юзер видит сообщение и решает (DESKTOP_SAFE_STORAGE_MISSING_OK=1 для CI/headless).
+ */
 function loadOrCreateEncryptionKey(): string {
   const keyPath = join(app.getPath('userData'), KEY_FILE_NAME);
+  const safeStorageAvailable = safeStorage.isEncryptionAvailable();
+
   if (existsSync(keyPath)) {
     const buf = readFileSync(keyPath);
-    if (safeStorage.isEncryptionAvailable()) {
+    if (safeStorageAvailable) {
       try {
         return safeStorage.decryptString(buf);
       } catch (e) {
-        log.error('settings-store: safeStorage decrypt failed — regenerating key', e);
-        // fallthrough к регенерации
+        // Сохраняем сломанный файл рядом для post-mortem'а, не стираем.
+        const backup = `${keyPath}.broken-${Date.now()}`;
+        try {
+          copyFileSync(keyPath, backup);
+        } catch {
+          /* fs gone? нечего сохранять */
+        }
+        log.error(
+          `settings-store: safeStorage decrypt failed (saved ${backup}). Refusing to ` +
+            `regenerate — that would wipe OAuth tokens and driver creds. Run as the same OS user.`,
+          e,
+        );
+        throw new Error(
+          'SmartHome Hub не может расшифровать ключ профиля. Запустите приложение от того же пользователя ОС.',
+        );
       }
-    } else {
-      return buf.toString('utf8');
     }
+    // safeStorage недоступен: legacy plaintext-ключ принимается one-shot ради миграции.
+    log.warn(
+      `settings-store: reading legacy plaintext key — рекомендуется переезд на ОС с DPAPI/Keychain/libsecret`,
+    );
+    return buf.toString('utf8');
+  }
+
+  // Свежий install / нет файла.
+  if (!safeStorageAvailable) {
+    if (process.env['HUB_SAFE_STORAGE_OPTIONAL'] === '1') {
+      log.warn(
+        `settings-store: safeStorage unavailable, HUB_SAFE_STORAGE_OPTIONAL=1 → plaintext key. Не для prod!`,
+      );
+      const key = randomBytes(32).toString('hex');
+      writeFileSync(keyPath, key, { encoding: 'utf8', mode: 0o600 });
+      return key;
+    }
+    throw new Error(
+      'safeStorage недоступен (нет DPAPI/Keychain/libsecret). Установите libsecret или ' +
+        'передайте HUB_SAFE_STORAGE_OPTIONAL=1 (только для dev).',
+    );
   }
   const key = randomBytes(32).toString('hex');
-  if (safeStorage.isEncryptionAvailable()) {
-    writeFileSync(keyPath, safeStorage.encryptString(key), { mode: 0o600 });
-  } else {
-    log.warn(`settings-store: safeStorage unavailable — key written plaintext at ${keyPath}`);
-    writeFileSync(keyPath, key, { encoding: 'utf8', mode: 0o600 });
-  }
+  atomicWriteFile(keyPath, safeStorage.encryptString(key), { mode: 0o600 });
   return key;
+}
+
+/**
+ * Atomic write через temp + rename: на crash либо старый файл остаётся целиком,
+ * либо новый записан полностью. Без temp-rename мы получаем 0-byte файлы при
+ * power loss / SIGKILL во время writeFileSync.
+ */
+function atomicWriteFile(
+  path: string,
+  data: string | Buffer,
+  options: { encoding?: BufferEncoding; mode?: number } = {},
+): void {
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tmp, data, options);
+  try {
+    renameSync(tmp, path);
+  } catch (e) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* nothing to clean */
+    }
+    throw e;
+  }
 }
 
 /** Перешифровывает `hub-settings.json` со старого hardcoded ключа на per-install. */
@@ -204,11 +275,15 @@ export async function createSettingsStore() {
   const encryptionKey = loadOrCreateEncryptionKey();
   migrateLegacyEncryptedSettings(encryptionKey);
 
+  // clearInvalidConfig:false — иначе одна повреждённая запись (DPAPI hiccup,
+  // обрыв питания при write) обнуляет всё: OAuth-токены, driver creds, выданные
+  // Алисе bearer'ы. Лучше получить exception и помочь юзеру восстановить из backup'а,
+  // чем тихо стереть.
   const store = new Store<HubSettings>({
     name: 'hub-settings',
     defaults,
     encryptionKey,
-    clearInvalidConfig: true,
+    clearInvalidConfig: false,
   });
 
   if (!store.get('hubId')) store.set('hubId', randomUUID());

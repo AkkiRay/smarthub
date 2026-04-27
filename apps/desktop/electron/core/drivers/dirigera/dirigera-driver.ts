@@ -56,6 +56,8 @@ interface DirigeraDevice {
 interface DirigeraCreds {
   host: string;
   accessToken: string;
+  /** SHA-256 fingerprint cert'а гейта, pinned при pairing'е. */
+  certFingerprint?: string;
 }
 
 export class DirigeraDriver extends BaseDriver {
@@ -64,14 +66,46 @@ export class DirigeraDriver extends BaseDriver {
 
   private readonly http: AxiosInstance;
 
-  constructor(private readonly creds: DirigeraCreds) {
+  constructor(
+    private readonly creds: DirigeraCreds,
+    private readonly persistFingerprint: (fp: string) => void = () => undefined,
+  ) {
     super();
     this.http = axios.create({
       baseURL: `https://${creds.host}:8443/v1`,
       timeout: DIRIGERA_HTTP_TIMEOUT_MS,
       headers: { Authorization: `Bearer ${creds.accessToken}` },
-      // self-signed cert — IKEA не публикует CA, доверяем локальной сети.
-      httpsAgent: new Agent({ rejectUnauthorized: false }),
+      // self-signed cert — IKEA не публикует CA. Если certFingerprint pinned
+      // (после pairing'а), проверяем на каждом запросе — иначе MITM в LAN
+      // после rotation'а cert'а гейта (firmware update) тихо проходит.
+      httpsAgent: new Agent({
+        rejectUnauthorized: false,
+        checkServerIdentity: (_host, cert) => {
+          if (!cert.raw) return undefined;
+          const fp = createHash('sha256')
+            .update(cert.raw)
+            .digest('hex')
+            .toUpperCase()
+            .match(/.{2}/g)!
+            .join(':');
+          if (!creds.certFingerprint) {
+            // TOFU при первом use — pin'им и persist'им.
+            creds.certFingerprint = fp;
+            try {
+              this.persistFingerprint(fp);
+            } catch (e) {
+              this.logWarn('persist fingerprint failed', e);
+            }
+            return undefined;
+          }
+          if (creds.certFingerprint !== fp) {
+            return new Error(
+              `Dirigera: cert fingerprint mismatch (expected ${creds.certFingerprint}, got ${fp})`,
+            );
+          }
+          return undefined;
+        },
+      }),
     });
   }
 

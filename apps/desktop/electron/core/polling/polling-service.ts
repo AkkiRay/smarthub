@@ -90,6 +90,8 @@ export function createPollingService(deps: { deviceRegistry: DeviceRegistry }) {
     }
   };
 
+  let removedListenerOff: (() => void) | null = null;
+
   return {
     start(): void {
       if (running || intervalMs === 0) {
@@ -102,12 +104,23 @@ export function createPollingService(deps: { deviceRegistry: DeviceRegistry }) {
       timer = setInterval(() => {
         if (running) void runCycle();
       }, intervalMs);
+      // failureCounts иначе растёт по device-id навечно — devices снимают с
+      // регистрации, а ключи остаются. На системе с rotation IoT за пару лет
+      // даёт десятки тысяч ключей в Map'е.
+      removedListenerOff = deps.deviceRegistry.on('device:removed', ({ id }) => {
+        failureCounts.delete(id);
+      });
       log.info(`PollingService started (interval=${intervalMs}ms)`);
     },
     stop(): void {
       running = false;
       if (timer) clearInterval(timer);
       timer = null;
+      if (removedListenerOff) {
+        removedListenerOff();
+        removedListenerOff = null;
+      }
+      failureCounts.clear();
     },
     /** Forced cycle — для UI-кнопки «Обновить всё». */
     runOnce: runCycle,

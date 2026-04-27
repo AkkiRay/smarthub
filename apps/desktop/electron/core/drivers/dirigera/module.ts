@@ -31,8 +31,27 @@ export const dirigeraModule: DriverModule = {
     ],
   },
   async create({ settings }) {
-    const c = settings.getDriverCredentials('dirigera') as { host?: string; accessToken?: string };
+    const c = settings.getDriverCredentials('dirigera') as {
+      host?: string;
+      accessToken?: string;
+      certFingerprint?: string;
+    };
     if (!c.host || !c.accessToken) return null;
-    return new DirigeraDriver({ host: c.host, accessToken: c.accessToken });
+    return new DirigeraDriver(
+      {
+        host: c.host,
+        accessToken: c.accessToken,
+        ...(c.certFingerprint ? { certFingerprint: c.certFingerprint } : {}),
+      },
+      // TOFU pin'инг при первом use; persist'им чтобы rotation cert'а на firmware
+      // update сломал пайплайн с явной ошибкой, а не молча MITM-уязвимостью.
+      (fingerprint) => {
+        const existing = settings.getDriverCredentials('dirigera');
+        settings.setDriverCredentials('dirigera', {
+          ...existing,
+          certFingerprint: fingerprint,
+        } as never);
+      },
+    );
   },
 };

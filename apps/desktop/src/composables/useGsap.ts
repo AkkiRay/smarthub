@@ -11,10 +11,12 @@
  * Все tween'ы получают `force3D: true` → GPU-композит через translateZ-trick.
  */
 
-import { onBeforeUnmount } from 'vue';
+import { onBeforeUnmount, isRef, type Ref } from 'vue';
 import { gsap } from 'gsap';
 import { useUiStore } from '@/stores/ui';
 import type { MotionLevel } from '@/stores/ui';
+
+type GsapScope = Element | Ref<Element | null | undefined> | (() => Element | null | undefined) | null | undefined;
 
 // Transform-свойства, блокируемые на `reduced` — пропускаем только opacity и
 // color-tween'ы.
@@ -71,7 +73,7 @@ function adapt(vars: gsap.TweenVars, level: MotionLevel): gsap.TweenVars {
   return scaleDuration(base, scale);
 }
 
-export function useGsap(scope?: Element | null) {
+export function useGsap(scope?: GsapScope) {
   // Pinia может быть не готова при HMR-mount — fallback на `standard`.
   let getLevel: () => MotionLevel = () => 'standard';
   try {
@@ -81,11 +83,50 @@ export function useGsap(scope?: Element | null) {
     /* store недоступен */
   }
 
-  const ctx = gsap.context(() => {}, scope ?? undefined);
+  // Scope резолвим лениво: setup() запускается ДО mount'а, root.value === null,
+  // и `gsap.context(fn, null)` создаёт глобальный scope, который ловит селекторы
+  // других view'ов при route-overlap'е. Принимаем Ref/getter и резолвим на каждом
+  // tween-вызове.
+  const resolveScope = (): Element | undefined => {
+    if (!scope) return undefined;
+    if (scope instanceof Element) return scope;
+    if (isRef(scope)) return scope.value ?? undefined;
+    if (typeof scope === 'function') return scope() ?? undefined;
+    return undefined;
+  };
+
+  const ctx = gsap.context(() => {});
+  const ensureScope = (): void => {
+    const el = resolveScope();
+    if (!el) return;
+    type CtxWithSelector = gsap.Context & { selector?: (sel: unknown) => Element[] | unknown };
+    const c = ctx as CtxWithSelector;
+    if (typeof c.selector === 'function') return;
+    (ctx as unknown as { _scope?: Element })._scope = el;
+    // GSAP routes ALL targets через context selector — Element / NodeList / Array
+    // отдаём как есть, scoped CSS-string резолвим через `el.querySelectorAll`.
+    // Defensive: невалидные строки (URL'ы, `[object HTMLDivElement]`) → пустой массив,
+    // иначе DOMException 'is not a valid selector' валит весь tween.
+    c.selector = ((target: unknown): unknown => {
+      if (target == null) return [];
+      if (typeof target !== 'string') return target;
+      const sel = target.trim();
+      if (!sel) return [];
+      // CSS selector должен начинаться с #, ., [, идентификатора или *. Любые
+      // префиксы вроде `http://`, `/`, `[object` — точно не selector.
+      if (!/^[#.\[*a-zA-Z_:>+~,&]/.test(sel)) return [];
+      try {
+        return Array.from(el.querySelectorAll(sel));
+      } catch {
+        return [];
+      }
+    }) as never;
+  };
 
   onBeforeUnmount(() => ctx.revert());
 
   function animate(targets: gsap.TweenTarget, vars: gsap.TweenVars): gsap.core.Tween {
+    ensureScope();
     const level = getLevel();
     if (level === 'off') {
       return gsap.set(targets, { ...vars, duration: 0 }) as unknown as gsap.core.Tween;
@@ -94,6 +135,7 @@ export function useGsap(scope?: Element | null) {
   }
 
   function from(targets: gsap.TweenTarget, vars: gsap.TweenVars): gsap.core.Tween {
+    ensureScope();
     const level = getLevel();
     if (level === 'off') {
       return gsap.set(targets, { clearProps: 'all' }) as unknown as gsap.core.Tween;
@@ -102,6 +144,7 @@ export function useGsap(scope?: Element | null) {
   }
 
   function timeline(vars?: gsap.TimelineVars): gsap.core.Timeline {
+    ensureScope();
     const level = getLevel();
     if (level === 'off') {
       // Timeline в finished-state без проигрывания.

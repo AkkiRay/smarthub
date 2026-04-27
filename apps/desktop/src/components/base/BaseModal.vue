@@ -301,12 +301,10 @@ onBeforeUnmount(() => {
       margin: 0;
       padding: 18px 16px 24px;
       border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-      // Высота — viewport минус title-bar (46px) минус safe-area; иначе на
-      // notched-устройствах sheet перекрывает status-bar и swipe-zone.
+      // viewport - title-bar (46px) - safe-top — резерв под notch и swipe-zone.
       max-height: calc(100dvh - 46px - var(--safe-top, 0px));
       overflow-y: auto;
       overscroll-behavior: contain;
-      // Безопасная зона для iOS home-indicator.
       padding-bottom: max(24px, var(--safe-bottom, 0px));
     }
 

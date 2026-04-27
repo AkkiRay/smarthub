@@ -39,14 +39,30 @@ export const ewelinkModule: DriverModule = {
       appId?: string;
       appSecret?: string;
       region?: 'eu' | 'us' | 'cn' | 'as';
+      accessToken?: string;
+      refreshToken?: string;
     };
     if (!c.email || !c.password || !c.appId || !c.appSecret) return null;
-    return new EWeLinkDriver({
-      email: c.email,
-      password: c.password,
-      appId: c.appId,
-      appSecret: c.appSecret,
-      region: c.region ?? 'eu',
-    });
+    return new EWeLinkDriver(
+      {
+        email: c.email,
+        password: c.password,
+        appId: c.appId,
+        appSecret: c.appSecret,
+        region: c.region ?? 'eu',
+        ...(c.accessToken ? { accessToken: c.accessToken } : {}),
+        ...(c.refreshToken ? { refreshToken: c.refreshToken } : {}),
+      },
+      // Persist ротированных токенов: eWeLink выдаёт новые at+rt на каждый refresh.
+      // Без этого после restart'а приложения rt=stale → re-login email/password (rate-limit).
+      ({ accessToken, refreshToken }) => {
+        const existing = settings.getDriverCredentials('ewelink');
+        settings.setDriverCredentials('ewelink', {
+          ...existing,
+          accessToken,
+          refreshToken,
+        } as never);
+      },
+    );
   },
 };

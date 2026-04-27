@@ -68,17 +68,37 @@ export function createSceneService(deps: {
       const scene = cache.get(id);
       if (!scene) throw new Error(`Unknown scene ${id}`);
       log.info(`SceneService: running ${scene.name} (${scene.actions.length} actions)`);
-      await Promise.all(
+      // allSettled, не all: «свет + музыка + штора» — упало одно действие, остальные
+      // физически выполнились. Promise.all бросал на первой ошибке, давая UI ложный
+      // negative («сцена не сработала»), хотя 2 из 3 устройств отработали.
+      const results = await Promise.all(
         scene.actions.map(async (action) => {
           if (action.delayMs && action.delayMs > 0) await delay(action.delayMs);
-          await deps.deviceRegistry.execute({
-            deviceId: action.deviceId,
-            capability: action.capability,
-            instance: action.instance,
-            value: action.value,
-          });
+          try {
+            const r = await deps.deviceRegistry.execute({
+              deviceId: action.deviceId,
+              capability: action.capability,
+              instance: action.instance,
+              value: action.value,
+            });
+            return { ok: r.status === 'DONE', deviceId: action.deviceId, result: r };
+          } catch (e) {
+            return { ok: false, deviceId: action.deviceId, error: (e as Error).message };
+          }
         }),
       );
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === scene.actions.length) {
+        throw new Error(
+          `Сцена «${scene.name}» не сработала: все ${failed.length} действий упали`,
+        );
+      }
+      if (failed.length > 0) {
+        log.warn(
+          `SceneService: scene ${scene.name} partial — ${failed.length}/${scene.actions.length} actions failed: ` +
+            failed.map((r) => r.deviceId).join(', '),
+        );
+      }
     },
   };
 }

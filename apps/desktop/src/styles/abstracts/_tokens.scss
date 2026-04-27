@@ -3,15 +3,20 @@
 
 :root {
   // ---- Background ----
-  --color-bg-base: #0f0f1a;
-  --color-bg-surface: #16172a;
-  --color-bg-elevated: #1f2138;
-  --color-bg-overlay: rgba(15, 15, 26, 0.72);
+  // Warm-charcoal база. R≈G, B чуть выше — тонкая violet warmth под brand
+  // gradient (violet → pink → amber), без cold-blue lean'а.
+  --color-bg-base: #0e0d12;
+  --color-bg-surface: #15141c;
+  --color-bg-elevated: #1d1b27;
+  --color-bg-overlay: rgba(14, 13, 18, 0.78);
+  // RGB-triplet для rgba(var(--color-bg-rgb), 0.x) — overlays / titlebar / popover.
+  --color-bg-rgb: 14, 13, 18;
+  --color-bg-elevated-rgb: 29, 27, 39;
 
   // ---- Text ----
-  --color-text-primary: #f5f6ff;
-  --color-text-secondary: #a8aac4;
-  --color-text-muted: #6b6e8a;
+  --color-text-primary: #f4f3f7;
+  --color-text-secondary: #a9a7b4;
+  --color-text-muted: #6f6c7a;
 
   // ---- Brand (Alice palette) ----
   --color-brand-violet: #7c5bff; // primary
@@ -71,7 +76,7 @@
 
   // ---- Glass-морфизм ----
   // Single source of truth для frosted glass — крутить тему здесь, не в блоках.
-  --glass-tint: 26, 27, 46;
+  --glass-tint: 22, 20, 28;
   --glass-alpha-soft: 0.42; // hero, ambient-карточки
   --glass-alpha-medium: 0.62; // sidebar, обычные карточки
   --glass-alpha-strong: 0.82; // модалки, popover
@@ -195,18 +200,13 @@
   --font-family-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
 
   // ============================================================================
-  // Fluid type-scale: линейная интерполяция размеров от 720px до 2560px viewport.
-  // Базируется на формуле `clamp(min, base + coef*vw, max)`, где
-  //   coef = (max-min) / (range_max-range_min)            — vw-коэффициент
-  //   base = min - coef * range_min / 100                 — px-смещение
-  // Гарантирует:
-  //   - На 720px viewport (минимальный desktop) типографика стартует с min.
-  //   - На 2560px (4K @ 150% scaling) достигает max — крупные мониторы видят
-  //     ощутимо более крупный текст без жирных tablet-/desktop-breakpoint'ов.
-  //   - Между точками интерполяция линейная — нет «прыжков» при ресайзе.
+  // Fluid type-scale (720px → 2560px viewport).
   //
-  // Mobile (<720px) перекрывает свои значения через `@media` ниже — фиксированный
-  // tighter-scale, иначе vw-formula на 360px давала бы сильно меньший min.
+  // Формула:        clamp(min, base + coef*vw, max)
+  //   coef = (max - min) / (range_max - range_min)
+  //   base = min - coef * range_min / 100
+  //
+  // Mobile (<720px) и 4K (≥2560px) — отдельные `@media`-секции ниже.
   // ============================================================================
   --font-size-display:   clamp(28px, 13.9px + 1.96vw, 64px);   // hero pages
   --font-size-display-2: clamp(22px, 11.83px + 1.41vw, 48px);  // section heroes
@@ -274,8 +274,8 @@
   --tone-warning-edge: rgba(var(--color-warning-rgb), 0.36);
   --tone-danger-soft: rgba(var(--color-danger-rgb), 0.14);
   --tone-danger-edge: rgba(var(--color-danger-rgb), 0.36);
-  --tone-info-soft: rgba(var(--color-brand-cyan-rgb), 0.14);
-  --tone-info-edge: rgba(var(--color-brand-cyan-rgb), 0.36);
+  --tone-info-soft: rgba(var(--color-brand-violet-rgb), 0.14);
+  --tone-info-edge: rgba(var(--color-brand-violet-rgb), 0.36);
   --tone-violet-soft: rgba(var(--color-brand-violet-rgb), 0.14);
   --tone-violet-edge: rgba(var(--color-brand-violet-rgb), 0.36);
 
@@ -293,7 +293,7 @@
   // ---- Sidebar surface ----
   // Тема свапает фон одной строкой через `--sidebar-surface`. База `--color-bg-sidebar`
   // темнее чем `--color-bg-base` — рейл «садится» под контент.
-  --color-bg-sidebar: #07080f;
+  --color-bg-sidebar: #07060d;
   --sidebar-surface:
     linear-gradient(
       180deg,
@@ -314,64 +314,65 @@
   --sidebar-edge: var(--color-border-subtle);
 }
 
-// alice-midnight: глубокий blue-black tint поверх brand-палитры.
+// alice-midnight: deeper warm-violet вариант alice-dark (не холодный синий).
 // data-theme крутится на <body> через ui store.
 [data-theme='alice-midnight'] {
-  --color-bg-base: #03040c;
-  --color-bg-surface: #08091a;
-  --color-bg-elevated: #10122a;
-  --color-bg-overlay: rgba(3, 4, 12, 0.82);
+  --color-bg-base: #07060c;
+  --color-bg-surface: #0d0b14;
+  --color-bg-elevated: #16131f;
+  --color-bg-overlay: rgba(7, 6, 12, 0.84);
+  --color-bg-rgb: 7, 6, 12;
+  --color-bg-elevated-rgb: 22, 19, 31;
 
-  --color-text-primary: #f8f9ff;
-  --color-text-secondary: #a4a8cf;
-  --color-text-muted: #5d608a;
+  --color-text-primary: #f6f4fa;
+  --color-text-secondary: #a39fb0;
+  --color-text-muted: #6a6675;
 
-  --color-border-subtle: rgba(180, 200, 255, 0.05);
-  --color-border-soft: rgba(180, 200, 255, 0.08);
-  --color-border-strong: rgba(180, 200, 255, 0.16);
+  --color-border-subtle: rgba(245, 240, 255, 0.05);
+  --color-border-soft: rgba(245, 240, 255, 0.08);
+  --color-border-strong: rgba(245, 240, 255, 0.16);
 
-  // Glass-tint в холодный синий.
-  --glass-tint: 10, 14, 36;
-  --glass-alpha-soft: 0.5;
-  --glass-alpha-medium: 0.72;
-  --glass-alpha-strong: 0.88;
-  --glass-edge: rgba(180, 200, 255, 0.07);
-  --glass-highlight: rgba(180, 200, 255, 0.08);
+  // Glass-tint — deeper warm-violet, без cool-blue cast'а.
+  --glass-tint: 14, 12, 20;
+  --glass-alpha-soft: 0.52;
+  --glass-alpha-medium: 0.74;
+  --glass-alpha-strong: 0.9;
+  --glass-edge: rgba(245, 240, 255, 0.07);
+  --glass-highlight: rgba(245, 240, 255, 0.08);
 
-  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.55);
-  --shadow-elev: 0 22px 56px rgba(0, 0, 0, 0.65);
-  --shadow-glow: 0 0 32px rgba(77, 127, 255, 0.45);
+  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.6);
+  --shadow-elev: 0 22px 56px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 32px rgba(var(--color-brand-violet-rgb), 0.5);
+  --shadow-hover: 0 16px 44px rgba(0, 0, 0, 0.65);
+  --shadow-violet-glow: 0 18px 48px rgba(var(--color-brand-violet-rgb), 0.45);
 
-  // Холодная аура: blue + violet + cyan вместо тёплой violet/pink/amber.
-  --aura-blob-1: rgba(50, 70, 220, 0.68);
-  --aura-blob-2: rgba(var(--color-brand-violet-rgb), 0.55);
-  --aura-blob-3: rgba(var(--color-brand-cyan-rgb), 0.5);
+  // Аура: насыщеннее brand-палитра (violet → pink → amber), без cyan.
+  --aura-blob-1: rgba(var(--color-brand-violet-rgb), 0.75);
+  --aura-blob-2: rgba(var(--color-brand-pink-rgb), 0.6);
+  --aura-blob-3: rgba(var(--color-brand-amber-rgb), 0.42);
 
-  --shadow-hover: 0 16px 44px rgba(0, 0, 0, 0.6);
-  --shadow-violet-glow: 0 18px 48px rgba(var(--color-brand-violet-rgb), 0.4);
+  --surface-hover: rgba(245, 240, 255, 0.045);
+  --surface-press: rgba(245, 240, 255, 0.085);
 
-  --surface-hover: rgba(180, 200, 255, 0.04);
-  --surface-press: rgba(180, 200, 255, 0.08);
-
-  --color-bg-sidebar: #010108;
+  --color-bg-sidebar: #03020a;
   --sidebar-surface:
     linear-gradient(
       180deg,
-      rgba(255, 220, 200, 0.05) 0%,
+      rgba(255, 220, 200, 0.06) 0%,
       rgba(255, 220, 200, 0) 42%
     ),
     radial-gradient(
       120% 55% at 0% 0%,
-      rgba(var(--color-brand-violet-rgb), 0.16) 0%,
+      rgba(var(--color-brand-violet-rgb), 0.2) 0%,
       transparent 62%
     ),
     radial-gradient(
       90% 45% at 100% 100%,
-      rgba(var(--color-brand-amber-rgb), 0.1) 0%,
+      rgba(var(--color-brand-pink-rgb), 0.12) 0%,
       transparent 70%
     ),
     var(--color-bg-sidebar);
-  --sidebar-edge: rgba(255, 200, 180, 0.06);
+  --sidebar-edge: rgba(255, 215, 200, 0.07);
 }
 
 // Coarse pointer (touch) — крупнее tap-targets, плотнее spacing.
@@ -406,11 +407,8 @@
     --cell-md: 100%;
     --cell-lg: 100%;
 
-    // Type-scale на узких viewport'ах (≤720px) — фиксированный tighter-set вместо
-    // fluid-clamp базы. Vw-формула давала бы display 28px @ 360 (от min'а),
-    // что слишком крупно: «Один хаб для всего умного дома» ломалось в 3 строки.
-    // Здесь явный clamp(min, vw, max) с малым vw-coef → плавный рост 22→28px
-    // от 360 до 720px viewport'а.
+    // Type-scale (≤720px): clamp(min, vw, max) с малым vw-коэффициентом.
+    // Range: 360→720px viewport.
     --font-size-display: clamp(22px, 5vw, 28px);
     --font-size-display-2: clamp(19px, 4.4vw, 24px);
     --font-size-h1: clamp(17px, 4vw, 21px);
@@ -421,22 +419,18 @@
   }
 }
 
+// Compact phones (≤480px): дополнительное сжатие display-сcale и padding.
 @media (max-width: 480px) {
   :root {
     --content-pad-x: 12px;
     --pad-roomy: 14px;
     --pad-grand: 14px;
-    // На совсем узких screens ещё сильнее ужимаем display, иначе hero-title
-    // в 28px сжирает 2 строки даже при `text-wrap: balance`.
     --font-size-display: clamp(20px, 5.6vw, 25px);
     --font-size-display-2: clamp(17px, 4.8vw, 22px);
   }
 }
 
-// 4K-уплотнение: на ОЧЕНЬ больших viewport'ах (≥2560px CSS-pixels) —
-// типография ещё чуть крупнее, иначе на 4K@100% мониторах текст выглядит
-// «мелким» относительно физического размера. Padding'и тоже растут — не
-// заставляем глаз бегать через половину экрана между КПИ-блоками.
+// 4K-overrides (≥2560px CSS-pixels): увеличенный type-scale и content padding.
 @media (min-width: 2560px) {
   :root {
     --font-size-display: clamp(56px, 0.8vw + 40px, 80px);

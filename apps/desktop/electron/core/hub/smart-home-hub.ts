@@ -54,7 +54,7 @@ import type { PollingService } from '../polling/polling-service.js';
 import type { SceneService } from '../scenes/scene-service.js';
 import type { YandexStationClient } from '../alice/yandex-station-client.js';
 import type { YandexStationDiscovery } from '../alice/yandex-station-discovery.js';
-import { YandexQuasarClient } from '../alice/yandex-quasar-api.js';
+import { YandexQuasarClient, fingerprintFromPem } from '../alice/yandex-quasar-api.js';
 import { YandexIotClient } from '../alice/yandex-iot-api.js';
 import { YandexImportService } from '../alice/yandex-import-service.js';
 import { detectCurrentNetwork, networkMatches } from '../network/network-identity.js';
@@ -541,6 +541,15 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
 
       let host = input.host;
       let port = input.port;
+      // mDNS можно spoof'ить (любой LAN-host публикует _yandexio._tcp.local).
+      // Cross-check: deviceId должен совпадать с device_list из cloud, иначе
+      // attacker мог подменить host/deviceId через forged mDNS-ответ.
+      const quasar = new YandexQuasarClient(auth.musicToken);
+      const cloudDevices = await quasar.fetchDeviceList();
+      const cloudDevice = cloudDevices.find((d) => d.id === input.deviceId);
+      if (!cloudDevice) {
+        throw new Error('Эта колонка отсутствует в вашем аккаунте «Дом с Алисой».');
+      }
       if (!host) {
         const lan = await deps.yandexStationDiscovery.scan(ALICE_TIMEOUT.MDNS_SCAN_MS);
         const found = lan.find((c) => c.deviceId === input.deviceId);
@@ -551,8 +560,13 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
         port = found.port;
       }
 
-      const quasar = new YandexQuasarClient(auth.musicToken);
       const jwt = await quasar.fetchDeviceToken(input.deviceId, input.platform);
+      // Pinning из cloud-side server_certificate ДО первого WS-connect:
+      // закрывает TOCTOU-окно TOFU pin'а. Если cloud-cert отсутствует —
+      // деградируем на TOFU (yandex-station-client запинит на первой сессии).
+      const cloudFingerprint = fingerprintFromPem(
+        cloudDevice.glagol?.security?.server_certificate,
+      );
 
       const creds: YandexStationCreds = {
         host,
@@ -562,6 +576,7 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
         tokenExpiresAt: jwt.expiresAt,
         platform: input.platform,
         ...(input.name ? { name: input.name } : {}),
+        ...(cloudFingerprint ? { certFingerprint: cloudFingerprint } : {}),
       };
       deps.settings.set('yandexStation', creds);
       const status = await deps.yandexStation.connect(creds);

@@ -99,8 +99,27 @@ export function createYandexStationClient() {
   /** true — disconnect() вызван явно, reconnect-loop отключён. */
   let manualDisconnect = false;
   const pending = new Map<string, PendingRequest>();
+  /** Максимум pending — защита от утечки если резко много sendCommand'ов и колонка молчит. */
+  const PENDING_MAX = 256;
   /** ID handshake/ping-сообщений — их ответы НЕ пушим в журнал, иначе он флудит. */
   const internalRequestIds = new Set<string>();
+
+  /** FIFO-усечение pending Map'ы при перегрузке. Самые старые reject'ятся. */
+  const trimPendingIfNeeded = (): void => {
+    if (pending.size <= PENDING_MAX) return;
+    const overflow = pending.size - PENDING_MAX;
+    const iter = pending.keys();
+    for (let i = 0; i < overflow; i++) {
+      const key = iter.next().value;
+      if (key === undefined) break;
+      const p = pending.get(key);
+      if (p) {
+        clearTimeout(p.timer);
+        p.reject(new Error('pending overflow — too many in-flight commands'));
+        pending.delete(key);
+      }
+    }
+  };
   /** Ring-buffer диагностических событий — UI забирает snapshot при mount. */
   const eventBuffer: YandexStationEvent[] = [];
   /** Подпись последнего state-push'а — чтобы не дублировать одинаковые тики. */
@@ -363,7 +382,11 @@ export function createYandexStationClient() {
           setConnectionState('disconnected', { configured: !!creds });
         } else {
           setConnectionState('error', { lastError: description });
-          if (shouldPreemptiveRefresh()) {
+          // Code 4000 = «другая Quasar-сессия захватила канал ИЛИ token rejected».
+          // Без force-refresh попадаем в reconnect-storm: тот же JWT → тот же 4000.
+          // Force-refresh device-token, не дожидаясь preemptive-window.
+          const needsForceRefresh = code === 4000 || shouldPreemptiveRefresh();
+          if (needsForceRefresh && tokenRefresher) {
             void refreshAndReconnect();
           } else {
             scheduleReconnect();
@@ -394,23 +417,44 @@ export function createYandexStationClient() {
     return exp - now < TOKEN_PREEMPTIVE_REFRESH_SEC;
   };
 
+  /**
+   * Mutex flag. Без него два пути (unexpected-response + close) могут одновременно
+   * стартовать refreshAndReconnect — получаем два новых JWT, две WS-сессии,
+   * Quasar убивает первую с code 4000, начинается loop.
+   */
+  let refreshInFlight: Promise<void> | null = null;
+
   const refreshAndReconnect = async (): Promise<void> => {
-    if (!tokenRefresher || !creds) return;
-    lastRefreshedAt = Date.now();
-    try {
-      const fresh = await tokenRefresher();
-      if (!fresh) {
-        scheduleReconnect();
-        return;
+    if (refreshInFlight) {
+      // Параллельный вызов — просто await текущего refresh'а.
+      try {
+        await refreshInFlight;
+      } catch {
+        /* первый refresh уже залогировал/scheduleReconnect'ил */
       }
-      creds = { ...creds, token: fresh };
-      log.info('YandexStation: device token refreshed, reconnecting');
-      pushEvent({ kind: 'note', summary: 'Получен свежий device-token, переподключаюсь' });
-      void openSocket(creds);
-    } catch (e) {
-      log.warn(`YandexStation: token refresh failed: ${(e as Error).message}`);
-      scheduleReconnect();
+      return;
     }
+    refreshInFlight = (async () => {
+      if (!tokenRefresher || !creds) return;
+      lastRefreshedAt = Date.now();
+      try {
+        const fresh = await tokenRefresher();
+        if (!fresh) {
+          scheduleReconnect();
+          return;
+        }
+        creds = { ...creds, token: fresh };
+        log.info('YandexStation: device token refreshed, reconnecting');
+        pushEvent({ kind: 'note', summary: 'Получен свежий device-token, переподключаюсь' });
+        void openSocket(creds);
+      } catch (e) {
+        log.warn(`YandexStation: token refresh failed: ${(e as Error).message}`);
+        scheduleReconnect();
+      }
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+    return refreshInFlight;
   };
 
   return {
@@ -517,6 +561,7 @@ export function createYandexStationClient() {
             resolve({ status: 'TIMEOUT' });
           }, ALICE_TIMEOUT.WS_RESPONSE_MS);
           pending.set(id, { resolve, reject, timer });
+          trimPendingIfNeeded();
         });
         if (response.status === 'REFUSED') {
           const vins = response.vinsResponse;

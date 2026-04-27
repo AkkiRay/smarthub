@@ -85,14 +85,28 @@
             v-for="(p, idx) in visibleProperties"
             :key="`${p.type}::${p.parameters.instance ?? idx}`"
             class="prop"
-            :class="{ 'prop--has-bar': hasProgressBar(p.parameters.instance) }"
+            :class="{
+              'prop--has-bar': hasProgressBar(p.parameters.instance),
+              'prop--state': isStateProp(p.parameters.instance),
+            }"
             :style="{ '--prop-accent': propAccent(p.parameters.instance) }"
           >
             <span class="prop__icon" v-safe-html="propIcon(p.parameters.instance)" />
             <span class="prop__label">{{ propLabel(p.parameters.instance) }}</span>
-            <strong class="prop__value">
+
+            <span
+              v-if="isStateProp(p.parameters.instance)"
+              class="prop__chip"
+              :data-tone="statePropTone(p.parameters.instance, p.state?.value)"
+            >
+              <span class="prop__chip-dot" />
+              {{ statePropLabel(p.parameters.instance, p.state?.value) }}
+            </span>
+
+            <strong v-else class="prop__value">
               {{ formatPropValue(p.state?.value) }}{{ unitFor(p.parameters.unit) }}
             </strong>
+
             <div
               v-if="hasProgressBar(p.parameters.instance)"
               class="prop__bar"
@@ -106,14 +120,21 @@
 
       <div class="card detail__assignment" data-anim="block">
         <h3 class="text--h2">Размещение</h3>
-        <p v-if="!isYandexImported" class="text--small">
+        <p v-if="!isYandexImported" class="text--small detail__assignment-hint">
           Имя и комната — основные поля для голосовых команд через Алису.
         </p>
-        <p v-else class="text--small detail__yandex-hint">
-          <BaseIcon name="alice" :size="13" />
-          Управляется приложением «Дом с Алисой» — имя и комната синхронизируются оттуда.
-          Ваши изменения здесь будут затёрты при следующей синхронизации. Меняйте в Алисе.
-        </p>
+        <div v-else class="banner banner--warning detail__yandex-banner">
+          <span class="banner__icon">
+            <BaseIcon name="alice" :size="18" />
+          </span>
+          <div class="banner__copy">
+            <span class="banner__title">Управляется «Домом с Алисой»</span>
+            <span class="banner__text">
+              Имя и комната синхронизируются из приложения. Меняйте в «Доме с Алисой» — иначе правки
+              затрутся при следующей синхронизации.
+            </span>
+          </div>
+        </div>
         <div class="detail__assignment-row">
           <BaseInput
             label="Имя устройства"
@@ -130,11 +151,25 @@
             @change="onRoomChange(String($event))"
           />
         </div>
-        <RouterLink to="/rooms" class="text--small detail__link">Управление комнатами →</RouterLink>
+        <RouterLink to="/rooms" class="text--small detail__link">
+          Управление комнатами
+          <BaseIcon name="arrow-right" :size="11" />
+        </RouterLink>
       </div>
 
-      <div class="card detail__meta" data-anim="block">
-        <h3 class="text--h2">Метаданные</h3>
+      <details
+        class="card detail__meta"
+        data-anim="block"
+        @toggle="onMetaToggle"
+      >
+        <summary class="detail__meta-summary">
+          <span class="detail__meta-summary-icon">
+            <BaseIcon name="info" :size="14" />
+          </span>
+          <span class="detail__meta-summary-title">Технические данные</span>
+          <span class="detail__meta-summary-hint text--micro">для отладки</span>
+          <BaseIcon name="arrow-right" :size="14" class="detail__meta-summary-chevron" />
+        </summary>
         <dl class="detail__dl">
           <div>
             <dt>ID</dt>
@@ -161,7 +196,7 @@
             <dd>{{ formatDate(device.lastSeenAt) }}</dd>
           </div>
         </dl>
-      </div>
+      </details>
     </div>
 
     <ConfirmDialog
@@ -195,6 +230,7 @@ import { useRoomsStore } from '@/stores/rooms';
 import { useYandexStationStore } from '@/stores/yandexStation';
 import { useToasterStore } from '@/stores/toaster';
 import { useViewMount } from '@/composables/useViewMount';
+import { useGsap } from '@/composables/useGsap';
 import CapabilityControl from '@/components/devices/CapabilityControl.vue';
 import SpeakerControlSurface from '@/components/devices/SpeakerControlSurface.vue';
 import {
@@ -216,6 +252,25 @@ const rooms = useRoomsStore();
 const station = useYandexStationStore();
 const toaster = useToasterStore();
 const root = useTemplateRef<HTMLElement>('root');
+
+// useGsap читает motionLevel из ui store: длительности и stagger масштабируются
+// автоматически (off → set, reduced → opacity-only × 0.6, full → × 1.15).
+const { from: metaFrom } = useGsap(null);
+
+function onMetaToggle(e: Event): void {
+  const el = e.target as HTMLDetailsElement;
+  if (!el.open) return;
+  const rows = el.querySelectorAll('.detail__dl > div');
+  if (!rows.length) return;
+  metaFrom(rows, {
+    opacity: 0,
+    x: -10,
+    stagger: 0.045,
+    duration: 0.36,
+    ease: 'power2.out',
+    clearProps: 'opacity,transform',
+  });
+}
 
 const id = computed(() => String(route.params.id));
 const device = computed(() => devices.byId.get(id.value));
@@ -375,6 +430,14 @@ const PROP_LABELS: Record<string, string> = {
   energy: 'Энергия',
   battery_level: 'Заряд батареи',
   link_quality: 'Качество связи',
+  voice_activity: 'Голосовой ассистент',
+  open: 'Состояние',
+  motion: 'Движение',
+  vibration: 'Вибрация',
+  smoke: 'Задымление',
+  gas: 'Утечка газа',
+  water_leak: 'Протечка',
+  button: 'Кнопка',
 };
 
 const PROP_ICONS: Record<string, string> = {
@@ -400,6 +463,8 @@ const PROP_ICONS: Record<string, string> = {
     '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v4l2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   link_quality:
     '<svg viewBox="0 0 16 16" fill="none"><path d="M2 9l3-3 3 2 3-4 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  voice_activity:
+    '<svg viewBox="0 0 16 16" fill="none"><rect x="6" y="2" width="4" height="7.5" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 8.5a4.5 4.5 0 009 0M8 13v1.4M5.6 14.4h4.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
 };
 
 const PROGRESS_BAR_INSTANCES = new Set(['humidity', 'battery_level']);
@@ -413,7 +478,55 @@ const PROP_ACCENTS: Record<string, string> = {
   power: '#ff61e6',
   voltage: '#ffd27d',
   amperage: '#ff7a8a',
+  voice_activity: 'var(--color-text-secondary)',
 };
+
+// State-style props (вместо number/value — chip с dot и human-label).
+const STATE_PROP_INSTANCES = new Set(['voice_activity', 'open', 'motion', 'vibration', 'smoke', 'gas', 'water_leak', 'button']);
+
+interface VoiceState {
+  label: string;
+  tone: 'idle' | 'active' | 'processing';
+}
+const VOICE_ACTIVITY_STATES: Record<string, VoiceState> = {
+  idle: { label: 'Ожидает команду', tone: 'idle' },
+  listening: { label: 'Слушает', tone: 'active' },
+  recognizing: { label: 'Распознаёт речь', tone: 'processing' },
+  speaking: { label: 'Говорит', tone: 'active' },
+  thinking: { label: 'Думает', tone: 'processing' },
+  shazam: { label: 'Распознаёт музыку', tone: 'processing' },
+};
+
+function isStateProp(instance: string): boolean {
+  return STATE_PROP_INSTANCES.has(instance);
+}
+
+function statePropLabel(instance: string, value: unknown): string {
+  const v = String(value ?? '').toLowerCase();
+  if (instance === 'voice_activity') return VOICE_ACTIVITY_STATES[v]?.label ?? (v || '—');
+  if (instance === 'open') return v === 'true' || v === 'opened' ? 'Открыто' : 'Закрыто';
+  if (instance === 'motion') return v === 'true' || v === 'detected' ? 'Движение' : 'Покой';
+  if (instance === 'vibration') return v === 'true' || v === 'detected' ? 'Вибрация' : 'Покой';
+  if (instance === 'smoke') return v === 'true' || v === 'detected' ? 'Задымление' : 'Норма';
+  if (instance === 'gas') return v === 'true' || v === 'detected' ? 'Утечка' : 'Норма';
+  if (instance === 'water_leak') return v === 'true' || v === 'leak' ? 'Протечка' : 'Сухо';
+  return v || '—';
+}
+
+function statePropTone(instance: string, value: unknown): 'idle' | 'active' | 'alert' | 'processing' {
+  const v = String(value ?? '').toLowerCase();
+  if (instance === 'voice_activity') {
+    const tone = VOICE_ACTIVITY_STATES[v]?.tone;
+    if (tone === 'active') return 'active';
+    if (tone === 'processing') return 'processing';
+    return 'idle';
+  }
+  const triggered = v === 'true' || v === 'detected' || v === 'opened' || v === 'leak';
+  if (instance === 'smoke' || instance === 'gas' || instance === 'water_leak') {
+    return triggered ? 'alert' : 'idle';
+  }
+  return triggered ? 'active' : 'idle';
+}
 
 function propLabel(instance: string): string {
   return PROP_LABELS[instance] ?? instance;
@@ -769,25 +882,29 @@ useViewMount({ scope: root });
   &__assignment {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
   }
-  &__yandex-hint {
-    display: inline-flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 8px 12px;
-    border-radius: var(--radius-md);
-    background: rgba(255, 204, 0, 0.08);
-    border: 1px solid rgba(255, 204, 0, 0.22);
-    color: var(--color-text-secondary);
-    line-height: 1.45;
 
-    :deep(.icon) {
-      flex-shrink: 0;
-      margin-top: 2px;
-      color: #ffcc00;
+  &__assignment-hint {
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    margin: 0;
+    max-width: 60ch;
+  }
+
+  // Yandex-import warning: brand-amber tint, icon-box с alice-glyph.
+  &__yandex-banner {
+    --banner-tone: #ffcc00;
+    --banner-tone-rgb: 255, 204, 0;
+    --banner-bg: rgba(255, 204, 0, 0.08);
+    --banner-edge: rgba(255, 204, 0, 0.28);
+
+    :deep(.banner__icon) {
+      --icon-tone: #ffcc00;
+      --icon-tone-rgb: 255, 204, 0;
     }
   }
+
   &__assignment-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -797,33 +914,152 @@ useViewMount({ scope: root });
       grid-template-columns: 1fr;
     }
   }
+
   &__link {
-    color: var(--color-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-brand-violet);
     align-self: flex-start;
-    transition: color 160ms var(--ease-out);
+    font-weight: 500;
+    transition: color 160ms var(--ease-out), gap 160ms var(--ease-out);
+
     &:hover {
       color: var(--color-text-primary);
+      gap: 8px;
     }
   }
 
+  // Метаданные: collapsible <details> с brand-styled summary.
+  &__meta {
+    padding: 0;
+    overflow: hidden;
+
+    &[open] {
+      .detail__meta-summary-chevron {
+        transform: rotate(90deg);
+      }
+    }
+  }
+
+  &__meta-summary {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: clamp(16px, 2vw, 24px);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    transition: background 200ms var(--ease-out);
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    &-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--color-text-muted);
+      flex-shrink: 0;
+    }
+
+    &-title {
+      font-family: var(--font-family-display);
+      font-size: var(--font-size-h2);
+      font-weight: 600;
+      color: var(--color-text-primary);
+      letter-spacing: var(--tracking-h2);
+    }
+
+    &-hint {
+      color: var(--color-text-muted);
+    }
+
+    &-chevron {
+      color: var(--color-text-muted);
+      transition: transform 240ms var(--ease-spring);
+      flex-shrink: 0;
+    }
+  }
+
+  // Property-inspector pattern: hairline-разделители между строк, no per-row
+  // chips. Label fixed 130px (alignment column), value mono right of it.
   &__dl {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 14px;
+    padding: 0 clamp(16px, 2vw, 24px) clamp(16px, 2vw, 24px);
+    margin: 0;
+
     div {
-      display: grid;
-      grid-template-columns: minmax(120px, 140px) minmax(0, 1fr);
-      gap: 12px;
-      font-size: 13px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 20px;
+      padding: 12px 8px;
+      transition: background var(--dur-fast) var(--ease-out);
+      position: relative;
     }
+
+    div + div {
+      border-top: var(--border-thin) solid var(--color-border-subtle);
+    }
+
+    div:hover {
+      background: rgba(var(--color-brand-violet-rgb), 0.05);
+    }
+
+    // Brand-accent left bar при hover — тонкий violet→pink stripe слева.
+    div::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%) scaleY(0);
+      transform-origin: center;
+      width: 2px;
+      height: 60%;
+      border-radius: 2px;
+      background: var(--gradient-brand);
+      transition: transform var(--dur-medium) var(--ease-spring);
+    }
+
+    div:hover::before {
+      transform: translateY(-50%) scaleY(1);
+    }
+
     dt {
+      flex: 0 0 130px;
+      max-width: 130px;
       color: var(--color-text-muted);
+      font-weight: 600;
+      font-size: 10.5px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding-left: 8px;
     }
+
     dd {
+      flex: 1 1 200px;
+      margin: 0;
       color: var(--color-text-primary);
-      word-break: break-all;
+      font-family: var(--font-family-mono);
+      font-size: 12.5px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       min-width: 0;
+      line-height: 1.55;
     }
   }
 }
@@ -903,6 +1139,72 @@ useViewMount({ scope: root });
     white-space: nowrap;
   }
 
+  // State chip: idle / active / processing / alert tone.
+  &__chip {
+    grid-area: value;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 11px 5px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 12.5px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-secondary);
+    justify-self: end;
+    line-height: 1;
+    white-space: nowrap;
+
+    &-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    &[data-tone='idle'] {
+      color: var(--color-text-muted);
+    }
+
+    &[data-tone='active'] {
+      color: var(--color-success);
+      background: rgba(var(--color-success-rgb), 0.12);
+      border-color: rgba(var(--color-success-rgb), 0.3);
+
+      .prop__chip-dot {
+        animation: heroDotPulse 2s ease-out infinite;
+      }
+    }
+
+    &[data-tone='processing'] {
+      color: var(--color-brand-purple);
+      background: rgba(var(--color-brand-purple-rgb), 0.1);
+      border-color: rgba(var(--color-brand-purple-rgb), 0.28);
+
+      .prop__chip-dot {
+        animation: heroDotPulse 1.4s ease-out infinite;
+      }
+    }
+
+    &[data-tone='alert'] {
+      color: var(--color-danger);
+      background: rgba(var(--color-danger-rgb), 0.12);
+      border-color: rgba(var(--color-danger-rgb), 0.32);
+
+      .prop__chip-dot {
+        animation: heroDotPulse 1s ease-out infinite;
+      }
+    }
+  }
+
+  &--state {
+    grid-template-areas:
+      'icon label value'
+      'icon label value';
+  }
+
   &__bar {
     grid-area: bar;
     height: 4px;
@@ -934,13 +1236,13 @@ useViewMount({ scope: root });
 }
 
 :global(.app--reduce-motion) {
-  .detail__hero-status[data-state='online'] .detail__hero-dot {
+  .detail__hero-status[data-state='online'] .detail__hero-dot,
+  .prop__chip-dot {
     animation: none;
   }
-  .detail__hero {
-    transition-duration: 0ms;
-  }
-  .detail__hero-icon {
+  .detail__hero,
+  .detail__hero-icon,
+  .detail__meta-summary-chevron {
     transition-duration: 0ms;
   }
 }

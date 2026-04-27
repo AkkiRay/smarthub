@@ -3,6 +3,11 @@
  * TP-Link Kasa Cloud (wap.tplinkcloud.com): закрывает обе линейки Kasa+Tapo через единый passthrough.
  * Auth: POST /?method=login → token; затем POST passthrough на конкретное устройство:
  *   /?token=<token> — { method: "passthrough", params: { deviceId, requestData: encrypt(json) } }
+ *
+ * Security note: TP-Link cloud API дизайн-вынуждает token в query (`?token=`) — нет
+ * header-альтернативы. Митигация: запросы идут поверх HTTPS direct (без прокси),
+ * axios серилизует token через `params` (не string concat), а в error-handler'е
+ * URL прогоняется через {@link redactToken} перед логированием.
  */
 
 import type { AxiosRequestConfig } from 'axios';
@@ -31,6 +36,12 @@ interface TpCloudDevice {
   appServerUrl?: string;
 }
 
+/** Срезает значение `?token=...` в URL/строке для безопасного логирования. */
+function redactToken(value: unknown): string {
+  if (typeof value !== 'string') return String(value);
+  return value.replace(/([?&])token=[^&\s]+/gi, '$1token=***');
+}
+
 export class TPLinkCloudDriver extends BaseCloudDriver {
   readonly id = 'tplink-cloud' as const;
   readonly displayName = 'TP-Link Cloud (Kasa+Tapo)';
@@ -43,9 +54,11 @@ export class TPLinkCloudDriver extends BaseCloudDriver {
   }
 
   protected applyAuth(config: AxiosRequestConfig): AxiosRequestConfig {
-    if (this.token) {
-      config.url = `/?token=${this.token}`;
-    }
+    if (!this.token) return config;
+    // Token через axios `params` — axios сам сделает URL-encode и не дублирует
+    // ?token= если запрос ушёл с уже set'ом url'ом. Это безопаснее чем `url = '/?token=' + this.token`,
+    // которое не escape'ит токен и ломается на спецсимволах.
+    config.params = { ...(config.params ?? {}), token: this.token };
     return config;
   }
 
@@ -58,7 +71,7 @@ export class TPLinkCloudDriver extends BaseCloudDriver {
       await this.ensureLogin();
       const r = await this.request<{ result: { deviceList: TpCloudDevice[] } }>({
         method: 'POST',
-        url: `/?token=${this.token}`,
+        url: '/',
         data: { method: 'getDeviceList' },
       });
       return (r.result.deviceList ?? []).map((d) => ({
@@ -74,7 +87,7 @@ export class TPLinkCloudDriver extends BaseCloudDriver {
         },
       }));
     } catch (e) {
-      this.logWarn('discovery failed', e);
+      this.logWarn(`discovery failed: ${redactToken((e as Error).message)}`);
       return [];
     }
   }
@@ -177,12 +190,27 @@ export class TPLinkCloudDriver extends BaseCloudDriver {
   private async passthrough(device: Device, requestData: unknown): Promise<unknown> {
     await this.ensureLogin();
     const meta = device.meta as { serverUrl?: string };
-    const url = meta.serverUrl ?? `https://wap.tplinkcloud.com/?token=${this.token}`;
-    const r = await this.http.post<{ result: { responseData: string } }>(url, {
-      method: 'passthrough',
-      params: { deviceId: device.externalId, requestData: JSON.stringify(requestData) },
+    // serverUrl приходит из getDeviceList — это региональный shard ('https://eu-wap.tplinkcloud.com').
+    // Идём через `request()` чтобы получить single-flight refresh-on-401, а не this.http.post напрямую,
+    // который bypass'ит весь refresh-flow → caller получит 401 без retry.
+    const r = await this.request<{ result: { responseData: string } }>({
+      method: 'POST',
+      // axios `params` добавит ?token=... и не дублирует если url уже его содержит.
+      url: meta.serverUrl ?? '/',
+      data: {
+        method: 'passthrough',
+        params: { deviceId: device.externalId, requestData: JSON.stringify(requestData) },
+      },
     });
-    return JSON.parse(r.data.result.responseData);
+    if (typeof r.result.responseData !== 'string') {
+      throw new Error('tplink-cloud: passthrough returned non-string responseData');
+    }
+    try {
+      return JSON.parse(r.result.responseData);
+    } catch (e) {
+      // Cloud вернул broken JSON — не маскируем под DEVICE_UNREACHABLE.
+      throw new Error(`tplink-cloud: malformed responseData (${(e as Error).message})`);
+    }
   }
 
   private async ensureLogin(): Promise<void> {

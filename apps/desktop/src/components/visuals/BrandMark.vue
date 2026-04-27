@@ -14,13 +14,10 @@
 /**
  * @fileoverview
  * Реестр brand-SVG для всех поддерживаемых интеграций (31 driver).
- *
- * Все марки лежат в `@/assets/brand-logos/<driver-id>.svg` и подхватываются
- * eager-glob'ом Vite — попадают в стартовый chunk, без runtime-fetch.
- * SVG'ы рендерятся в `currentColor` (родитель задаёт accent из driverPalette).
- *
- * Если для нового driver-id SVG отсутствует — fallback показывает нейтральный
- * circle-mark с восклицательным знаком, чтобы баг был сразу виден.
+ * Марки лежат в `@/assets/brand-logos/<driver-id>.svg`, подхватываются
+ * eager-glob'ом Vite в стартовый chunk. SVG рендерятся в `currentColor`,
+ * accent задаётся родителем из driverPalette.
+ * Fallback для отсутствующих ID — neutral circle-mark с «!» внутри.
  */
 
 import { computed } from 'vue';
@@ -47,9 +44,7 @@ const props = withDefaults(defineProps<Props>(), {
 const accent = computed(() => driverAccent(props.brand as DriverId));
 const label = computed(() => props.label ?? String(props.brand));
 
-// Eager-glob — все SVG в стартовый chunk, без runtime-fetch'а. Без
-// flickering при первой отрисовке chip'а / icon'ки. Vite разворачивает на
-// build-time: bundle размер ~+45KB raw для 31 brand-mark.
+// Eager-glob: все SVG в стартовый chunk на build-time (~+45KB raw для 31 brand-mark).
 const modules = import.meta.glob('@/assets/brand-logos/*.svg', {
   eager: true,
   query: '?raw',
@@ -65,9 +60,8 @@ const REGISTRY: Record<string, string> = (() => {
   return map;
 })();
 
-// Marker-аттрибут `data-mono="1"` отличает fallback от brand-SVG'шки —
-// CSS-override на shape-fill (см. styles ниже) пропускает его, иначе frame
-// был бы залит currentColor.
+// Marker-attribute `data-mono="1"` отличает fallback от brand-SVG;
+// CSS-override на shape-fill пропускает monogram (см. styles).
 const FALLBACK = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" data-mono="1">
   <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
   <path d="M12 7v5M12 16v.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
@@ -96,8 +90,8 @@ const svg = computed(() => {
   &--lg  { --mark-size: 28px; }
   &--xl  { --mark-size: 40px; }
 
-  // Filled-вариант: марка лежит в скруглённом квадрате с brand-tone fill.
-  // Используется в DriverIcon (большой), DriversMarketplace, Discovery.
+  // Filled: марка в скруглённом квадрате с brand-tone fill.
+  // Используется в DriverIcon, DriversMarketplace, Discovery.
   &--filled {
     --brand-tone: var(--color-brand-violet);
     --pad: calc(var(--mark-size) * 0.32);
@@ -117,13 +111,9 @@ const svg = computed(() => {
     display: inline-flex;
     width: 100%;
     height: 100%;
-    // Mount-fade — SVG появляется плавно из 0→1 opacity с лёгким scale-ease,
-    // одинаково для всех мест использования (chip, marketplace, discovery,
-    // orbital). `both` фиксирует начальное opacity:0 чтобы не было flash'а
-    // до первого frame'а animation'а.
+    // Mount-fade: 0→1 opacity + scale-ease. `both` фиксирует opacity:0 до старта.
     animation: brand-mark-reveal var(--dur-medium) var(--ease-out) both;
-    // Цвет accent'а может меняться (active-state в DriverIcon) — пусть
-    // переход тоже едет плавно, не жёстким swap'ом.
+    // Плавный transition accent'а (active-state в DriverIcon).
     transition: color var(--dur-medium) var(--ease-out);
 
     :deep(svg) {
@@ -131,10 +121,8 @@ const svg = computed(() => {
       height: 100%;
     }
 
-    // Simple-icons SVG используют сплошной fill без атрибута — по дефолту
-    // браузер красит в чёрный. Нам нужен accent. Override на shape-элементах,
-    // НО только для не-monogram SVG (там есть `fill="none"` явно — оставляем
-    // его, иначе frame залило бы внутренность).
+    // Simple-icons SVG: shape-fill в currentColor. Monogram (data-mono) исключён —
+    // там `fill="none"` явный.
     :deep(svg:not([data-mono]) path),
     :deep(svg:not([data-mono]) rect),
     :deep(svg:not([data-mono]) circle),
@@ -156,7 +144,7 @@ const svg = computed(() => {
   }
 }
 
-// Motion off/reduced — fade без scale (более «сухой» вход без bounce-эффекта).
+// Motion off/reduced: fade без scale.
 [data-motion='off'] .brand-mark__svg,
 [data-motion='reduced'] .brand-mark__svg {
   animation-name: brand-mark-reveal-flat;

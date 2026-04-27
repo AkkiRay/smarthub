@@ -441,10 +441,7 @@ function animateStep(prev: number, idx: number): void {
   const toEl = cards.value[idx];
   if (!toEl) return;
 
-  // Чистый opacity-crossfade без `filter: blur` — blur даёт layout-thrash на
-  // Windows + Intel iGPU (composite-layer пересчитывается каждый кадр) и
-  // визуально читается как «прыжок» при переходе. force3D промоутит карточку
-  // в свой GPU-слой — opacity всегда smooth.
+  // Opacity-only crossfade. force3D промоутит карточку в отдельный compositor-слой.
   const tl = gsap.timeline({ defaults: { ease: 'power3.out', force3D: true } });
 
   if (fromEl && fromEl !== toEl) {
@@ -456,10 +453,8 @@ function animateStep(prev: number, idx: number): void {
     });
   }
 
-  // Stagger по детям: только opacity (без y) — карточка absolute, но
-  // одновременный transform на родителе (Vue route-fade) и на детях
-  // создавал заметный «дрейф» при смене шага. Чистое затухание читается
-  // плавно на всех устройствах.
+  // Children stagger: opacity без transform — конкуренция с Vue route-fade'ом
+  // на parent'е давала бы «дрейф» при смене шага.
   tl.set(toEl, { visibility: 'visible', pointerEvents: 'auto', opacity: 0 })
     .to(toEl, { opacity: 1, duration: 0.32 }, fromEl && fromEl !== toEl ? '-=0.12' : 0)
     .fromTo(
@@ -525,9 +520,10 @@ function onKeydown(e: KeyboardEvent): void {
 watch(step, (now, prev) => animateStep(prev, now));
 
 // =====================================================================
-// Touch swipe: горизонтальный жест ←/→ листает шаги (mobile-only ввод).
-// Threshold 60px по X отсекает случайные тапы; вертикальный delta > X
-// блокирует жест — даём приоритет нативному scroll'у контента.
+// Touch swipe handler. Горизонтальный жест → next/back step.
+//   - Threshold X: 60px (случайные тапы отсекаются).
+//   - dy > dx: вертикаль приоритетна → нативный scroll контента.
+//   - dt > 600ms: жест считается долгим, игнорируется.
 // =====================================================================
 let touchStart: { x: number; y: number; t: number } | null = null;
 
@@ -612,17 +608,13 @@ onBeforeUnmount(() => {
   // фиксированной вертикали: header сразу под titlebar'ом, dots-footer
   // вплотную к нижнему краю, layout (flex: 1) растягивается между.
   //
-  // height: 100% / min-height: 100% намеренно НЕ выставляем — в комбинации с
-  // `flex: 1` родителя (.app__fullscreen) они делают двойную фиксацию высоты,
-  // и в Chromium percentage-resolution через flex-context даёт overflow вниз
-  // на высоту titlebar'а; визуально читалось как «welcome провисает в низ».
+  // height/min-height не выставляем: parent `.app__fullscreen { flex: 1 }` уже
+  // даёт высоту, а percentage в flex-context Chromium резолвит как overflow.
   position: relative;
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: clamp(12px, 1.6vh, 24px);
-  // Top padding сжали до 14-22px — иначе bar + дефолтные отступы layout'а
-  // давали ~150px пустого пространства над hero на 1080p мониторах.
   padding: clamp(14px, 1.8vh, 22px) clamp(24px, 4vw, 64px) clamp(16px, 2vh, 28px);
   color: var(--color-text-primary);
   outline: none;
@@ -630,8 +622,7 @@ onBeforeUnmount(() => {
   isolation: isolate;
   background: var(--color-bg-base);
 
-  // ---- Brand aura: статичная плоскость + три мягких пятна.
-  // Per feedback flat-hero: NO bubble-glass, plane + ambient shadow.
+  // Brand aura: flat plane + три soft pятна (НЕ bubble-glass).
   &__aura {
     position: absolute;
     inset: 0;
@@ -758,14 +749,7 @@ onBeforeUnmount(() => {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(360px, 38vw, 560px);
     gap: clamp(24px, 3vw, 56px);
-    // center: copy и orb выравниваются по vertical-axis layout'а — пустое
-    // пространство (≈ flex:1 минус контент сцены) распределяется симметрично
-    // выше/ниже карточки, а не «коллапсирует» под actions'ами на высоких
-    // viewport'ах. Орб остаётся на той же оси (тоже center).
     align-items: center;
-    // Welcome теперь flex-column (auto bar / flex layout / auto bottom). Layout
-    // должен поглощать всю остаточную высоту, иначе flex auto-sizes по контенту
-    // и footer-dots залипают сразу под layout'ом — bottom большого экрана пуст.
     flex: 1 1 auto;
     min-height: 0;
 
@@ -785,12 +769,8 @@ onBeforeUnmount(() => {
     align-self: center;
   }
 
-  // ---- Сцена: фикс. min-height = под самый высокий шаг (path/finish с
-  // grid-карточками). Меньше нельзя — иначе тот шаг переполнит и push'нёт
-  // bottom-dots вниз. Замеры: hero ~340px, features ~430px, path ~440px,
-  // finish ~450px. Берём 440px как safe min — copy теперь center'ится в
-  // layout'е, и более крупная min-height просто давала бы пустоту внутри
-  // карточки, а не вокруг.
+  // Scene min-height: hero ~340, features ~430, path ~440, finish ~450 — берём
+  // 440 как safe-минимум для самого высокого шага.
   &__scene {
     position: relative;
     width: 100%;
@@ -1233,9 +1213,8 @@ onBeforeUnmount(() => {
   }
 
   // =================================================================
-  // Visual pane: orb + chips. Стейдж — viewport-driven, fixed-aspect.
-  // Container queries намеренно убраны — иначе высота copy-колонки
-  // таскает orb-стейдж за собой между шагами.
+  // Visual pane: orb + chips. Стейдж viewport-driven (`vw`/`vh`), fixed-aspect.
+  // Container queries не используем — стейдж не должен зависеть от copy-колонки.
   // =================================================================
   &__pane--visual {
     position: relative;
@@ -1333,17 +1312,10 @@ onBeforeUnmount(() => {
 }
 
 // =====================================================================
-// Mobile (≤ 720px): полностью другой UX-pattern.
-//
-// Desktop: copy слева, orb справа, всё умещается в один экран.
-// Mobile: вертикальный stack — orb сверху (компактный hero ≤ 30vh), контент
-// под ним прокручивается естественно, dots/actions идут в общем flow внизу.
-// Sticky-bottom CTA не делаем: при scroll'е контента overlap'ится с длинными
-// карточками path-step'а; вместо этого actions внутри каждой карточки уже
-// помечены `margin-top: auto` и оказываются последними в скролле.
-//
-// Swipe-навигация (см. setupTouchSwipe в script) даёт жест влево/вправо для
-// смены шага — основной mobile-ввод вместо клавиш.
+// Mobile (≤720px): vertical stack-layout.
+//   - Orb: hero сверху (≤30vh), под ним прокручивается контент.
+//   - Actions: внутри step-card с `margin-top: auto`, оказываются в конце.
+//   - Touch swipe ←/→: листает шаги (см. onTouchStart / onTouchEnd в script).
 // =====================================================================
 @media (max-width: 720px) {
   .welcome {
@@ -1382,9 +1354,7 @@ onBeforeUnmount(() => {
       align-self: stretch;
     }
 
-    // Visual в mobile — БЕЗ aspect:1, чтобы не съедал треть высоты viewport'а.
-    // Stage держит 30vh max; orb внутри сжат до 0.78 чтобы chip-кольца хорошо
-    // обтекали (на узком экране фракция от стейджа меньше, но хорошо смотрится).
+    // Visual: hero-блок 30vh max, orb 70% от стейджа.
     &__pane--visual {
       order: -1;
       height: clamp(220px, 30vh, 300px);
@@ -1400,9 +1370,8 @@ onBeforeUnmount(() => {
       }
     }
 
-    // Scene держит min-height под самый высокий шаг (path-step ≈ 540px). Без
-    // этого absolute-stack карточек коллапсирует контейнер в 0px. На мобиле
-    // welcome имеет overflow:auto, лишняя высота скроллится естественно.
+    // Scene min-height — резерв под самый высокий step (path-grid ≈ 540px).
+    // overflow:auto на root скроллит overflow естественно.
     &__scene {
       min-height: clamp(480px, 70vh, 620px);
     }
@@ -1411,7 +1380,6 @@ onBeforeUnmount(() => {
       gap: 16px;
     }
 
-    // ---- Typography: --font-size-display token уже clamp 22→28px на mobile.
     &__title {
       line-height: 1.15;
     }
@@ -1433,7 +1401,7 @@ onBeforeUnmount(() => {
       }
     }
 
-    // ---- Actions — full-width column. На touch проще ткнуть большую кнопку.
+    // Actions — full-width column, min-height = tap-target.
     &__actions {
       flex-direction: column;
       gap: 8px;
@@ -1446,7 +1414,7 @@ onBeforeUnmount(() => {
       }
     }
 
-    // ---- Feature/path grids: один column на mobile.
+    // Feature / path grids: single-column.
     &__feature-grid,
     &__path-grid {
       grid-template-columns: 100%;
@@ -1460,8 +1428,7 @@ onBeforeUnmount(() => {
       padding: 14px;
     }
 
-    // ---- Finish cards: иконка слева, body справа, CTA под body на отдельной
-    // строке (а не справа — на 360px не помещается).
+    // Finish cards: icon + body в строке, CTA отдельной строкой снизу.
     &__finish-card {
       grid-template-columns: auto minmax(0, 1fr);
       grid-template-rows: auto auto;

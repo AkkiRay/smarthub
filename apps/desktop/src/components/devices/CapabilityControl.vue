@@ -142,18 +142,27 @@
       </BaseButton>
     </div>
 
-    <!-- Fallback для unknown capability type: instance + state meta. -->
+    <!-- Fallback для unknown capability type. -->
     <div v-else class="cap__fallback">
       <p class="text--small cap__fallback-msg">
-        Прямого UI для этой возможности пока нет — Алиса всё равно её знает,
-        используйте голосовую команду или TTS-поле выше.
+        Прямого UI пока нет — Алиса знает текущее состояние, управляйте голосом или TTS-полем выше.
       </p>
-      <dl v-if="fallbackDetails.length" class="cap__fallback-meta">
-        <div v-for="d in fallbackDetails" :key="d.k">
-          <dt>{{ d.k }}</dt>
-          <dd>{{ d.v }}</dd>
-        </div>
-      </dl>
+
+      <div v-if="fallbackChip" class="cap__fallback-chip">
+        <span class="cap__fallback-chip-dot" />
+        <span class="cap__fallback-chip-label">{{ fallbackChip.label }}</span>
+        <strong class="cap__fallback-chip-value">{{ fallbackChip.value }}</strong>
+      </div>
+
+      <div v-else-if="fallbackPrimitive" class="cap__fallback-row">
+        <span class="cap__fallback-row-label">Значение</span>
+        <code class="cap__fallback-row-value">{{ fallbackPrimitive }}</code>
+      </div>
+
+      <span v-if="fallbackWriteOnly" class="cap__fallback-readonly">
+        <BaseIcon name="info" :size="12" />
+        Write-only — читается только из приложения «Дом с Алисой»
+      </span>
     </div>
   </div>
 </template>
@@ -163,10 +172,12 @@ import { computed, ref, watch } from 'vue';
 import type { Capability, Device } from '@smarthome/shared';
 import { useDevicesStore } from '@/stores/devices';
 import { RGB_PRESETS, TEMPERATURE_PRESETS, type ColorPreset } from '@/constants/colorPresets';
+import { capabilityLabel as labelForCapability } from '@/constants/capabilityLabels';
 import BaseSwitch from '@/components/base/BaseSwitch.vue';
 import BaseSegmented, { type SegmentedOption } from '@/components/base/BaseSegmented.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
+import BaseIcon from '@/components/base/BaseIcon.vue';
 
 const props = defineProps<{ device: Device; capability: Capability }>();
 const devices = useDevicesStore();
@@ -182,81 +193,19 @@ const instanceName = computed(() =>
   ),
 );
 
-const label = computed(() => {
-  const t = props.capability.type;
-  if (t === 'devices.capabilities.on_off') return 'Питание';
-  if (t === 'devices.capabilities.range') {
-    return RANGE_LABELS[instanceName.value] ?? 'Уровень';
-  }
-  if (t === 'devices.capabilities.color_setting') return 'Цвет';
-  if (t === 'devices.capabilities.mode') {
-    return MODE_LABELS[instanceName.value] ?? 'Режим';
-  }
-  if (t === 'devices.capabilities.toggle') {
-    return (
-      TOGGLE_LABELS[instanceName.value] ??
-      (instanceName.value.replace(/_/g, ' ') || 'Переключатель')
-    );
-  }
-  if (
-    t === 'devices.capabilities.quasar.server_action' ||
-    (t as string) === 'devices.capabilities.quasar'
-  ) {
-    // Известный instance → человеческое имя; иначе instance + technical type.
-    return (
-      SERVER_ACTION_LABELS[instanceName.value] ??
-      (instanceName.value ? `Quasar · ${instanceName.value}` : 'Команда Алисы')
-    );
-  }
-  // Generic fallback: type без префикса + instance.
-  const short = t.replace(/^devices\.capabilities\./, '');
-  return instanceName.value ? `${short} · ${instanceName.value}` : short;
-});
+const label = computed(() =>
+  labelForCapability(props.capability.type, instanceName.value),
+);
 
-// Toggle instances Yandex Smart Home.
-const TOGGLE_LABELS: Record<string, string> = {
-  mute: 'Звук выключен',
-  pause: 'Пауза',
-  backlight: 'Подсветка',
-  controls_locked: 'Блокировка от детей',
-  ionization: 'Ионизация',
-  keep_warm: 'Подогрев',
-  oscillation: 'Качание',
-};
-
-// quasar phrase / text instances (both `quasar` и `quasar.server_action`).
-const SERVER_ACTION_LABELS: Record<string, string> = {
-  phrase_action: 'Произнести фразу',
-  text_action: 'Голосовая команда',
-  tts: 'TTS-фраза',
-  voice_action: 'Голосовая команда',
-  sound_command: 'Звук',
-};
-
-/** Placeholder hint по instance'у. */
+// Placeholder hints per instance (используются в `cap__action` input'ах для
+// quasar.server_action / quasar). Локально, потому что hints — UI-only,
+// не относятся к Yandex spec'ификации capability'ов.
 const SERVER_ACTION_HINTS: Record<string, string> = {
   phrase_action: 'Например: «доброе утро»',
   text_action: 'Например: «включи свет на кухне»',
   tts: 'Текст для синтеза речи',
   voice_action: 'Текст голосовой команды',
   sound_command: 'Название звука',
-};
-
-const RANGE_LABELS: Record<string, string> = {
-  brightness: 'Яркость',
-  volume: 'Громкость',
-  temperature: 'Температура',
-  channel: 'Канал',
-  humidity: 'Влажность',
-};
-
-const MODE_LABELS: Record<string, string> = {
-  thermostat: 'Режим работы',
-  fan_speed: 'Скорость вентилятора',
-  work_speed: 'Скорость',
-  program: 'Программа',
-  scene: 'Сцена',
-  swing: 'Качание',
 };
 
 const isOn = computed(() => Boolean(props.capability.state?.value));
@@ -267,6 +216,12 @@ const valueLabel = computed(() => {
     return `${rangeLocal.value}${unitSuffix.value}`;
   }
   if (t === 'devices.capabilities.color_setting') {
+    const raw = props.capability.state?.value;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const sceneName = (raw as Record<string, unknown>)['name'];
+      if (typeof sceneName === 'string' && sceneName) return sceneName;
+    }
+    if (!acceptsColor.value && !hasTemperature.value) return '';
     if (colorMode.value === 'temperature') return `${tempLocal.value} K`;
     return `#${rgbValue.value.toString(16).padStart(6, '0').toUpperCase()}`;
   }
@@ -587,26 +542,31 @@ async function runServerAction(): Promise<void> {
   }
 }
 
-// Generic fallback meta.
+// Fallback chip / row для unknown capability type.
 
-interface FallbackEntry {
-  k: string;
-  v: string;
-}
-
-/** Fallback meta: instance, текущее значение, retrievable. */
-const fallbackDetails = computed<FallbackEntry[]>(() => {
-  const out: FallbackEntry[] = [];
-  if (instanceName.value) out.push({ k: 'instance', v: instanceName.value });
+/** Chip-summary: object-value c human-readable name → отдельная карточка. */
+const fallbackChip = computed<{ label: string; value: string } | null>(() => {
   const val = props.capability.state?.value;
-  if (val !== undefined && val !== null && val !== '') {
-    out.push({ k: 'value', v: typeof val === 'object' ? JSON.stringify(val) : String(val) });
+  if (val && typeof val === 'object' && !Array.isArray(val)) {
+    const obj = val as Record<string, unknown>;
+    const name = obj['name'];
+    if (typeof name === 'string' && name) {
+      return { label: 'Активная сцена', value: name };
+    }
   }
-  if (props.capability.retrievable === false) {
-    out.push({ k: 'retrievable', v: 'нет (write-only)' });
-  }
-  return out;
+  return null;
 });
+
+/** Primitive row: scalar-value без чипа. */
+const fallbackPrimitive = computed<string | null>(() => {
+  if (fallbackChip.value) return null;
+  const val = props.capability.state?.value;
+  if (val === undefined || val === null || val === '') return null;
+  if (typeof val === 'object') return null;
+  return String(val);
+});
+
+const fallbackWriteOnly = computed(() => props.capability.retrievable === false);
 
 function rgbToHue(rgb: number): number {
   const r = ((rgb >> 16) & 0xff) / 255;
@@ -698,7 +658,9 @@ function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
   gap: 14px;
   padding: 16px;
   border-radius: var(--radius-md);
-  @include glass(var(--glass-alpha-soft), var(--glass-blur-soft));
+  // Flat plane: single-tone surface + hairline border (без glass top-highlight).
+  background: rgba(var(--glass-tint), var(--glass-alpha-soft));
+  border: 1px solid var(--glass-edge);
   min-width: 0;
   transition: opacity 200ms var(--ease-out);
 
@@ -938,36 +900,96 @@ function rgbToHsv(rgb: number): { h: number; s: number; v: number } {
   &__fallback {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 
     &-msg {
-      color: var(--color-text-muted);
+      color: var(--color-text-secondary);
       line-height: 1.5;
       margin: 0;
+      max-width: 64ch;
     }
-    &-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      margin: 0;
 
-      div {
-        display: grid;
-        grid-template-columns: 96px minmax(0, 1fr);
-        gap: 8px;
-        font-size: 12px;
-        font-family: var(--font-family-mono);
-      }
-      dt {
+    // Chip: tone-tinted card с label + emphasized value (для object-scenes).
+    // Фон opaque — иначе glass-highlight родительской `.cap` просвечивает
+    // через rgba и выглядит как градиент top→bottom.
+    &-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      background: var(--color-bg-elevated);
+      border: 1px solid rgba(var(--color-brand-violet-rgb), 0.28);
+      width: fit-content;
+      max-width: 100%;
+    }
+
+    &-chip-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-brand-violet);
+      flex-shrink: 0;
+    }
+
+    &-chip-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+    }
+
+    &-chip-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      letter-spacing: -0.005em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    // Row: scalar-value (number / string) — компактная label-value пара.
+    &-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: fit-content;
+    }
+
+    &-row-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+    }
+
+    &-row-value {
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--color-border-subtle);
+      font-family: var(--font-family-mono);
+      font-size: 12.5px;
+      color: var(--color-text-primary);
+    }
+
+    // Hint: write-only / read-only маркер.
+    &-readonly {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      color: var(--color-text-muted);
+      line-height: 1.4;
+
+      :deep(.icon) {
         color: var(--color-text-muted);
-        text-transform: lowercase;
-        letter-spacing: 0.04em;
-      }
-      dd {
-        margin: 0;
-        color: var(--color-text-secondary);
-        word-break: break-all;
-        min-width: 0;
+        flex-shrink: 0;
+        opacity: 0.7;
       }
     }
   }

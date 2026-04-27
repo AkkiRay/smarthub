@@ -388,15 +388,31 @@ async function runQuick(quick: QuickScene): Promise<void> {
   );
   const value = quick.id === 'all-off' || quick.id === 'sleep' ? false : true;
   try {
-    for (const t of targets) {
-      await devices.execute({
-        deviceId: t.id,
-        capability: 'devices.capabilities.on_off',
-        instance: 'on',
-        value,
+    // Параллельно: serial-цикл блокировал UI на 1.5с/устройство (15с на 10 лампах,
+    // фриз orb'а и спиннеров). allSettled — каждая команда failure'ит независимо,
+    // success-toast считает только удавшиеся.
+    const results = await Promise.allSettled(
+      targets.map((t) =>
+        devices.execute({
+          deviceId: t.id,
+          capability: 'devices.capabilities.on_off',
+          instance: 'on',
+          value,
+        }),
+      ),
+    );
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.length - ok;
+    if (failed === 0) {
+      toaster.push({ kind: 'success', message: `«${quick.name}» применено к ${ok} устройствам` });
+    } else if (ok === 0) {
+      toaster.push({ kind: 'error', message: `«${quick.name}» не применилось ни к одному устройству` });
+    } else {
+      toaster.push({
+        kind: 'info',
+        message: `«${quick.name}»: ${ok} из ${results.length} устройств отработали, ${failed} не ответили`,
       });
     }
-    toaster.push({ kind: 'success', message: `«${quick.name}» применено к ${targets.length} устройствам` });
   } catch (e) {
     toaster.push({ kind: 'error', message: (e as Error).message });
   } finally {
@@ -404,7 +420,7 @@ async function runQuick(quick: QuickScene): Promise<void> {
   }
 }
 
-const { from } = useGsap(root.value);
+const { from } = useGsap(root);
 
 onMounted(async () => {
   if (!scenes.scenes.length) await scenes.bootstrap();
@@ -423,10 +439,6 @@ onMounted(async () => {
   from('.quick-tile', { opacity: 0, y: 12, stagger: 0.05, duration: 0.45, delay: 0.4 });
   from('.alice-tile', { opacity: 0, y: 12, stagger: 0.05, duration: 0.45, delay: 0.45 });
   from('.home__device-grid > *', { opacity: 0, y: 12, stagger: 0.05, duration: 0.4, delay: 0.5 });
-
-  // Trigger тура `?tour=1` теперь живёт глобально в App.vue (route-agnostic),
-  // потому что Welcome может редиректить на /discovery|/alice|/settings, а
-  // не только на /home. Здесь оставлять дубль не нужно.
 });
 </script>
 
@@ -576,9 +588,7 @@ onMounted(async () => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  // На очень узких screens (iPhone SE 375 / 360) две колонки по 140px не
-  // влезают в viewport-padding — KPI value-fonts ломаются на 2 строки и
-  // блок «прыгает». Вертикальный стек надёжнее: каждая метрика на свою строку.
+  // ≤380px: single-column stack — каждая метрика на свою строку.
   @media (max-width: 380px) {
     grid-template-columns: 1fr;
   }
@@ -602,8 +612,7 @@ onMounted(async () => {
     gap: 2px;
   }
 
-  // На 1-кол layout'е (≤380px) value/label идут в строку — плотнее визуально,
-  // не теряется vertical real-estate под одной длинной метрикой.
+  // ≤380px: row-layout, label слева, value справа (выровнены по baseline).
   @media (max-width: 380px) {
     flex-direction: row;
     align-items: baseline;
@@ -622,6 +631,8 @@ onMounted(async () => {
     letter-spacing: var(--tracking-micro);
   }
 
+  // Value поддерживает numeric (`1`) и текстовые (`на связи`) значения.
+  // text-wrap: balance + min-width: 0 — flexible-shrink в narrow cell'е.
   &-value {
     font-family: var(--font-family-display);
     font-size: var(--font-size-display-2);
@@ -632,20 +643,13 @@ onMounted(async () => {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    // Длинные value-текстовые ("на связи", "Яндекс Станция 2") при display-2
-    // ломались на 2 строки в narrow KPI-cell — KPI block прыгал по высоте.
-    // text-wrap: balance + min-width:0 позволяют SCSS-цепочке гибко сжимать.
     min-width: 0;
     text-wrap: balance;
 
     @media (max-width: 720px) {
-      // В mobile token --font-size-display-2 уже clamp'нут (≤24px),
-      // но мы дополнительно режем — в 1-кол layout'е значение часто текстовое
-      // ("на связи") и должно влезть в одну строку рядом с label'ом.
       font-size: clamp(15px, 4.4vw, 19px);
     }
     @media (max-width: 380px) {
-      // Single-row layout: label слева, value справа. Максимально компактно.
       font-size: 15px;
       gap: 6px;
     }

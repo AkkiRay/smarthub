@@ -127,7 +127,7 @@ const hubAriaLabel = computed(() => {
 // Items + badge counters: shared composable между sidebar и bottom-nav.
 const items = useNavItems();
 
-const { from } = useGsap(root.value);
+const { from } = useGsap(root);
 const route = useRoute();
 const navEl = useTemplateRef<HTMLElement>('navEl');
 

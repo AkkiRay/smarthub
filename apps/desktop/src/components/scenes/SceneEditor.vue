@@ -119,7 +119,7 @@
                 @update:model-value="(v) => onActionCapability(idx, String(v))"
               />
 
-              <!-- Value-editor подменяется по capability-type. -->
+              <!-- Value-editor по capability-type. -->
 
               <BaseSelect
                 v-if="action.capability === 'devices.capabilities.on_off'"
@@ -213,6 +213,7 @@ import {
 } from '@/components/base';
 import type { Capability, CapabilityType, Device, Scene, SceneAction } from '@smarthome/shared';
 import { useDevicesStore } from '@/stores/devices';
+import { capabilityActionLabel } from '@/constants/capabilityLabels';
 
 const props = defineProps<{
   mode: 'create' | 'edit';
@@ -225,17 +226,16 @@ const emit = defineEmits<{
 
 const devices = useDevicesStore();
 
-// Brand-токены + тёплые/нейтральные акценты под бытовые сценарии. Последний
-// свотч — нативный custom-picker.
+// Brand-токены + тёплые/нейтральные акценты. Последний свотч — нативный custom-picker.
 const palette = [
   '#B85DFF', // brand-purple
-  '#FF5B9E', // brand-pink (coral)
-  '#FFB866', // brand-amber (warm finish)
+  '#FF5B9E', // brand-pink
+  '#FFB866', // brand-amber
   '#5BE3AD', // mint
-  '#FFD27D', // warm-yellow (закат)
-  '#FF9A6E', // peach (morning)
-  '#FF6E66', // coral (party)
-  '#7C5BFF', // brand-violet (sleep)
+  '#FFD27D', // warm-yellow
+  '#FF9A6E', // peach
+  '#FF6E66', // coral
+  '#7C5BFF', // brand-violet
 ] as const;
 
 function isSameColor(a: string, b: string): boolean {
@@ -342,7 +342,7 @@ function onActionDevice(idx: number, value: string): void {
   const action = form.actions[idx];
   if (!action) return;
   action.deviceId = value;
-  // При смене device — сбрасываем capability на первую доступную.
+  // Смена device → capability сбрасывается на первую доступную.
   const caps = capabilitiesFor(value);
   if (!caps.length) return;
   const first = caps[0]!;
@@ -362,15 +362,7 @@ function onActionCapability(idx: number, compositeKey: string): void {
 }
 
 function capabilityLabel(type: CapabilityType, instance: string): string {
-  if (type === 'devices.capabilities.on_off') return 'Включить / выключить';
-  if (type === 'devices.capabilities.range') {
-    if (instance === 'brightness') return 'Установить яркость';
-    if (instance === 'volume') return 'Установить громкость';
-    if (instance === 'temperature') return 'Установить температуру';
-    return `Установить ${instance}`;
-  }
-  if (type === 'devices.capabilities.color_setting') return 'Установить цвет';
-  return `${type} (${instance})`;
+  return capabilityActionLabel(type, instance);
 }
 
 function deviceTypeLabel(type: Device['type']): string {
@@ -394,7 +386,7 @@ function deviceTypeLabel(type: Device['type']): string {
   );
 }
 
-// Composite-key `type::instance` → раскладываем перед save.
+// Composite-key `type::instance` → раскладывается перед save.
 function splitKey(key: string): { type: CapabilityType; instance: string } {
   const [type, instance] = key.split('::') as [CapabilityType, string | undefined];
   return { type, instance: instance ?? '' };
@@ -422,7 +414,7 @@ const canSave = computed(
     form.actions.every((a) => a.deviceId && a.capability && a.instance !== ''),
 );
 
-// watch composite-key в action.capability → распиливаем обратно.
+// Watch composite-key в action.capability → распилка обратно на type+instance.
 watch(
   () => form.actions.map((a) => a.capability),
   () => {
@@ -457,7 +449,7 @@ function onSave(): void {
   });
 }
 
-// CapabilityOption удерживается для линтера, наружу не экспортируется.
+// CapabilityOption удерживается линтером, наружу не экспортируется.
 void ((): CapabilityOption[] => []);
 </script>
 
@@ -573,7 +565,7 @@ void ((): CapabilityOption[] => []);
   transition:
     transform 220ms var(--ease-spring),
     box-shadow 220ms var(--ease-out);
-  // Hairline-обводка для контраста — белые свотчи не сливаются с modal-background.
+  // Hairline-обводка для контраста с modal-background.
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.12),
     0 4px 12px -4px color-mix(in srgb, var(--swatch-color) 60%, transparent);
@@ -584,8 +576,7 @@ void ((): CapabilityOption[] => []);
       inset 0 0 0 3px rgba(0, 0, 0, 0.18);
   }
 
-  // Selected state: двойной inset ring (тёмный gap + светлая обводка). Inset, а не
-  // outline, чтобы крайние свотчи в строке не обрезались краем модалки.
+  // Selected: двойной inset ring (тёмный gap + светлая обводка).
   &.is-selected {
     box-shadow:
       inset 0 0 0 2px #fff,
@@ -599,8 +590,7 @@ void ((): CapabilityOption[] => []);
       inset 0 0 0 4px #fff;
   }
 
-  // Custom: native input[type=color] лежит прозрачным сверху — клик открывает
-  // системный picker, не ломая стиль свотча.
+  // Custom: native input[type=color] прозрачным слоем сверху — клик открывает системный picker.
   &--custom {
     background: conic-gradient(from 90deg, #ff61e6, #ffd27d, #5eea89, #5bd8ff, #a961ff, #ff61e6);
     color: #fff;
@@ -716,7 +706,7 @@ void ((): CapabilityOption[] => []);
     }
   }
 
-  // Стилем совпадает с BaseInput/BaseSelect — для ровного ряда.
+  // Стилем совпадает с BaseInput/BaseSelect для ровного ряда.
   &__color {
     display: flex;
     flex-direction: column;

@@ -205,7 +205,6 @@ function onBack(): void {
   &__title {
     margin: 0;
     font-family: var(--font-family-display);
-    // Display-2 token: 22→48px на 720→2560px viewport.
     font-size: var(--font-size-display-2);
     line-height: 1.1;
     letter-spacing: -0.02em;
@@ -238,8 +237,7 @@ function onBack(): void {
   }
 }
 
-// Mobile: header стекается в column, actions внизу full-width row.
-// Lighter ambient-shadow + compact padding/radius.
+// Mobile (≤720px): single-column stack, full-width actions row, compact padding.
 @media (max-width: 720px) {
   .page-head {
     flex-direction: column;
@@ -267,8 +265,6 @@ function onBack(): void {
       height: 36px;
       margin-top: 0;
     }
-
-    // __title использует --font-size-display-2 token (clamp 19→24px на mobile).
 
     &__desc {
       font-size: var(--font-size-small);

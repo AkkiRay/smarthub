@@ -52,8 +52,16 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
 
   private session: MiSession | null = null;
   private readonly region: string;
+  private readonly username: string;
+  /**
+   * Mi Cloud login принимает MD5(password).hex.upperCase как `hash` параметр —
+   * сам plaintext password ему не нужен. Считаем хэш ОДИН раз в конструкторе и
+   * не держим plaintext password в памяти весь lifetime приложения. Heap-dump
+   * (crash) больше не утечёт пароль; raw уже undefined в this.
+   */
+  private readonly passwordHash: string;
 
-  constructor(private readonly creds: MiHomeCloudCreds) {
+  constructor(creds: MiHomeCloudCreds) {
     super({
       baseURL: `https://${creds.region ?? 'cn'}.api.io.mi.com/app`,
       timeoutMs: 8000,
@@ -64,6 +72,8 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
       },
     });
     this.region = creds.region ?? 'cn';
+    this.username = creds.username;
+    this.passwordHash = createHash('md5').update(creds.password).digest('hex').toUpperCase();
   }
 
   protected applyAuth(config: AxiosRequestConfig): AxiosRequestConfig {
@@ -230,13 +240,12 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
     if (!json1?._sign) throw new Error('Mi Cloud: serviceLogin failed (no _sign)');
 
     // Step 2: serviceLoginAuth2 — login сам.
-    const passHash = createHash('md5').update(this.creds.password).digest('hex').toUpperCase();
     const form = new URLSearchParams({
       sid: 'xiaomiio',
-      hash: passHash,
+      hash: this.passwordHash,
       callback: 'https://sts.api.io.mi.com/sts',
       qs: '%3Fsid%3Dxiaomiio%26_json%3Dtrue',
-      user: this.creds.username,
+      user: this.username,
       _sign: json1._sign,
       _json: 'true',
     });

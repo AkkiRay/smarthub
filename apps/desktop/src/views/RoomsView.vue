@@ -715,13 +715,22 @@ function onCustomColorChange(roomId: string, hex: string): void {
   );
 }
 
-/** Дебаунсер яркости — слайдер шлёт events на каждый input, не хотим спамить execute(). */
-let brightnessDebounce: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Дебаунсер яркости — слайдер шлёт events на каждый input, не хотим спамить execute().
+ * Per-roomId Map: глобальный singleton приводил к тому, что drag в одной комнате
+ * отменял запланированный execute другой (видно при быстром переключении).
+ */
+const brightnessDebounce = new Map<string, ReturnType<typeof setTimeout>>();
 function onBrightnessSliderInput(roomId: string, percent: number): void {
-  if (brightnessDebounce) clearTimeout(brightnessDebounce);
-  brightnessDebounce = setTimeout(() => {
-    void onBulkBrightness(roomId, percent);
-  }, 250);
+  const prev = brightnessDebounce.get(roomId);
+  if (prev) clearTimeout(prev);
+  brightnessDebounce.set(
+    roomId,
+    setTimeout(() => {
+      brightnessDebounce.delete(roomId);
+      void onBulkBrightness(roomId, percent);
+    }, 250),
+  );
 }
 
 const COLOR_PRESETS: ReadonlyArray<ColorPreset> = [

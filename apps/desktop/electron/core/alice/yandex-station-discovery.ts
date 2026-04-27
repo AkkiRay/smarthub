@@ -14,7 +14,11 @@ function listScanInterfaces(): string[] {
   for (const list of Object.values(os.networkInterfaces())) {
     for (const iface of list ?? []) {
       if (iface.family !== 'IPv4' || iface.internal) continue;
-      const [a, b] = iface.address.split('.').map(Number) as [number, number, number, number];
+      // Защитный split: на IPv6-only интерфейсе или редком address без 4 октетов
+      // деструктуризация давала undefined → NaN сравнения (link-local пролетал).
+      const parts = iface.address.split('.').map(Number);
+      if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) continue;
+      const [a, b] = parts as [number, number, number, number];
       if (a === 169 && b === 254) continue;
       if (a === 198 && (b === 18 || b === 19)) continue;
       ips.add(iface.address);

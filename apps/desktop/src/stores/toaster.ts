@@ -34,17 +34,35 @@ export interface RunToastOptions {
   pending?: string;
 }
 
+// Stack cap: max одновременных toast'ов. При превышении старейший non-pending
+// dismiss'ится, чтобы стек не разрастался при retry-loop'е ошибок.
+const MAX_TOASTS = 5;
+// Default TTL по kind. Errors дольше — у пользователя время прочитать.
+const TTL_DEFAULT: Record<ToastKind, number> = {
+  success: 3500,
+  info: 4000,
+  error: 7000,
+  pending: Infinity,
+};
+
 export const useToasterStore = defineStore('toaster', () => {
   const toasts = ref<Toast[]>([]);
   let nextId = 1;
-  // Live-таймеры по id — `update()` переставляет TTL при смене kind.
   const timers = new Map<number, ReturnType<typeof setTimeout>>();
+  // Pause/resume: при hover toast'а сохраняем remaining ms, при leave — schedule
+  // с этим остатком вместо полного TTL.
+  const remainingOnPause = new Map<number, number>();
+  // Time когда таймер был set'ан — для расчёта остатка при pause.
+  const scheduledAt = new Map<number, { startMs: number; ttl: number }>();
 
   function scheduleDismiss(toast: Toast): void {
     const existing = timers.get(toast.id);
     if (existing) clearTimeout(existing);
     if (toast.kind === 'pending') return;
-    const ttl = toast.ttlMs ?? 4000;
+    const ttl = remainingOnPause.get(toast.id) ?? toast.ttlMs ?? TTL_DEFAULT[toast.kind];
+    remainingOnPause.delete(toast.id);
+    if (!Number.isFinite(ttl)) return;
+    scheduledAt.set(toast.id, { startMs: Date.now(), ttl });
     timers.set(
       toast.id,
       setTimeout(() => dismiss(toast.id), ttl),
@@ -52,22 +70,24 @@ export const useToasterStore = defineStore('toaster', () => {
   }
 
   /**
-   * Ставит toast в очередь, возвращает id для последующего update/dismiss.
-   *
-   * Дедупликация по паре `kind+message`: повторный push продлевает TTL
-   * существующего toast'а и возвращает его id.
+   * Ставит toast в очередь, возвращает id для update/dismiss.
+   * Dedupe по `kind+message`: повторный push продлевает TTL и возвращает тот же id.
+   * Stack cap: при `length >= MAX_TOASTS` старейший non-pending удаляется.
    */
   function push(input: Omit<Toast, 'id'>): number {
     const existing = toasts.value.find(
       (t) => t.kind === input.kind && t.message === input.message,
     );
     if (existing) {
-      // Merge `detail` и пере-инициация TTL.
       const merged: Toast = { ...existing, ...input, id: existing.id };
       const idx = toasts.value.findIndex((t) => t.id === existing.id);
       if (idx !== -1) toasts.value.splice(idx, 1, merged);
       scheduleDismiss(merged);
       return existing.id;
+    }
+    if (toasts.value.length >= MAX_TOASTS) {
+      const oldest = toasts.value.find((t) => t.kind !== 'pending');
+      if (oldest) dismiss(oldest.id);
     }
     const toast: Toast = { id: nextId++, ...input };
     toasts.value = [...toasts.value, toast];
@@ -75,12 +95,13 @@ export const useToasterStore = defineStore('toaster', () => {
     return toast.id;
   }
 
-  /** Меняет kind/message существующего toast'а. Используется для pending → success/error. */
+  /** Меняет kind/message существующего toast'а. Pending → success/error. */
   function update(id: number, patch: Partial<Omit<Toast, 'id'>>): void {
     const idx = toasts.value.findIndex((t) => t.id === id);
     if (idx === -1) return;
     const merged: Toast = { ...toasts.value[idx]!, ...patch };
     toasts.value.splice(idx, 1, merged);
+    remainingOnPause.delete(id);
     scheduleDismiss(merged);
   }
 
@@ -90,7 +111,45 @@ export const useToasterStore = defineStore('toaster', () => {
       clearTimeout(t);
       timers.delete(id);
     }
+    scheduledAt.delete(id);
+    remainingOnPause.delete(id);
     toasts.value = toasts.value.filter((t) => t.id !== id);
+  }
+
+  /** Hover pause: clear timer, сохранить remaining ms для resume. */
+  function pause(id: number): void {
+    const t = timers.get(id);
+    if (!t) return;
+    clearTimeout(t);
+    timers.delete(id);
+    const sched = scheduledAt.get(id);
+    if (sched) {
+      const elapsed = Date.now() - sched.startMs;
+      remainingOnPause.set(id, Math.max(800, sched.ttl - elapsed));
+      scheduledAt.delete(id);
+    }
+  }
+
+  /** Hover end: schedule с remaining ms (или fresh TTL если не было pause). */
+  function resume(id: number): void {
+    if (timers.has(id)) return;
+    const toast = toasts.value.find((tt) => tt.id === id);
+    if (!toast || toast.kind === 'pending') return;
+    scheduleDismiss(toast);
+  }
+
+  /** Снимает все non-pending toast'ы. Вызывается на route change. */
+  function clearTransient(): void {
+    const stayingPending = toasts.value.filter((t) => t.kind === 'pending');
+    for (const t of toasts.value) {
+      if (t.kind === 'pending') continue;
+      const tm = timers.get(t.id);
+      if (tm) clearTimeout(tm);
+      timers.delete(t.id);
+      scheduledAt.delete(t.id);
+      remainingOnPause.delete(t.id);
+    }
+    toasts.value = stayingPending;
   }
 
   /**
@@ -121,5 +180,5 @@ export const useToasterStore = defineStore('toaster', () => {
     }
   }
 
-  return { toasts, push, update, dismiss, run };
+  return { toasts, push, update, dismiss, pause, resume, clearTransient, run };
 });

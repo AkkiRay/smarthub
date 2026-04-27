@@ -25,6 +25,9 @@ interface AqaraCreds {
   region?: 'cn' | 'usa' | 'eu' | 'sg' | 'kr' | 'ru';
 }
 
+/** См. eWeLink driver — те же причины (Aqara также ротирует refresh-token). */
+type PersistTokens = (tokens: { accessToken: string; refreshToken?: string }) => void;
+
 interface AqaraResource {
   did: string;
   resourceId: string;
@@ -58,7 +61,10 @@ export class AqaraCloudDriver extends BaseCloudDriver {
   readonly id = 'aqara-cloud' as const;
   readonly displayName = 'Aqara Cloud';
 
-  constructor(private readonly creds: AqaraCreds) {
+  constructor(
+    private readonly creds: AqaraCreds,
+    private readonly persist: PersistTokens = () => undefined,
+  ) {
     super({
       baseURL: `https://${REGION_HOSTS[creds.region ?? 'eu']}`,
       timeoutMs: 7000,
@@ -89,6 +95,14 @@ export class AqaraCloudDriver extends BaseCloudDriver {
     );
     this.creds.accessToken = r.data.result.accessToken;
     this.creds.refreshToken = r.data.result.refreshToken;
+    try {
+      this.persist({
+        accessToken: r.data.result.accessToken,
+        refreshToken: r.data.result.refreshToken,
+      });
+    } catch (e) {
+      this.logWarn('persist tokens failed', e);
+    }
   }
 
   async discover(): Promise<DiscoveredDevice[]> {

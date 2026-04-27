@@ -86,9 +86,14 @@ const resolveRoomName = (device: Device, rooms: Room[], override?: string): stri
   return room?.name?.trim() || undefined;
 };
 
-const sanitizeName = (raw: string): string => {
+const sanitizeName = (raw: string | null | undefined): string => {
   // Алиса принимает до 64 символов; обрезаем длинные технические имена.
-  return raw.trim().slice(0, 64) || 'Устройство';
+  // Defensive: raw может быть undefined при битой migration или partial response.
+  // Также убираем control-символы (Алиса валится с invalid_name на \n внутри имени).
+  if (typeof raw !== 'string') return 'Устройство';
+  // eslint-disable-next-line no-control-regex
+  const cleaned = raw.replace(/[\x00-\x1f\x7f]/g, ' ').trim();
+  return cleaned.slice(0, 64) || 'Устройство';
 };
 
 /** Один Device → один YandexSmartHomeDevice. */

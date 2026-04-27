@@ -176,6 +176,8 @@ export class YandexIotDriver extends BaseDriver {
 
   /** Disconnect-fn от updates-WS, если подписка живёт. */
   private updatesUnsubscribe: (() => void) | null = null;
+  /** URL текущей WS-подписки — для detect'а rotation в новом snapshot'е. */
+  private updatesUrlActive: string | null = null;
 
   /** Listeners на push-state-changes — registry подписывается через subscribePush(). */
   private readonly pushListeners = new Set<(externalId: string, partial: Partial<Device>) => void>();
@@ -195,9 +197,13 @@ export class YandexIotDriver extends BaseDriver {
       .fetchUserDevices()
       .then((snapshot) => {
         this.snapshotCache = { snapshot, fetchedAt: Date.now() };
-        // `updates_url` приходит в теле первого snapshot'а; на нём открываем
-        // real-time подписку, если ещё не открыта.
-        if (snapshot.updatesUrl && !this.updatesUnsubscribe) {
+        // `updates_url` ротируется (TTL ~ часы). Если новый snapshot принёс
+        // отличный URL, переоткрываем WS — иначе старая подписка молча
+        // дохнет на server-side TTL'е и push'и перестают приходить.
+        if (snapshot.updatesUrl && snapshot.updatesUrl !== this.updatesUrlActive) {
+          this.stopUpdatesStream();
+          this.startUpdatesStream(snapshot.updatesUrl);
+        } else if (snapshot.updatesUrl && !this.updatesUnsubscribe) {
           this.startUpdatesStream(snapshot.updatesUrl);
         }
         return snapshot;
@@ -208,11 +214,24 @@ export class YandexIotDriver extends BaseDriver {
     return this.snapshotInFlight;
   }
 
+  private stopUpdatesStream(): void {
+    if (this.updatesUnsubscribe) {
+      try {
+        this.updatesUnsubscribe();
+      } catch (e) {
+        this.logWarn('updates WS unsubscribe failed', e);
+      }
+      this.updatesUnsubscribe = null;
+    }
+    this.updatesUrlActive = null;
+  }
+
   /**
    * Real-time WS push: Yandex шлёт `update_states` сообщения с дельтой по device-state.
    * Patches snapshot-cache и нотифицирует pushListeners (registry → device:updated → UI).
    */
   private startUpdatesStream(updatesUrl: string): void {
+    this.updatesUrlActive = updatesUrl;
     this.updatesUnsubscribe = this.client.subscribeUpdates(updatesUrl, (externalId, raw) => {
       const cached = this.snapshotCache?.snapshot;
       if (cached) {
@@ -370,10 +389,7 @@ export class YandexIotDriver extends BaseDriver {
   }
 
   override async shutdown(): Promise<void> {
-    if (this.updatesUnsubscribe) {
-      this.updatesUnsubscribe();
-      this.updatesUnsubscribe = null;
-    }
+    this.stopUpdatesStream();
     this.pushListeners.clear();
     this.snapshotCache = null;
     this.snapshotInFlight = null;

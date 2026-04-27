@@ -61,9 +61,29 @@ export interface AuthorizationCodeRecord {
 
 export class TokenIssuer {
   private codes = new Map<string, AuthorizationCodeRecord>();
+  private pruneTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly settings: SettingsStore) {
     this.migrateLegacyPlaintextTokens();
+    // Periodic prune — codes хранятся 10 мин, без фонового sweep'а они оставались
+    // в памяти бесконечно, если /authorize-flow срабатывал, а /token нет
+    // (юзер закрыл вкладку). Тихая утечка.
+    this.pruneTimer = setInterval(() => this.pruneExpiredCodes(), 5 * 60_000);
+    // Не блокируем shutdown event-loop'а из-за timer'а.
+    this.pruneTimer.unref?.();
+  }
+
+  /** Освободить ресурсы (тестовые контексты, hot-reload в dev). */
+  dispose(): void {
+    if (this.pruneTimer) clearInterval(this.pruneTimer);
+    this.pruneTimer = null;
+  }
+
+  private pruneExpiredCodes(): void {
+    const now = Date.now();
+    for (const [k, v] of this.codes) {
+      if (v.expiresAt < now) this.codes.delete(k);
+    }
   }
 
   // ===== Authorization code =====
@@ -117,7 +137,14 @@ export class TokenIssuer {
     };
   }
 
-  /** Найти запись по access_token. null если не найден или истёк. */
+  /**
+   * Найти запись по access_token. null если не найден или истёк.
+   *
+   * Лукап БЕЗ early-out по совпадению: вне зависимости от того, нашли ли матч
+   * на первой записи или последней, обходим все entries — иначе атакующий
+   * через timing определяет «какой слот совпал», что в комбинации с другими
+   * каналами утечки сужает space перебора.
+   */
   resolveAccessToken(accessToken: string): {
     internalUserId: string;
     expiresAt: number;
@@ -126,7 +153,8 @@ export class TokenIssuer {
     const candidate = hashToken(accessToken);
     let match: { internalUserId: string; expiresAt: number } | null = null;
     for (const [storedHash, record] of Object.entries(this.settings.getAlice().issuedTokens)) {
-      if (safeEqualHex(storedHash, candidate)) {
+      const equal = safeEqualHex(storedHash, candidate);
+      if (equal && !match) {
         match = { internalUserId: record.internalUserId, expiresAt: record.expiresAt };
       }
     }
@@ -135,22 +163,29 @@ export class TokenIssuer {
     return match;
   }
 
-  /** Refresh: ищем запись по refresh_token, выдаём новую пару, старый access инвалидируем. */
+  /**
+   * Refresh: ищем запись по refresh_token, выдаём новую пару, старый access инвалидируем.
+   * Полный обход entries без early-out (см. resolveAccessToken).
+   */
   refresh(refreshToken: string): IssuedTokenPair | null {
     if (typeof refreshToken !== 'string' || refreshToken.length === 0) return null;
     const candidate = hashToken(refreshToken);
     const alice = this.settings.getAlice();
-    const entries = Object.entries(alice.issuedTokens);
-    const found = entries.find(
-      ([, v]) => typeof v.refreshToken === 'string' && safeEqualHex(v.refreshToken, candidate),
-    );
-    if (!found) return null;
-    const [oldAccessHash, record] = found;
-    // Удаляем старый access и выдаём новую пару
+    let foundHash: string | null = null;
+    let foundRecord: { internalUserId: string } | null = null;
+    for (const [storedHash, v] of Object.entries(alice.issuedTokens)) {
+      const equal =
+        typeof v.refreshToken === 'string' && safeEqualHex(v.refreshToken, candidate);
+      if (equal && !foundHash) {
+        foundHash = storedHash;
+        foundRecord = { internalUserId: v.internalUserId };
+      }
+    }
+    if (!foundHash || !foundRecord) return null;
     const issuedTokens = { ...alice.issuedTokens };
-    delete issuedTokens[oldAccessHash];
+    delete issuedTokens[foundHash];
     this.settings.patchAlice({ issuedTokens });
-    return this.issueTokenPair(record.internalUserId);
+    return this.issueTokenPair(foundRecord.internalUserId);
   }
 
   /** Полная инвалидация — Алиса дёрнула /unlink. */
@@ -158,15 +193,20 @@ export class TokenIssuer {
     this.settings.patchAlice({ issuedTokens: {} });
   }
 
-  /** Чистит plaintext-токены из старых версий (key.length !== 64 = не sha256-hex). */
+  /**
+   * Удаляет legacy plaintext-токены (ключ != sha256-hex) из issuedTokens.
+   *
+   * Раньше один битый ключ обнулял всю мапу — единичный malformed entry
+   * выкидывал валидные токены, юзер терял Alice link. Теперь удаляются
+   * именно битые ключи; валидные sha256-hex остаются.
+   */
   private migrateLegacyPlaintextTokens(): void {
     const tokens = this.settings.getAlice().issuedTokens;
-    for (const key of Object.keys(tokens)) {
-      if (key.length !== 64) {
-        this.settings.patchAlice({ issuedTokens: {} });
-        return;
-      }
-    }
+    const legacyKeys = Object.keys(tokens).filter((k) => !/^[0-9a-f]{64}$/.test(k));
+    if (legacyKeys.length === 0) return;
+    const cleaned = { ...tokens };
+    for (const k of legacyKeys) delete cleaned[k];
+    this.settings.patchAlice({ issuedTokens: cleaned });
   }
 }
 

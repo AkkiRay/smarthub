@@ -26,6 +26,38 @@ import type { DriverCredentials, DriverId } from '@smarthome/shared';
 import type { SmartHomeHub } from '@core/hub/smart-home-hub.js';
 import { safeOpenExternal } from '@main/security/open-external.js';
 
+/** Поля, которые НИКОГДА не возвращаются renderer'у (bcrypt-style маска). */
+const SECRET_KEY_PATTERNS = [
+  /password/i,
+  /secret/i,
+  /token/i,
+  /api[_-]?key/i,
+  /private[_-]?key/i,
+  /^pin$/i,
+];
+
+/**
+ * Маскирует sensitive-поля creds: оставляет последние 4 символа, остальное — `***`.
+ * UI показывает «●●●●1234» — юзер видит, что creds сохранены, но raw secret не утекает.
+ */
+function redactCredentials(creds: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  if (!creds || typeof creds !== 'object') return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(creds)) {
+    if (typeof v === 'string' && SECRET_KEY_PATTERNS.some((re) => re.test(k))) {
+      out[k] = v.length > 4 ? `***${v.slice(-4)}` : '***';
+    } else if (Array.isArray(v)) {
+      // Списки host'ов / device-spec'ов — не трогаем (они нужны UI для отображения).
+      out[k] = v;
+    } else if (v && typeof v === 'object') {
+      out[k] = redactCredentials(v as Record<string, unknown>);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 export interface IpcHandlerDeps {
   ipcMain: IpcMain;
   hub: SmartHomeHub;
@@ -98,7 +130,13 @@ function buildHandlers(hub: SmartHomeHub): Record<string, HandlerFn> {
     'drivers:list': () => hub.drivers.list(),
     'drivers:set-credentials': (driverId, creds) =>
       hub.drivers.setCredentials(driverId as DriverId, creds as DriverCredentials<DriverId>),
-    'drivers:get-credentials': (driverId) => hub.drivers.getCredentials(driverId as DriverId),
+    // Redact: sensitive-поля (password/token/secret/key) маскируются —
+    // raw secret в renderer'е не нужен, UI показывает только «●●●●1234».
+    // Это закрывает leak через DevTools heap-snapshot и crash-reports.
+    'drivers:get-credentials': (driverId) => {
+      const raw = hub.drivers.getCredentials(driverId as DriverId);
+      return redactCredentials(raw as Record<string, unknown>);
+    },
 
     // Yandex Station
     'yandexStation:discover': (timeoutMs) =>
@@ -194,8 +232,17 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
 
   // Electron-сериализация Error теряет stack/cause/message — пересоздаём plain Error,
   // иначе renderer получает generic "An error occurred in the main process".
+  // senderFrame-gate: запрос принимается ТОЛЬКО из main-frame нашего окна, не из
+  // вложенных iframe (если когда-нибудь появятся через webview/embed). Это закрывает
+  // компрометацию через 3rd-party SVG/iframe → IPC.
   const wrap = (channel: string, fn: HandlerFn) => {
-    return async (_event: IpcMainInvokeEvent, ...args: unknown[]): Promise<unknown> => {
+    return async (event: IpcMainInvokeEvent, ...args: unknown[]): Promise<unknown> => {
+      const win = deps.getMainWindow();
+      const expected = win?.webContents.mainFrame;
+      if (!expected || event.senderFrame !== expected) {
+        log.warn(`IPC ${channel} rejected: sender frame is not main frame`);
+        throw new Error('IPC sender not allowed');
+      }
       try {
         return await fn(...args);
       } catch (e) {

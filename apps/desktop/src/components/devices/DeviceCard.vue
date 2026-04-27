@@ -40,9 +40,9 @@
           <BaseIcon name="alice" :size="10" />
           Yandex
         </span>
-        <!-- Alice-чип: один тап выдаёт/отзывает устройство в skill «Дома с Алисой».
-             Скрываем для yandex-iot (они уже видны Алисе как родные облачные устройства)
-             и пока skill не привязан — иначе чип бесполезный. -->
+        <!-- Alice-чип: тап выдаёт/отзывает устройство в skill «Дома с Алисой».
+             Скрыт для yandex-iot (они уже доступны Алисе как облачные родные)
+             и пока skill не связан. -->
         <button
           v-if="canToggleAliceExposure"
           type="button"
@@ -72,7 +72,7 @@
         @update:model-value="togglePower"
       />
 
-      <!-- Inline brightness — без захода в DeviceDetailView. -->
+      <!-- Inline brightness без захода в DeviceDetailView. -->
       <div v-if="brightness !== null" class="device-card__bright">
         <input
           class="device-card__range"
@@ -121,6 +121,7 @@ const alice = useAliceStore();
 // busy-flag блокирует двойные клики во время выполнения команды.
 const busy = ref(false);
 
+
 const onOffCap = computed(() =>
   findCapability(props.device.capabilities, CAPABILITY.ON_OFF, INSTANCE.ON),
 );
@@ -146,8 +147,8 @@ const brightnessRange = computed(() => {
   };
 });
 
-// Оптимистичный state: drag двигает локально, IPC уходит только на @change;
-// dragLock блокирует внешние updates, чтобы значение не дёргалось.
+// Оптимистичный state: drag двигает локально, IPC уходит на @change.
+// dragLock блокирует внешние updates во время drag'а.
 const brightnessLocal = ref<number>(brightness.value ?? brightnessRange.value.min);
 const dragLock = ref(false);
 watch(
@@ -164,16 +165,15 @@ const brightnessProgress = computed(() => {
 });
 
 // Accent для --device-accent: реальный цвет лампы (rgb / hsv / temperature_k)
-// или brand-purple fallback. Yandex IoT отдаёт state в одном из трёх форматов
-// в зависимости от того, в каком режиме лампа сейчас. Все три обрабатываем,
-// иначе hsv-only Лампочка показывает дефолтный фиолетовый вместо своего цвета.
+// либо brand-purple fallback. Yandex IoT отдаёт state в одном из трёх форматов
+// в зависимости от текущего режима лампы.
 const ACCENT_FALLBACK = 'var(--color-brand-purple)';
 
 const colorCap = computed(() =>
   findCapability(props.device.capabilities, CAPABILITY.COLOR_SETTING),
 );
 
-/** State.value лампы конвертируется в hex `#RRGGBB` для CSS-переменной accent'а. */
+/** state.value лампы → hex `#RRGGBB` для CSS-переменной accent'а. */
 const accentColor = computed<string>(() => {
   const state = colorCap.value?.state;
   if (!state) return ACCENT_FALLBACK;
@@ -192,11 +192,7 @@ const accentColor = computed<string>(() => {
   return ACCENT_FALLBACK;
 });
 
-/**
- * Карточка показывает RGB-каплю когда у лампы есть какой-то "цвет" (включая HSV
- * и CCT-mode). Capability должна быть, и иметь активный state — иначе клякса
- * показывала бы фолбэк-purple, что вводит в заблуждение.
- */
+/** RGB-капля видна, когда у лампы есть color-state в одном из режимов: rgb / hsv / cct. */
 const hasRgb = computed(() => {
   const state = colorCap.value?.state;
   if (!state) return false;
@@ -209,8 +205,7 @@ const hasRgb = computed(() => {
 
 /**
  * HSV (h:0..360, s:0..100, v:0..100) → 24-битный RGB-int.
- * Стандартный алгоритм из W3C CSS Color Module L4. Используется для отображения
- * текущего цвета hsv-лампы — отправлять в Yandex всё равно надо `instance:'rgb'`.
+ * Алгоритм W3C CSS Color Module L4.
  */
 function hsvToRgbInt(h: number, s: number, v: number): number {
   const sn = Math.max(0, Math.min(1, s / 100));
@@ -233,10 +228,8 @@ function hsvToRgbInt(h: number, s: number, v: number): number {
 }
 
 /**
- * Цветовая температура в Кельвинах → приближённый RGB-int. Алгоритм Tanner Helland
- * (упрощённый): тёплый белый ~2700K → жёлто-оранжевый, дневной ~6500K → белый,
- * холодный ~9000K+ → голубоватый. Не идеально точно, но визуально достаточно
- * для swatch'а размером 14px.
+ * Цветовая температура в Кельвинах → RGB-int. Упрощённый Tanner Helland:
+ * ~2700K → жёлто-оранжевый, ~6500K → белый, ~9000K+ → голубоватый.
  */
 function kelvinToRgbInt(k: number): number {
   const t = Math.max(1000, Math.min(40000, k)) / 100;
@@ -259,9 +252,8 @@ const typeName = computed(() => DEVICE_TYPE_LABEL_RU[props.device.type]);
 
 /**
  * Alice-exposure quick-toggle:
- *   - чип виден только когда skill связан (`alice.isLinked`) — иначе нет смысла
- *   - НЕ показываем для yandex-iot устройств: они УЖЕ в Алисе как облачные родные
- *     (выдавать их повторно в наш skill = дублирование)
+ *   - чип виден только при связанном skill (`alice.isLinked`)
+ *   - скрыт для yandex-iot (они в Алисе как родные облачные)
  *   - default state — `enabled: true` (см. `device-mapper.ts:buildExposedDeviceList`)
  */
 const canToggleAliceExposure = computed(
@@ -280,13 +272,10 @@ async function onToggleAliceExposure(): Promise<void> {
 }
 
 /**
- * Имя комнаты — резолвим по цепочке fallback'ов, чтобы tag отрисовался даже
- * когда часть данных ещё не подъехала:
- *   1. device.room (id) → rooms-store.find    — основной join
- *   2. meta.roomId → rooms-store.find          — для девайсов, где room пока не
- *      перезаписан после нашего room-фикса (старые записи в БД).
- *   3. meta.roomName                           — последний оплот: snapshot из Yandex
- *      хранит читаемое имя, его хватает до загрузки rooms-store'а.
+ * Имя комнаты — цепочка fallback'ов:
+ *   1. device.room (id) → rooms-store.find
+ *   2. meta.roomId → rooms-store.find
+ *   3. meta.roomName — snapshot-имя из Yandex.
  */
 const roomName = computed<string | null>(() => {
   const direct = props.device.room
@@ -303,9 +292,8 @@ const roomName = computed<string | null>(() => {
 });
 
 /**
- * Самый интересный read-only показатель — выбираем по приоритету: температура
- * → влажность → CO₂ → power → battery. Один показатель в карточке достаточно;
- * остальные видны на DeviceDetailView.
+ * Read-only показатель карточки. Приоритет: температура → влажность → CO₂ → power → battery.
+ * Остальные показатели — на DeviceDetailView.
  */
 interface Reading {
   icon: IconName;
@@ -451,9 +439,8 @@ async function onBrightnessChange(v: number): Promise<void> {
     overflow-wrap: anywhere;
   }
 
-  // Бейджи под именем — комната, цвет, тип. Одна линия, переноса не делаем,
-  // лишние теги срезает контейнер. RGB-капля показывается только когда лампа
-  // в RGB-режиме (для CCT-only ламп её нет, чтобы не врать про цвет).
+  // Бейджи под именем: комната, цвет, тип. Одна строка, лишние теги срезает контейнер.
+  // RGB-капля только при RGB-режиме лампы.
   &__tags {
     display: flex;
     flex-wrap: wrap;
@@ -497,8 +484,7 @@ async function onBrightnessChange(v: number): Promise<void> {
     }
   }
 
-  // RGB-капля — диаметр 14px, чтобы не доминировать над текстом. Бэкграунд
-  // подаётся через inline-style из computed accentColor.
+  // RGB-капля диаметром 14px. Background подаётся inline-style'ом из computed accentColor.
   &__swatch {
     width: 14px;
     height: 14px;
@@ -511,14 +497,14 @@ async function onBrightnessChange(v: number): Promise<void> {
   }
 
   &--rgb &__swatch {
-    // Чуть ярче glow, когда лампа реально цветная — показывает «живой» state.
+    // Усиленный glow для RGB-режима.
     box-shadow:
       0 0 0 2px rgba(0, 0, 0, 0.25),
       0 0 14px var(--device-accent);
   }
 
   // Alice quick-exposure chip: пилюля с brand-tint в active-state.
-  // Активный чип — full purple→pink градиент; outline-вариант для opt-out.
+  // Active — full purple→pink gradient; outline-вариант для opt-out.
   &__alice-chip {
     all: unset;
     cursor: pointer;
@@ -562,8 +548,7 @@ async function onBrightnessChange(v: number): Promise<void> {
     }
   }
 
-  // Read-only показатель — одна строка, один показатель максимум. Для сенсоров
-  // и розеток с power-monitoring главная инфа — на карточке без захода в детали.
+  // Read-only показатель: одна строка, один показатель.
   &__reading {
     display: inline-flex;
     align-items: center;
@@ -585,7 +570,7 @@ async function onBrightnessChange(v: number): Promise<void> {
     gap: 10px;
   }
 
-  // BaseSwitch — здесь только align в колонке controls.
+  // BaseSwitch — align в колонке controls.
   &__switch {
     align-self: flex-start;
   }
@@ -646,8 +631,7 @@ async function onBrightnessChange(v: number): Promise<void> {
       transform: scale(1.3);
     }
 
-    // Touch — палец крупный, увеличиваем track для попадания (track высотой
-    // 6→14px, hit-area thumb автоматически тянется через --slider-thumb из tokens).
+    // Touch: track 6→14px, hit-area thumb тянется через --slider-thumb из tokens.
     @media (hover: none) and (pointer: coarse) {
       height: 14px;
       &::-webkit-slider-thumb {
@@ -656,7 +640,7 @@ async function onBrightnessChange(v: number): Promise<void> {
           0 6px 14px rgba(0, 0, 0, 0.5);
       }
       &::-webkit-slider-thumb:hover {
-        transform: none; // hover на touch — спам, оставляем только active
+        transform: none;
       }
     }
   }
