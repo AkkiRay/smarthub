@@ -58,6 +58,13 @@
 
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
 
+/**
+ * Module-level стек ESC-handler'ов. ESC закрывает только TOP-модалку.
+ * Без stack'а nested-confirm + parent-modal схлопывались одним нажатием —
+ * `e.stopPropagation()` не помогает между siblings'ами на одном target'е.
+ */
+const modalStack: Array<(e: KeyboardEvent) => void> = [];
+
 interface Props {
   /** v-model: открыта ли модалка. */
   modelValue: boolean;
