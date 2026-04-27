@@ -88,6 +88,10 @@ jobs:
           git tag "v${v}"
           git push origin HEAD --tags
 
+  # macOS из matrix исключён намеренно — целевая аудитория хаба под Windows/Linux,
+  # cross-compile под darwin без Apple Developer Program сейчас не приоритет.
+  # Если когда-то понадобится — добавьте `macos-latest` обратно и заведите
+  # MAC_CSC_LINK / APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID.
   release:
     name: Build & publish (${{ matrix.os }})
     needs: quality
@@ -95,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -121,20 +125,6 @@ jobs:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: pnpm release:win
-
-      - name: Build & publish — macOS
-        if: matrix.os == 'macos-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Без MAC_CSC_LINK auto-discovery попытается найти keychain-сертификат,
-          # которого нет на CI runner'е → падает. Явно отключаем.
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK == '' && 'false' || 'true' }}
-        run: pnpm release:mac
 
   # `if: !cancelled()` — promote выполняется даже если одна из платформ
   # в matrix упала: Linux + Windows достаточно для valid release, mac можно
