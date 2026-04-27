@@ -1,7 +1,10 @@
 <template>
   <section class="home" ref="root">
-    <!-- HERO: главный заголовок + статус-strip -->
+    <!-- HERO: главный заголовок + статус-strip + ambient 3D mesh -->
     <header class="home__hero">
+      <!-- 3D wireframe sphere в правом-верхнем углу hero — статичный визуал
+           с медленным spin'ом. На narrow viewport скрыт через CSS. -->
+      <AmbientMesh class="home__hero-mesh" :detail="2" />
       <div class="home__hero-copy">
         <span class="home__hero-eyebrow">
           <span class="home__hero-pulse" />
@@ -9,7 +12,7 @@
         </span>
         <h1 class="home__title">
           {{ greeting }},<br />
-          <span class="text--gradient">{{ subtitleAccent }}</span>
+          <span class="text--alice">{{ subtitleAccent }}</span>
         </h1>
         <p class="home__lead">{{ contextLead }}</p>
 
@@ -263,6 +266,7 @@ import { useToasterStore } from '@/stores/toaster';
 import { useGsap } from '@/composables/useGsap';
 import { useRouter } from 'vue-router';
 import DeviceCard from '@/components/devices/DeviceCard.vue';
+import AmbientMesh from '@/components/visuals/AmbientMesh.vue';
 import { BaseButton, BaseEmpty, BaseIcon } from '@/components/base';
 import { QUICK_SCENES, type QuickScene } from '@/constants/quickScenes';
 
@@ -494,6 +498,7 @@ onMounted(() => {
 }
 
 // HERO: glass-карточка с двумя колонками — copy слева, KPI strip справа.
+// AmbientMesh висит абсолютным слоем за gradient'ом, под содержимым.
 .home__hero {
   position: relative;
   display: grid;
@@ -505,6 +510,9 @@ onMounted(() => {
   overflow: hidden;
   isolation: isolate;
   @include glass(var(--glass-alpha-soft), var(--glass-blur-medium));
+  // Layered depth + Alice-yellow tint в gradient'е.
+  box-shadow: var(--depth-2);
+  contain: layout style;
 
   &::before {
     content: '';
@@ -522,8 +530,8 @@ onMounted(() => {
         transparent 60%
       ),
       radial-gradient(
-        40% 50% at 80% 20%,
-        rgba(var(--color-brand-amber-rgb), 0.16) 0%,
+        38% 48% at 84% 18%,
+        rgba(var(--color-brand-yellow-rgb), 0.16) 0%,
         transparent 60%
       );
     z-index: 0;
@@ -544,6 +552,32 @@ onMounted(() => {
     padding: var(--pad-comfort);
     border-radius: var(--radius-lg);
     gap: var(--space-4);
+  }
+}
+
+// AmbientMesh — 3D wireframe sphere в верхне-правом углу hero. Position
+// absolute поверх gradient'а, под content'ом, через z-index. На <1080px
+// hide — мобильный hero одноколоночный, mesh бы накладывался на text.
+.home__hero-mesh {
+  position: absolute;
+  top: -40px;
+  right: -60px;
+  width: 320px;
+  height: 320px;
+  z-index: 0;
+  opacity: 0.85;
+  pointer-events: none;
+
+  @media (max-width: 1080px) {
+    width: 220px;
+    height: 220px;
+    top: -30px;
+    right: -40px;
+    opacity: 0.55;
+  }
+
+  @media (max-width: 760px) {
+    display: none;
   }
 }
 
@@ -914,7 +948,9 @@ onMounted(() => {
 }
 
 .alice-tile {
-  --alice-accent: 255, 204, 0;
+  // Alice-canon yellow из централизованного token'а — правки палитры
+  // подхватываются автоматически без поиска rgb-литералов.
+  --alice-accent: var(--color-brand-yellow-rgb);
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -953,7 +989,7 @@ onMounted(() => {
     transform: translateY(-1px);
     .alice-tile__action {
       transform: translateX(2px);
-      color: #ffd75e;
+      color: var(--color-brand-yellow);
     }
   }
 
@@ -972,7 +1008,7 @@ onMounted(() => {
     height: var(--icon-box-md);
     border-radius: 12px;
     background: rgba(var(--alice-accent), 0.18);
-    color: #ffd75e;
+    color: var(--color-brand-yellow);
     display: grid;
     place-items: center;
   }
@@ -1004,9 +1040,12 @@ onMounted(() => {
   }
 }
 
-// Devices tile grid.
+// Devices tile grid. content-visibility:auto — auto-skip render off-screen
+// rows на лонг-листе устройств (>30); contain-intrinsic-size держит layout.
 .home__device-grid {
   @include auto-grid(var(--cell-md), var(--space-3));
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 320px;
 }
 
 .home-fade-enter-active,

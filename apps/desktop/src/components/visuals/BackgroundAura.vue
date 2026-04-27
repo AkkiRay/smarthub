@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, useTemplateRef, watch } from 'vue';
+import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { gsap } from 'gsap';
 import { useUiStore } from '@/stores/ui';
@@ -18,6 +18,7 @@ const ui = useUiStore();
 const { motionLevel } = storeToRefs(ui);
 
 let tweens: gsap.core.Tween[] = [];
+let visibilityHandler: (() => void) | null = null;
 
 function killTweens(): void {
   tweens.forEach((t) => t.kill());
@@ -27,9 +28,10 @@ function killTweens(): void {
 function startDrift(): void {
   killTweens();
   if (!root.value) return;
-  // off / reduced — drift отключён.
+  // off / reduced / hidden-tab — drift отключён.
   if (motionLevel.value === 'off' || motionLevel.value === 'reduced') return;
-  const blobs = root.value.querySelectorAll('.aura__blob');
+  if (document.hidden) return;
+  const blobs = root.value.querySelectorAll<HTMLElement>('.aura__blob');
   // full — увеличенная амплитуда и speed.
   const amp = motionLevel.value === 'full' ? 1.2 : 1;
   const speed = motionLevel.value === 'full' ? 0.85 : 1;
@@ -51,7 +53,20 @@ function startDrift(): void {
 // Runtime-reaction на смену motionLevel: рестарт drift'а без перезагрузки.
 watch(motionLevel, () => startDrift(), { immediate: true, flush: 'post' });
 
-onBeforeUnmount(killTweens);
+onMounted(() => {
+  // Pause drift, когда окно minimized / в фоне — экономит GPU при backdrop-filter
+  // на остальных panel'ах. resume при возврате — startDrift пересоздаёт tween'ы.
+  visibilityHandler = () => {
+    if (document.hidden) killTweens();
+    else startDrift();
+  };
+  document.addEventListener('visibilitychange', visibilityHandler);
+});
+
+onBeforeUnmount(() => {
+  killTweens();
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+});
 </script>
 
 <style scoped lang="scss">
@@ -64,13 +79,16 @@ onBeforeUnmount(killTweens);
   z-index: var(--z-deep);
 
   // Цвета блобов из `--aura-blob-*` токенов; темы свапают палитру.
-  // Имена `&--violet/--pink/--blue` — слоты 1/2/3.
+  // Имена `&--violet/--pink/--yellow` — слоты 1/2/3 (yellow = Alice-canon).
+  // will-change опущен: GSAP `force3D: true` промоутит layer на время tween'а,
+  // постоянный hint держал бы 3 composite-layer'а с blur(140px) всегда → GPU-hit.
   &__blob {
     position: absolute;
     border-radius: 50%;
     filter: blur(140px);
     opacity: 0.55;
-    will-change: transform;
+    backface-visibility: hidden;
+    transform: translateZ(0);
 
     &--violet {
       width: 520px;

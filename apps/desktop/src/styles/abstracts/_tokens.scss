@@ -3,56 +3,76 @@
 
 :root {
   // ---- Background ----
-  // Warm-charcoal база. R≈G, B чуть выше — тонкая violet warmth под brand
-  // gradient (violet → pink → amber), без cold-blue lean'а.
-  --color-bg-base: #0e0d12;
-  --color-bg-surface: #15141c;
-  --color-bg-elevated: #1d1b27;
-  --color-bg-overlay: rgba(14, 13, 18, 0.78);
+  // Deep-midnight base под референс «Дом с Алисой»: чуть глубже, чем чистый
+  // charcoal, R≈G, B на 5pt выше — едва заметный violet warmth не уезжает в blue.
+  --color-bg-base: #0a090f;
+  --color-bg-surface: #131119;
+  --color-bg-elevated: #1b1825;
+  --color-bg-overlay: rgba(10, 9, 15, 0.82);
   // RGB-triplet для rgba(var(--color-bg-rgb), 0.x) — overlays / titlebar / popover.
-  --color-bg-rgb: 14, 13, 18;
-  --color-bg-elevated-rgb: 29, 27, 39;
+  --color-bg-rgb: 10, 9, 15;
+  --color-bg-elevated-rgb: 27, 24, 37;
 
   // ---- Text ----
-  --color-text-primary: #f4f3f7;
-  --color-text-secondary: #a9a7b4;
-  --color-text-muted: #6f6c7a;
+  --color-text-primary: #f5f4f8;
+  --color-text-secondary: #a8a6b3;
+  --color-text-muted: #6c6978;
 
   // ---- Brand (Alice palette) ----
-  --color-brand-violet: #7c5bff; // primary
-  --color-brand-purple: #b85dff; // active-state accent
-  --color-brand-pink: #ff5b9e;
+  // violet/pink/amber/yellow — base. Yellow (#ffcc00) — канонический Alice-color
+  // (логотип, кнопка «Алиса», голосовой индикатор) — добавлен как 5-й brand tone.
+  --color-brand-violet: #6e54ff; // primary, чуть глубже прежнего #7c5bff
+  --color-brand-purple: #b15bff; // active-state accent
+  --color-brand-pink: #ff5c8b; // мягче прежнего #ff5b9e
   --color-brand-blue: #5b8dff;
-  --color-brand-cyan: #5bd8ff;
-  --color-brand-amber: #ffb866;
+  --color-brand-cyan: #42e2f4; // ярче cyan для status / badge
+  --color-brand-amber: #ffb347; // canonical Alice warm
+  --color-brand-yellow: #ffcc00; // canonical Alice-brand yellow
   --color-brand-mint: #5be3ad;
   --color-brand-coral: #ff6e66;
   --color-brand-orange: #ff8a4d;
 
   // RGB-triplets для `rgba(var(--color), a)` — hex в rgba() не работает.
-  --color-brand-violet-rgb: 124, 91, 255;
-  --color-brand-purple-rgb: 184, 93, 255;
-  --color-brand-pink-rgb: 255, 91, 158;
+  --color-brand-violet-rgb: 110, 84, 255;
+  --color-brand-purple-rgb: 177, 91, 255;
+  --color-brand-pink-rgb: 255, 92, 139;
   --color-brand-blue-rgb: 91, 141, 255;
-  --color-brand-cyan-rgb: 91, 216, 255;
-  --color-brand-amber-rgb: 255, 184, 102;
+  --color-brand-cyan-rgb: 66, 226, 244;
+  --color-brand-amber-rgb: 255, 179, 71;
+  --color-brand-yellow-rgb: 255, 204, 0;
   --color-brand-mint-rgb: 91, 227, 173;
   --color-brand-coral-rgb: 255, 110, 102;
   --color-brand-orange-rgb: 255, 138, 77;
 
-  // Brand-gradient: violet → purple → pink → amber.
-  --gradient-brand: linear-gradient(135deg, #7c5bff 0%, #b85dff 32%, #ff5b9e 64%, #ffb866 100%);
+  // Brand-gradient: violet → purple → pink → amber → yellow.
+  // Финальный stop yellow — Alice-canon — даёт «солнечный» край в gradient'е.
+  --gradient-brand: linear-gradient(
+    135deg,
+    #6e54ff 0%,
+    #b15bff 28%,
+    #ff5c8b 58%,
+    #ffb347 86%,
+    #ffcc00 100%
+  );
   --gradient-brand-soft: linear-gradient(
     135deg,
-    rgba(124, 91, 255, 0.18) 0%,
-    rgba(184, 93, 255, 0.14) 32%,
-    rgba(255, 91, 158, 0.16) 64%,
-    rgba(255, 184, 102, 0.16) 100%
+    rgba(110, 84, 255, 0.18) 0%,
+    rgba(177, 91, 255, 0.14) 32%,
+    rgba(255, 92, 139, 0.16) 64%,
+    rgba(255, 179, 71, 0.16) 100%
+  );
+  // Alice-canon: чистый yellow→amber для голосовых акцентов.
+  --gradient-alice: linear-gradient(135deg, #ffcc00 0%, #ffb347 60%, #ff8a4d 100%);
+  --gradient-aurora: linear-gradient(
+    135deg,
+    rgba(110, 84, 255, 0.45) 0%,
+    rgba(66, 226, 244, 0.32) 50%,
+    rgba(255, 204, 0, 0.42) 100%
   );
   --gradient-aura:
-    radial-gradient(60% 50% at 18% 8%, rgba(124, 91, 255, 0.55) 0%, transparent 65%),
-    radial-gradient(48% 50% at 82% 0%, rgba(255, 91, 158, 0.42) 0%, transparent 62%),
-    radial-gradient(60% 55% at 100% 90%, rgba(255, 184, 102, 0.32) 0%, transparent 68%),
+    radial-gradient(60% 50% at 18% 8%, rgba(110, 84, 255, 0.55) 0%, transparent 65%),
+    radial-gradient(48% 50% at 82% 0%, rgba(255, 92, 139, 0.42) 0%, transparent 62%),
+    radial-gradient(60% 55% at 100% 90%, rgba(255, 204, 0, 0.28) 0%, transparent 68%),
     radial-gradient(70% 60% at 0% 100%, rgba(91, 141, 255, 0.34) 0%, transparent 70%);
 
   // ---- Status ----
@@ -235,6 +255,33 @@
   --shadow-hover: 0 14px 36px rgba(0, 0, 0, 0.5);
   --shadow-violet-glow: 0 18px 48px rgba(var(--color-brand-violet-rgb), 0.32);
   --shadow-pink-glow: 0 18px 48px rgba(var(--color-brand-pink-rgb), 0.28);
+  --shadow-yellow-glow: 0 18px 48px rgba(var(--color-brand-yellow-rgb), 0.28);
+
+  // ---- Depth / Elevation tokens (3-уровневая система layered shadow) ----
+  // depth-1: ambient floating-card; depth-2: hovered hero / panel; depth-3:
+  // raised modal / popover. Каждый — комбинация ambient (key light) + brand-tint.
+  --depth-1:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 8px 24px -12px rgba(0, 0, 0, 0.6),
+    0 2px 8px -4px rgba(var(--color-brand-violet-rgb), 0.18);
+  --depth-2:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 48px -24px rgba(0, 0, 0, 0.7),
+    0 8px 24px -12px rgba(var(--color-brand-violet-rgb), 0.22);
+  --depth-3:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 32px 80px -36px rgba(0, 0, 0, 0.78),
+    0 14px 36px -16px rgba(var(--color-brand-violet-rgb), 0.32);
+
+  // ---- Glow halos (для interactive states, активных tile'ов, alice voice) ----
+  --glow-violet: 0 0 0 1px rgba(var(--color-brand-violet-rgb), 0.28),
+    0 0 24px rgba(var(--color-brand-violet-rgb), 0.42);
+  --glow-pink: 0 0 0 1px rgba(var(--color-brand-pink-rgb), 0.28),
+    0 0 24px rgba(var(--color-brand-pink-rgb), 0.42);
+  --glow-yellow: 0 0 0 1px rgba(var(--color-brand-yellow-rgb), 0.32),
+    0 0 24px rgba(var(--color-brand-yellow-rgb), 0.45);
+  --glow-cyan: 0 0 0 1px rgba(var(--color-brand-cyan-rgb), 0.28),
+    0 0 24px rgba(var(--color-brand-cyan-rgb), 0.4);
 
   // ---- Motion ----
   // `--motion-scale` ставится на <html> store'ом ui (см. applyMotion). Все длительности
@@ -244,11 +291,40 @@
   --motion-scale: 1;
   --dur-instant: calc(80ms * var(--motion-scale));
   --dur-fast: calc(160ms * var(--motion-scale));
-  --dur-medium: calc(280ms * var(--motion-scale));
-  --dur-slow: calc(480ms * var(--motion-scale));
-  --dur-stage: calc(720ms * var(--motion-scale));
+  --dur-medium: calc(240ms * var(--motion-scale));
+  --dur-slow: calc(420ms * var(--motion-scale));
+  --dur-stage: calc(680ms * var(--motion-scale));
   --ease-snap: cubic-bezier(0.4, 0, 0, 1);
   --ease-emphasis: cubic-bezier(0.2, 0, 0, 1.2);
+  // soft / press — приглушённые easing'и для micro-interactions: open-curve без
+  // overshoot'а. press — для tap/click feedback (быстрый «прижим» + плавный rebound).
+  --ease-soft: cubic-bezier(0.32, 0.72, 0.24, 1);
+  --ease-press: cubic-bezier(0.34, 1.2, 0.64, 1);
+
+  // ---- Hover lift amplitude ----
+  // Единый источник для translateY-лифта на hover'е. 1px — почти-незаметный
+  // подъём, не вызывает «прыгания» в плотных гридах. Active-состояние возвращает
+  // в 0. Все блоки (button/tile/card/...) читают этот токен через `--lift`.
+  --lift: -1px;
+  --press-scale: 0.985;
+
+  // ---- Transition presets ----
+  // 4 канонических shorthand'а для свойств, которые анимируются чаще всего.
+  // Все идут через --dur-* → автоматически реагируют на смену motion-level
+  // без перерасчёта SCSS. Использовать в блоках вместо bare `200ms ease`.
+  // base — color / background / border (быстрая «подсветка»).
+  // medium — box-shadow / opacity / filter (плавная глубина).
+  // transform — translate / scale (отдельным channel'ом, чтобы выйти из shorthand'а
+  //   и подменить duration для :active без race condition'ов).
+  // colors — комбинация фоновых свойств одним токеном.
+  --trans-base: var(--dur-fast) var(--ease-out);
+  --trans-medium: var(--dur-medium) var(--ease-out);
+  --trans-transform: var(--dur-medium) var(--ease-soft);
+  --trans-press: var(--dur-fast) var(--ease-press);
+  --trans-colors: background var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 
   // ---- Semantic spacing scale (not opinionated about layout) ----
   --space-1: 4px;
@@ -272,6 +348,10 @@
   --tone-info-edge: rgba(var(--color-brand-violet-rgb), 0.36);
   --tone-violet-soft: rgba(var(--color-brand-violet-rgb), 0.14);
   --tone-violet-edge: rgba(var(--color-brand-violet-rgb), 0.36);
+  --tone-alice-soft: rgba(var(--color-brand-yellow-rgb), 0.14);
+  --tone-alice-edge: rgba(var(--color-brand-yellow-rgb), 0.36);
+  --tone-cyan-soft: rgba(var(--color-brand-cyan-rgb), 0.14);
+  --tone-cyan-edge: rgba(var(--color-brand-cyan-rgb), 0.36);
 
   // ---- Surface overlays for hover/press states ----
   --surface-hover: rgba(255, 255, 255, 0.04);
@@ -287,17 +367,17 @@
   // ---- Sidebar surface ----
   // Тема свапает фон одной строкой через `--sidebar-surface`. База `--color-bg-sidebar`
   // темнее чем `--color-bg-base` — рейл «садится» под контент.
-  --color-bg-sidebar: #07060d;
+  --color-bg-sidebar: #06050b;
   --sidebar-surface:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 38%),
     radial-gradient(
       110% 50% at 0% 0%,
-      rgba(var(--color-brand-violet-rgb), 0.1) 0%,
+      rgba(var(--color-brand-violet-rgb), 0.12) 0%,
       transparent 60%
     ),
     radial-gradient(
       85% 40% at 100% 100%,
-      rgba(var(--color-brand-pink-rgb), 0.07) 0%,
+      rgba(var(--color-brand-yellow-rgb), 0.05) 0%,
       transparent 70%
     ),
     var(--color-bg-sidebar);
@@ -307,12 +387,12 @@
 // alice-midnight: deeper warm-violet вариант alice-dark (не холодный синий).
 // data-theme крутится на <body> через ui store.
 [data-theme='alice-midnight'] {
-  --color-bg-base: #07060c;
-  --color-bg-surface: #0d0b14;
-  --color-bg-elevated: #16131f;
-  --color-bg-overlay: rgba(7, 6, 12, 0.84);
-  --color-bg-rgb: 7, 6, 12;
-  --color-bg-elevated-rgb: 22, 19, 31;
+  --color-bg-base: #050410;
+  --color-bg-surface: #0c0a18;
+  --color-bg-elevated: #14111f;
+  --color-bg-overlay: rgba(5, 4, 16, 0.88);
+  --color-bg-rgb: 5, 4, 16;
+  --color-bg-elevated-rgb: 20, 17, 31;
 
   --color-text-primary: #f6f4fa;
   --color-text-secondary: #a39fb0;
@@ -323,38 +403,52 @@
   --color-border-strong: rgba(245, 240, 255, 0.16);
 
   // Glass-tint — deeper warm-violet, без cool-blue cast'а.
-  --glass-tint: 14, 12, 20;
-  --glass-alpha-soft: 0.52;
-  --glass-alpha-medium: 0.74;
-  --glass-alpha-strong: 0.9;
+  --glass-tint: 12, 10, 22;
+  --glass-alpha-soft: 0.55;
+  --glass-alpha-medium: 0.76;
+  --glass-alpha-strong: 0.92;
   --glass-edge: rgba(245, 240, 255, 0.07);
   --glass-highlight: rgba(245, 240, 255, 0.08);
 
-  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.6);
-  --shadow-elev: 0 22px 56px rgba(0, 0, 0, 0.7);
+  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.62);
+  --shadow-elev: 0 22px 56px rgba(0, 0, 0, 0.72);
   --shadow-glow: 0 0 32px rgba(var(--color-brand-violet-rgb), 0.5);
   --shadow-hover: 0 16px 44px rgba(0, 0, 0, 0.65);
   --shadow-violet-glow: 0 18px 48px rgba(var(--color-brand-violet-rgb), 0.45);
 
-  // Аура: насыщеннее brand-палитра (violet → pink → amber), без cyan.
-  --aura-blob-1: rgba(var(--color-brand-violet-rgb), 0.75);
+  // Depth-токены в midnight — глубже + warm-violet tint.
+  --depth-1:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 10px 28px -12px rgba(0, 0, 0, 0.7),
+    0 3px 10px -4px rgba(var(--color-brand-violet-rgb), 0.22);
+  --depth-2:
+    0 1px 0 rgba(255, 255, 255, 0.07) inset,
+    0 22px 56px -24px rgba(0, 0, 0, 0.78),
+    0 10px 28px -12px rgba(var(--color-brand-violet-rgb), 0.28);
+  --depth-3:
+    0 1px 0 rgba(255, 255, 255, 0.09) inset,
+    0 36px 90px -36px rgba(0, 0, 0, 0.85),
+    0 16px 40px -16px rgba(var(--color-brand-violet-rgb), 0.4);
+
+  // Аура: насыщеннее brand-палитра (violet → pink → yellow).
+  --aura-blob-1: rgba(var(--color-brand-violet-rgb), 0.78);
   --aura-blob-2: rgba(var(--color-brand-pink-rgb), 0.6);
-  --aura-blob-3: rgba(var(--color-brand-amber-rgb), 0.42);
+  --aura-blob-3: rgba(var(--color-brand-yellow-rgb), 0.4);
 
   --surface-hover: rgba(245, 240, 255, 0.045);
   --surface-press: rgba(245, 240, 255, 0.085);
 
-  --color-bg-sidebar: #03020a;
+  --color-bg-sidebar: #02010a;
   --sidebar-surface:
     linear-gradient(180deg, rgba(255, 220, 200, 0.06) 0%, rgba(255, 220, 200, 0) 42%),
     radial-gradient(
       120% 55% at 0% 0%,
-      rgba(var(--color-brand-violet-rgb), 0.2) 0%,
+      rgba(var(--color-brand-violet-rgb), 0.22) 0%,
       transparent 62%
     ),
     radial-gradient(
       90% 45% at 100% 100%,
-      rgba(var(--color-brand-pink-rgb), 0.12) 0%,
+      rgba(var(--color-brand-yellow-rgb), 0.07) 0%,
       transparent 70%
     ),
     var(--color-bg-sidebar);

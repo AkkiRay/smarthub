@@ -111,6 +111,70 @@
   }
 }
 
+// Aurora-shift: gradient-position drift для panel--alice / accent-bar.
+@keyframes aurora-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+// Drift-slow: parallax-плавающий float для hero визуалов.
+@keyframes drift-slow {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0);
+  }
+}
+
+// Performance helpers ————————————————————————————————————————————————
+
+// Auto-skip rendering off-screen children. Применяется на больших гридах
+// (devices, drivers marketplace), где элементов > 50.
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 320px;
+}
+
+// Layout-isolate: отрезает children от reflow'а наружу (paint + layout).
+// Помогает на panel'ах с независимыми анимациями (accent-line + content).
+.contain-layout {
+  contain: layout style;
+}
+
+.contain-paint {
+  contain: layout style paint;
+}
+
+// Glow utilities (для interactive highlights / focus / active rows).
+.glow--violet {
+  box-shadow: var(--glow-violet);
+}
+.glow--pink {
+  box-shadow: var(--glow-pink);
+}
+.glow--yellow {
+  box-shadow: var(--glow-yellow);
+}
+.glow--cyan {
+  box-shadow: var(--glow-cyan);
+}
+
+// Text-gradient в Alice-yellow (для hero accents).
+.text--alice {
+  background: var(--gradient-alice);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
 // Stack-fade-in для контейнеров с children: каждый child делает float-up
 // со staggered delay через nth-child.
 .stack-in > * {

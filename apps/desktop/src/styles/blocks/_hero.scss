@@ -4,7 +4,7 @@
 // actions + opt visual. Применяется на Welcome / Home / Discovery / Devices /
 // Rooms / Scenes / Alice / Settings.
 .hero {
-  --hero-glow: rgba(var(--color-brand-violet-rgb), 0.35);
+  --hero-glow: rgba(var(--color-brand-violet-rgb), 0.32);
 
   position: relative;
   display: grid;
@@ -16,7 +16,11 @@
   overflow: hidden;
   isolation: isolate;
   @include glass(var(--glass-alpha-soft), var(--glass-blur-medium));
+  box-shadow: var(--depth-2);
 
+  // Aurora background-glow: violet (top-left) → pink (bottom-right) → yellow
+  // (top-right hot-spot, Alice-canon). Yellow stop — отличающий signature от
+  // конкурентов: «дом с Алисой» использует yellow для голосовых акцентов.
   &::before {
     content: '';
     position: absolute;
@@ -26,6 +30,11 @@
       radial-gradient(
         50% 60% at 100% 100%,
         rgba(var(--color-brand-pink-rgb), 0.18) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        38% 48% at 86% 14%,
+        rgba(var(--color-brand-yellow-rgb), 0.14) 0%,
         transparent 60%
       );
     opacity: 0.95;

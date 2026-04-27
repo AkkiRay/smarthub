@@ -68,6 +68,8 @@ function onBack(): void {
 @use '@/styles/abstracts/mixins' as *;
 
 .page-head {
+  // Page-head — частный случай `.panel`: наследует depth-shadow и accent-line
+  // через depth-токены, не дублирует значения.
   position: relative;
   display: flex;
   flex-wrap: wrap;
@@ -77,18 +79,15 @@ function onBack(): void {
   padding: clamp(20px, 2vw, 28px) clamp(20px, 2.4vw, 32px);
   border-radius: var(--radius-xl);
   isolation: isolate;
-  // Flat surface: матовый single-tone background + hairline + ambient drop-shadow.
   background: rgba(255, 255, 255, 0.022);
-  border: 1px solid rgba(255, 255, 255, 0.055);
-  box-shadow:
-    0 32px 80px -44px rgba(0, 0, 0, 0.75),
-    0 10px 24px -20px rgba(var(--color-brand-violet-rgb), 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  border: var(--border-thin) solid rgba(255, 255, 255, 0.055);
+  box-shadow: var(--depth-2);
   transition:
-    border-color 280ms var(--ease-out),
-    box-shadow 280ms var(--ease-out);
+    border-color var(--dur-medium) var(--ease-out),
+    box-shadow var(--dur-medium) var(--ease-out);
 
-  // Brand accent line: вертикальный gradient слева, slow shift через keyframes.
+  // Brand accent line: vertical gradient violet → yellow (Alice-canon) → violet.
+  // background-size 280% + alternate-shift даёт «дыхание».
   &::before {
     content: '';
     position: absolute;
@@ -101,7 +100,7 @@ function onBack(): void {
       180deg,
       rgba(var(--color-brand-violet-rgb), 0) 0%,
       rgba(var(--color-brand-violet-rgb), 0.7) 25%,
-      rgba(var(--color-brand-pink-rgb), 0.85) 60%,
+      rgba(var(--color-brand-yellow-rgb), 0.85) 60%,
       rgba(var(--color-brand-violet-rgb), 0) 100%
     );
     background-size: 100% 280%;
@@ -112,9 +111,8 @@ function onBack(): void {
   &:hover {
     border-color: rgba(255, 255, 255, 0.08);
     box-shadow:
-      0 32px 80px -40px rgba(0, 0, 0, 0.75),
-      0 14px 28px -18px rgba(var(--color-brand-purple-rgb), 0.32),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      var(--depth-2),
+      0 0 24px rgba(var(--color-brand-purple-rgb), 0.18);
   }
 
   > * {
