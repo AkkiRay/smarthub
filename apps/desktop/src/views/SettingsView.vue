@@ -127,11 +127,72 @@
           </div>
         </dl>
       </article>
+      <article class="settings__group" data-anim="block">
+        <header class="settings__group-head">
+          <span class="settings__group-num">03</span>
+          <div>
+            <h2 class="settings__group-title">Диагностика разработчика</h2>
+            <p class="settings__group-desc">
+              Техническая информация о среде запуска, mock-режиме и путях приложения.
+            </p>
+          </div>
+        </header>
 
+        <dl class="settings__dl">
+          <div>
+            <dt>Mock-режим</dt>
+            <dd>{{ diagnostics?.mockEnabled ? 'Включён' : 'Выключен' }}</dd>
+          </div>
+          <div>
+            <dt>DevTools</dt>
+            <dd>{{ diagnostics?.devtoolsEnabled ? 'Включены' : 'Выключены' }}</dd>
+          </div>
+          <div>
+            <dt>Node.js</dt>
+            <dd>{{ diagnostics?.nodeVersion ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>Electron</dt>
+            <dd>{{ diagnostics?.electronVersion ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>Chromium</dt>
+            <dd>{{ diagnostics?.chromeVersion ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>Папка данных</dt>
+            <dd>{{ diagnostics?.userDataPath ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>Лог</dt>
+            <dd>{{ diagnostics?.logPath ?? '—' }}</dd>
+          </div>
+        </dl>
+
+        <div class="settings__actions">
+          <BaseButton
+            variant="ghost"
+            size="sm"
+            icon-left="refresh"
+            :disabled="diagnosticsLoading"
+            @click="loadDiagnostics"
+          >
+            {{ diagnosticsLoading ? 'Обновляем…' : 'Обновить диагностику' }}
+          </BaseButton>
+
+          <BaseButton variant="ghost" size="sm" @click="openLogsFolder">
+            Открыть папку логов
+          </BaseButton>
+        </div>
+
+        <p v-if="diagnosticsError" class="settings__error">
+          {{ diagnosticsError }}
+        </p>
+      </article>
       <!-- ============ Обновления ============ -->
       <article id="updates" class="settings__group" data-anim="block">
         <header class="settings__group-head">
-          <span class="settings__group-num">03</span>
+          <span class="settings__group-num">04</span>
           <div>
             <h2 class="settings__group-title">Обновления</h2>
             <p class="settings__group-desc">
@@ -202,7 +263,7 @@
       <!-- ============ Интеграции ============ -->
       <article class="settings__group" data-anim="block" data-tour="settings-integrations">
         <header class="settings__group-head">
-          <span class="settings__group-num">04</span>
+          <span class="settings__group-num">05</span>
           <div>
             <h2 class="settings__group-title">Интеграции</h2>
             <p class="settings__group-desc">
@@ -234,7 +295,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
-import type { HubInfo } from '@smarthome/shared';
+import type { AppDiagnostics, HubInfo } from '@smarthome/shared';
 import { useUiStore, type MotionLevel } from '@/stores/ui';
 import { useUpdaterStore } from '@/stores/updater';
 import { useViewMount } from '@/composables/useViewMount';
@@ -292,6 +353,9 @@ function onInstall(): void {
 }
 
 const hubInfo = ref<HubInfo | null>(null);
+const diagnostics = ref<AppDiagnostics | null>(null);
+const diagnosticsLoading = ref(false);
+const diagnosticsError = ref<string | null>(null);
 const copied = ref(false);
 
 const themeOptions: SelectOption[] = [
@@ -330,13 +394,37 @@ async function copyHubId(): Promise<void> {
   }
 }
 
+async function loadDiagnostics(): Promise<void> {
+  diagnosticsLoading.value = true;
+  diagnosticsError.value = null;
+
+  try {
+    diagnostics.value = await window.smarthome.app.getDiagnostics();
+  } catch (error) {
+    diagnosticsError.value =
+      error instanceof Error ? error.message : 'Не удалось загрузить диагностику';
+  } finally {
+    diagnosticsLoading.value = false;
+  }
+}
+
+async function openLogsFolder(): Promise<void> {
+  try {
+    await window.smarthome.app.openLogsFolder();
+  } catch (error) {
+    diagnosticsError.value =
+      error instanceof Error ? error.message : 'Не удалось открыть папку логов';
+  }
+}
+
 const gate = useBootstrapGate({
   minDuration: 450,
   tasks: [
-    async () => {
-      hubInfo.value = await window.smarthome.app.getHubInfo();
-    },
-  ],
+  async () => {
+    hubInfo.value = await window.smarthome.app.getHubInfo();
+    await loadDiagnostics();
+  },
+],
 });
 
 useViewMount({ scope: root, defer: gate.whenReady() });

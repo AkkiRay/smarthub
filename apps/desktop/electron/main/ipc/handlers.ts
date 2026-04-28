@@ -18,8 +18,8 @@
  * Push-events форвардятся декларативно: добавление события — одна строка
  * в {@link HUB_EVENTS}.
  */
-
-import { app } from 'electron';
+import path from 'node:path';
+import { app, shell } from 'electron';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import log from 'electron-log/main.js';
 import type { DriverCredentials, DriverId } from '@smarthome/shared';
@@ -133,6 +133,20 @@ function buildHandlers(hub: SmartHomeHub, updater: UpdaterController): Record<st
     'app:get-version': () => app.getVersion(),
     'app:get-platform': () => process.platform,
     'app:get-hub-info': () => hub.getInfo(),
+    'app:get-diagnostics': () => ({
+      version: app.getVersion(),
+      platform: process.platform,
+      nodeVersion: process.versions.node,
+      electronVersion: process.versions.electron,
+      chromeVersion: process.versions.chrome,
+      mockEnabled: process.env.HUB_ENABLE_MOCK === 'true',
+      devtoolsEnabled: process.env.HUB_OPEN_DEVTOOLS === 'true',
+      logPath: path.join(app.getPath('logs'), 'main.log'),
+      userDataPath: app.getPath('userData'),
+    }),
+    'app:open-logs-folder': async () => {
+      await shell.openPath(app.getPath('logs'));
+    },
     'app:open-external': (url) => safeOpenExternal(url),
 
     // updater

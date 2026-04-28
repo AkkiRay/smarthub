@@ -27,6 +27,8 @@ const api: IpcApi = {
     getVersion: () => invoke<string>('app:get-version'),
     getPlatform: () => invoke<Platform>('app:get-platform'),
     getHubInfo: () => invoke('app:get-hub-info'),
+    getDiagnostics: () => invoke('app:get-diagnostics'),
+    openLogsFolder: () => invoke<void>('app:open-logs-folder'),
     openExternal: (url) => invoke('app:open-external', url),
     // Fire-and-forget — renderer пушит ошибки в main.log без блокировки UI.
     reportError: (payload) => ipcRenderer.send('app:report-error', payload),
