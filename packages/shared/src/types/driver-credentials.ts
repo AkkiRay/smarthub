@@ -76,8 +76,19 @@ export interface SwitchBotCredentials {
 }
 
 export interface MihomeCloudCredentials {
-  username: string;
-  password: string;
+  /** Optional: legacy password-flow для аккаунтов БЕЗ 2FA. */
+  username?: string;
+  password?: string;
+  /**
+   * Pre-fetched session из embedded BrowserWindow OAuth.
+   * Заполняется через `drivers.signInOauth('mihome-cloud', { region })`.
+   * Когда session есть — driver использует её и password не нужен.
+   */
+  session?: {
+    userId: string;
+    ssecurity: string;
+    serviceToken: string;
+  };
   /** Mi Cloud region: cn, de, i2, ru, sg, us. */
   region?: string;
 }

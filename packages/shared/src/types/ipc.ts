@@ -115,6 +115,18 @@ export interface IpcApi {
     ) => Promise<{ ok: boolean; message?: string }>;
     /** Открыть deep-link на портал разработчика — `register-link` field в credentials-schema. */
     openExternal: (url: string) => Promise<void>;
+    /**
+     * Запустить embedded OAuth-флоу для driver'а, который требует interactive auth
+     * (mihome-cloud — 2FA email/SMS, captcha). Открывает изолированный
+     * BrowserWindow, после успеха main process сам сохраняет полученную session
+     * в `driverCredentials.<driverId>` и перезагружает driver.
+     * Возвращает `{ok: true}` если session получена и сохранена;
+     * `{ok: false, message}` если юзер закрыл окно или auth не завершился.
+     */
+    signInOauth: (
+      driverId: string,
+      params?: Record<string, string>,
+    ) => Promise<{ ok: boolean; message?: string }>;
   };
   yandexStation: {
     /** mDNS-сканер на N секунд. */

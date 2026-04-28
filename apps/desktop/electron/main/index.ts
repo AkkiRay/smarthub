@@ -192,6 +192,13 @@ async function createWindow(): Promise<void> {
     mainWindow?.show();
   });
 
+  // Когда окно закрывается крестиком — destroyed BrowserWindow остаётся в `mainWindow`
+  // ссылкой. Обнуляем reference, чтобы `showMainWindow()` из tray увидел null
+  // и пересоздал окно (иначе `show()` на destroyed instance — no-op).
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   // External links → системный браузер через scheme-allow-list.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     safeOpenExternal(url);
@@ -280,7 +287,10 @@ app.on('second-instance', () => {
 });
 
 async function showMainWindow(): Promise<void> {
-  if (!mainWindow) {
+  // isDestroyed-guard: между close и срабатыванием 'closed' event'а
+  // mainWindow ещё указывает на BrowserWindow, но все методы на нём — no-op.
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = null;
     await createWindow();
     return;
   }

@@ -63,6 +63,7 @@ export const MODE_INSTANCE_LABELS: Record<string, string> = {
   coffee_mode: 'Тип кофе',
   tea_mode: 'Тип чая',
   cleanup_mode: 'Режим уборки',
+  water_level: 'Уровень воды',
   scene: 'Сцена освещения',
   heat: 'Подогрев',
   ventilation: 'Вентиляция',
