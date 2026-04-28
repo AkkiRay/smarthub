@@ -108,7 +108,8 @@
               </span>
 
               <strong v-else class="prop__value">
-                {{ formatPropValue(p.state?.value) }}{{ unitFor(p.parameters.unit) }}
+                {{ formatPropValue(p.state?.value)
+                }}{{ suffixFor(p.parameters.instance, p.parameters.unit) }}
               </strong>
 
               <div
@@ -486,6 +487,8 @@ const PROP_LABELS: Record<string, string> = {
   gas: 'Утечка газа',
   water_leak: 'Протечка',
   button: 'Кнопка',
+  clean_time: 'Время уборки',
+  clean_area: 'Зона уборки',
 };
 
 const PROP_ICONS: Record<string, string> = {
@@ -513,6 +516,10 @@ const PROP_ICONS: Record<string, string> = {
     '<svg viewBox="0 0 16 16" fill="none"><path d="M2 9l3-3 3 2 3-4 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   voice_activity:
     '<svg viewBox="0 0 16 16" fill="none"><rect x="6" y="2" width="4" height="7.5" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 8.5a4.5 4.5 0 009 0M8 13v1.4M5.6 14.4h4.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  clean_time:
+    '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v4l2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  clean_area:
+    '<svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h12M6 2.5v11" stroke="currentColor" stroke-width="1.4" opacity="0.6"/></svg>',
 };
 
 const PROGRESS_BAR_INSTANCES = new Set(['humidity', 'battery_level']);
@@ -521,6 +528,8 @@ const PROP_ACCENTS: Record<string, string> = {
   temperature: '#ff9a6e',
   humidity: '#5bd8ff',
   battery_level: '#5eea89',
+  clean_time: '#5b8dff',
+  clean_area: '#a961ff',
   illumination: '#ffd27d',
   co2_level: '#a961ff',
   power: '#ff61e6',
@@ -626,6 +635,13 @@ const unitFor = (unit?: string) =>
       : unit === 'unit.watt'
         ? ' Вт'
         : '';
+
+/** Custom-instance suffix'ы для vacuum-properties без явного unit'а. */
+const suffixFor = (instance: string, unit?: string): string => {
+  if (instance === 'clean_time') return ' мин';
+  if (instance === 'clean_area') return ' м²';
+  return unitFor(unit);
+};
 
 const formatDate = (iso: string) => new Date(iso).toLocaleString('ru-RU');
 

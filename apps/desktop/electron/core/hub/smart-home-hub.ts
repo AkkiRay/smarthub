@@ -293,6 +293,35 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
       }
       await shell.openExternal(trimmed);
     },
+    /**
+     * Embedded OAuth-флоу. Сейчас обрабатывается только `mihome-cloud` (Xiaomi 2FA);
+     * остальным driver'ам без interactive auth этот канал не нужен.
+     */
+    signInOauth: async (
+      driverId: string,
+      params?: Record<string, string>,
+    ): Promise<{ ok: boolean; message?: string }> => {
+      if (driverId !== 'mihome-cloud') {
+        return { ok: false, message: `Driver "${driverId}" не поддерживает embedded OAuth` };
+      }
+      const region = (params?.['region'] ?? 'cn') as 'cn' | 'de' | 'i2' | 'ru' | 'sg' | 'us';
+      const { runMihomeOauth } = await import('@main/oauth/mihome-oauth.js');
+      const result = await runMihomeOauth({ region });
+      if (!result) {
+        return { ok: false, message: 'Окно входа закрыто без авторизации' };
+      }
+      // Сохраняем session как driver-credentials и перезагружаем driver.
+      deps.settings.setDriverCredentials('mihome-cloud', {
+        region: result.region,
+        session: result.session,
+      });
+      await deps.driverRegistry.reloadDriver('mihome-cloud');
+      return { ok: true };
+    },
+    /**
+     * Получить карту пылесоса. Сейчас только mihome-cloud + Dreame MiOT
+     * `map_view` (siid:6/piid:1 или siid:23/piid:1 в зависимости от модели).
+     */
   };
 
   // ---- Public API: Yandex Station ------------------------------------------

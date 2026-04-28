@@ -227,6 +227,15 @@ function buildHandlers(hub: SmartHomeHub, updater: UpdaterController): Record<st
       const safe = assertString('drivers:open-external', 'url', url, { maxLen: 512 });
       return hub.drivers.openExternal(safe);
     },
+    'drivers:sign-in-oauth': (driverId, params) => {
+      const id = assertString('drivers:sign-in-oauth', 'driverId', driverId, { maxLen: 64 });
+      // params optional — для mihome-cloud содержит { region }.
+      const p =
+        params === undefined || params === null
+          ? undefined
+          : (assertObject('drivers:sign-in-oauth', 'params', params) as Record<string, string>);
+      return hub.drivers.signInOauth(id, p);
+    },
 
     // Yandex Station
     'yandexStation:discover': (timeoutMs) =>

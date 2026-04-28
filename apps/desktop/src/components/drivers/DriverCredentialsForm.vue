@@ -17,6 +17,27 @@
       </button>
     </template>
 
+    <!-- OAuth-кнопка (embedded BrowserWindow): для драйверов, у которых password-flow
+         не работает из-за 2FA / captcha (Mi Home Cloud и т.п.). -->
+    <template v-for="field in oauthFields" :key="field.key">
+      <button
+        type="button"
+        class="creds-form__oauth"
+        :disabled="oauthBusy || busy"
+        @click="onOauth"
+      >
+        <span class="creds-form__oauth-icon">
+          <BaseIcon :name="oauthBusy ? 'refresh' : 'arrow-right'" :size="16" />
+        </span>
+        <span class="creds-form__oauth-body">
+          <span class="creds-form__oauth-title">
+            {{ oauthBusy ? 'Открываю окно входа…' : field.label }}
+          </span>
+          <span v-if="field.hint" class="creds-form__oauth-hint">{{ field.hint }}</span>
+        </span>
+      </button>
+    </template>
+
     <div class="creds-form__grid">
       <div
         v-for="field in inputFields"
@@ -125,9 +146,11 @@ watch(
   { immediate: true, deep: true },
 );
 
-/** Поля для рендера input'ов — без register-link и test-button. */
+/** Поля для рендера input'ов — без register-link, test-button, oauth. */
 const inputFields = computed(() =>
-  props.schema.filter((f) => f.kind !== 'register-link' && f.kind !== 'test-button'),
+  props.schema.filter(
+    (f) => f.kind !== 'register-link' && f.kind !== 'test-button' && f.kind !== 'oauth',
+  ),
 );
 
 /** Карточки-deep-links сверху формы. */
@@ -138,11 +161,17 @@ const registerLinks = computed(() =>
   ),
 );
 
+/** OAuth-кнопки (embedded BrowserWindow auth flow, например Xiaomi 2FA). */
+const oauthFields = computed(() =>
+  props.schema.filter((f) => f.kind === 'oauth' && Boolean(props.driverId)),
+);
+
 const hasTestButton = computed(
   () => props.schema.some((f) => f.kind === 'test-button') && Boolean(props.driverId),
 );
 
 const testing = ref(false);
+const oauthBusy = ref(false);
 const testResult = ref<DriverProbeResult | null>(null);
 
 function onUpdate(key: string, v: string | number): void {
@@ -165,6 +194,30 @@ async function onTest(): Promise<void> {
     testResult.value = { ok: false, message: (e as Error).message ?? 'Ошибка проверки' };
   } finally {
     testing.value = false;
+  }
+}
+
+async function onOauth(): Promise<void> {
+  if (!props.driverId || oauthBusy.value) return;
+  oauthBusy.value = true;
+  testResult.value = null;
+  try {
+    // Пробрасываем неконфиденциальные поля (region и т.п.) — пароль не нужен для embedded flow.
+    const params: Record<string, string> = {};
+    for (const f of props.schema) {
+      if (f.kind === 'select' && values[f.key]) params[f.key] = values[f.key]!;
+    }
+    const result = await window.smarthome.drivers.signInOauth(props.driverId, params);
+    testResult.value = {
+      ok: result.ok,
+      message: result.ok
+        ? 'Вход выполнен. Сессия сохранена, драйвер активирован.'
+        : (result.message ?? 'Не удалось войти'),
+    };
+  } catch (e) {
+    testResult.value = { ok: false, message: (e as Error).message ?? 'Ошибка авторизации' };
+  } finally {
+    oauthBusy.value = false;
   }
 }
 
@@ -211,6 +264,67 @@ function isLongPlaceholder(p?: string): boolean {
       border-color: rgba(var(--color-brand-violet-rgb), 0.45);
       transform: translateY(-1px);
     }
+  }
+
+  // Primary OAuth-кнопка — акцентнее register-link'а (это РЕКОМЕНДОВАННЫЙ способ
+  // войти, а не вспомогательная ссылка на портал разработчика).
+  &__oauth {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border-radius: var(--radius-md);
+    background: rgba(var(--color-brand-violet-rgb), 0.16);
+    border: 1px solid rgba(var(--color-brand-violet-rgb), 0.5);
+    color: var(--color-text-primary);
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition:
+      background var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-spring);
+
+    &:hover:not(:disabled) {
+      background: rgba(var(--color-brand-violet-rgb), 0.24);
+      border-color: rgba(var(--color-brand-violet-rgb), 0.7);
+      transform: translateY(-1px);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: progress;
+    }
+  }
+
+  &__oauth-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--gradient-brand);
+    color: #fff;
+  }
+
+  &__oauth-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  &__oauth-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  &__oauth-hint {
+    font-size: 12.5px;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
   }
 
   &__register-icon {
