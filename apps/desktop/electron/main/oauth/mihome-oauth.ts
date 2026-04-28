@@ -48,8 +48,7 @@ export const MIHOME_OAUTH_PARTITION = 'persist:mihome-oauth';
  * passport.xiaomi.com (legacy redirect), <region>.api.io.mi.com (final API),
  * mi.com / xiaomi.com root domains.
  */
-const XIAOMI_HOST_REGEX =
-  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*(?:xiaomi|mi)\.com$/i;
+const XIAOMI_HOST_REGEX = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*(?:xiaomi|mi)\.com$/i;
 
 function isXiaomiHost(host: string): boolean {
   return typeof host === 'string' && host.length > 0 && XIAOMI_HOST_REGEX.test(host);

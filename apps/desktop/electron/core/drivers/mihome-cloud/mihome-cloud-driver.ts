@@ -124,9 +124,7 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
     // session обновлена, retry на API будет успешен. Если passToken тоже
     // истёк — fallback на password-flow для legacy creds; в session-only
     // режиме ensureSession() бросит «откройте Настройки и войдите заново».
-    const { resilverSessionFromPartition } = await import(
-      '../../../main/oauth/mihome-oauth.js'
-    );
+    const { resilverSessionFromPartition } = await import('../../../main/oauth/mihome-oauth.js');
     const fresh = await resilverSessionFromPartition();
     if (fresh) {
       this.session = fresh;
@@ -232,9 +230,7 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
             );
           }
           const arr = Array.isArray(r?.result) ? (r.result as unknown[]) : [];
-          status = (arr[0] && typeof arr[0] === 'object' ? arr[0] : null) as
-            | VacuumStatusRaw
-            | null;
+          status = (arr[0] && typeof arr[0] === 'object' ? arr[0] : null) as VacuumStatusRaw | null;
 
           // Auto-region probe: result=[] обычно значит что device привязан к
           // другому Mi Cloud региону (cross-region listing работает, RPC — нет).
@@ -253,9 +249,9 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
                   probe,
                 );
                 const arrp = Array.isArray(rp?.result) ? (rp.result as unknown[]) : [];
-                const cand = (arrp[0] && typeof arrp[0] === 'object' ? arrp[0] : null) as
-                  | VacuumStatusRaw
-                  | null;
+                const cand = (
+                  arrp[0] && typeof arrp[0] === 'object' ? arrp[0] : null
+                ) as VacuumStatusRaw | null;
                 if (cand) {
                   status = cand;
                   workingRegion = probe;
@@ -344,7 +340,14 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
               `/home/rpc/${meta.did}`,
               {
                 method: 'get_prop',
-                params: ['run_state', 'battary_life', 's_time', 's_area', 'suction_grade', 'water_grade'],
+                params: [
+                  'run_state',
+                  'battary_life',
+                  's_time',
+                  's_area',
+                  'suction_grade',
+                  'water_grade',
+                ],
               },
               workingRegion,
             );
@@ -393,13 +396,28 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
           }),
           properties: device.properties.map((p) => {
             if (p.parameters.instance === INSTANCE.BATTERY_LEVEL) {
-              return { ...p, state: { instance: INSTANCE.BATTERY_LEVEL, value: Number(status.battery) || 0 } };
+              return {
+                ...p,
+                state: { instance: INSTANCE.BATTERY_LEVEL, value: Number(status.battery) || 0 },
+              };
             }
             if (p.parameters.instance === 'clean_time') {
-              return { ...p, state: { instance: 'clean_time', value: Math.round(Number(status.clean_time) / 60) } };
+              return {
+                ...p,
+                state: {
+                  instance: 'clean_time',
+                  value: Math.round(Number(status.clean_time) / 60),
+                },
+              };
             }
             if (p.parameters.instance === 'clean_area') {
-              return { ...p, state: { instance: 'clean_area', value: Math.round(Number(status.clean_area) / 1_000_000 * 100) / 100 } };
+              return {
+                ...p,
+                state: {
+                  instance: 'clean_area',
+                  value: Math.round((Number(status.clean_area) / 1_000_000) * 100) / 100,
+                },
+              };
             }
             return p;
           }),
@@ -436,7 +454,10 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
         }),
       };
     } catch (e) {
-      this.logWarn(`readState failed for ${device.id} (${(device.meta as Record<string, unknown>)?.['did'] ?? '-'})`, e);
+      this.logWarn(
+        `readState failed for ${device.id} (${(device.meta as Record<string, unknown>)?.['did'] ?? '-'})`,
+        e,
+      );
       return { ...device, status: 'unreachable' };
     }
   }
@@ -492,9 +513,7 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
           command.instance === INSTANCE.WATER_LEVEL
         ) {
           // Многие MiOT vacuum'ы не имеют water_level через MiOT — silent OK.
-          this.logWarn(
-            `vacuum ${meta.did}: water_level not exposed via MiOT-spec, skipping`,
-          );
+          this.logWarn(`vacuum ${meta.did}: water_level not exposed via MiOT-spec, skipping`);
         } else {
           return this.err(device, command, 'UNSUPPORTED_CAPABILITY');
         }
@@ -643,10 +662,9 @@ export class MiHomeCloudDriver extends BaseCloudDriver {
     };
     const encryptedBody = await this.request<string>(requestConfig);
 
-    const decryptedJson = rc4WithWarmup(
-      signedNonce,
-      Buffer.from(encryptedBody, 'base64'),
-    ).toString('utf8');
+    const decryptedJson = rc4WithWarmup(signedNonce, Buffer.from(encryptedBody, 'base64')).toString(
+      'utf8',
+    );
     return JSON.parse(decryptedJson) as T;
   }
 
