@@ -197,5 +197,4 @@ jobs:
           gh release edit "$tag" \
             --draft=false \
             --latest \
-            --generate-notes \
             --repo "$GITHUB_REPOSITORY"
