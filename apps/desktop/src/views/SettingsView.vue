@@ -420,11 +420,11 @@ async function openLogsFolder(): Promise<void> {
 const gate = useBootstrapGate({
   minDuration: 450,
   tasks: [
-  async () => {
-    hubInfo.value = await window.smarthome.app.getHubInfo();
-    await loadDiagnostics();
-  },
-],
+    async () => {
+      hubInfo.value = await window.smarthome.app.getHubInfo();
+      await loadDiagnostics();
+    },
+  ],
 });
 
 useViewMount({ scope: root, defer: gate.whenReady() });
