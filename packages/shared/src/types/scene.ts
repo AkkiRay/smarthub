@@ -33,6 +33,32 @@ export interface SceneAction {
   delayMs?: number;
 }
 
+export type SceneDryRunSeverity = 'ok' | 'warning' | 'error';
+
+export interface SceneDryRunStep {
+  index: number;
+  delayMs: number;
+  deviceId: string;
+  deviceName: string;
+  deviceStatus: string;
+  capability: CapabilityType;
+  instance: string;
+  value: unknown;
+  severity: SceneDryRunSeverity;
+  message: string;
+}
+
+export interface SceneDryRunReport {
+  sceneId: string;
+  sceneName: string;
+  actionCount: number;
+  estimatedDurationMs: number;
+  canRun: boolean;
+  warnings: number;
+  errors: number;
+  steps: SceneDryRunStep[];
+}
+
 /**
  * Сценарий — именованный набор {@link SceneAction}. Запускается из UI кнопкой
  * или (при `exposeToStation`) голосом через Алису.

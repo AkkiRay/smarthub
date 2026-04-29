@@ -216,6 +216,7 @@ function buildHandlers(hub: SmartHomeHub, updater: UpdaterController): Record<st
         assertObject('scenes:update', 'patch', patch) as Parameters<typeof hub.scenes.update>[1],
       ),
     'scenes:remove': (id) => hub.scenes.remove(assertString('scenes:remove', 'id', id)),
+    'scenes:dry-run': (id) => hub.scenes.dryRun(assertString('scenes:dry-run', 'id', id)),
     'scenes:run': (id) => hub.scenes.run(assertString('scenes:run', 'id', id)),
 
     // drivers

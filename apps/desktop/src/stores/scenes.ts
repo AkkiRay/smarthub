@@ -9,7 +9,7 @@
 
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { Scene } from '@smarthome/shared';
+import type { Scene, SceneDryRunReport } from '@smarthome/shared';
 import { useToasterStore } from './toaster';
 
 // JSON-roundtrip: критично для Scene.actions[], приходящих из reactive form.
@@ -46,6 +46,10 @@ export const useScenesStore = defineStore('scenes', () => {
     scenes.value = scenes.value.filter((s) => s.id !== id);
   }
 
+  async function dryRun(id: string): Promise<SceneDryRunReport> {
+    return window.smarthome.scenes.dryRun(id);
+  }
+
   async function run(id: string) {
     const toaster = useToasterStore();
     const scene = scenes.value.find((s) => s.id === id);
@@ -59,5 +63,5 @@ export const useScenesStore = defineStore('scenes', () => {
       });
   }
 
-  return { scenes, isLoading, bootstrap, create, update, remove, run };
+  return { scenes, isLoading, bootstrap, create, update, remove, dryRun, run };
 });

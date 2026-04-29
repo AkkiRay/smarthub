@@ -57,6 +57,15 @@
               Запустить
             </BaseButton>
             <BaseButton
+              variant="ghost"
+              size="sm"
+              icon-left="check"
+              :disabled="!s.actions.length || dryRun.loadingId === s.id"
+              @click.stop="openDryRun(s.id)"
+            >
+              {{ dryRun.loadingId === s.id ? 'Проверяем' : 'Проверить' }}
+            </BaseButton>
+            <BaseButton
               variant="danger"
               size="icon-sm"
               icon-left="trash"
@@ -248,6 +257,69 @@
       @confirm="performYandexDelete"
     />
 
+    <BaseModal
+      :model-value="dryRun.open"
+      :title="
+        dryRun.report
+          ? `${SCENARIO_PREFLIGHT_MODAL_TITLE}: ${dryRun.report.sceneName}`
+          : SCENARIO_PREFLIGHT_MODAL_TITLE
+      "
+      size="lg"
+      @update:model-value="(v) => v || closeDryRun()"
+    >
+      <div v-if="dryRun.report" class="dry-run">
+        <div class="dry-run__summary" :data-state="dryRun.report.canRun ? 'ok' : 'error'">
+          <BaseIcon :name="dryRun.report.canRun ? 'check' : 'close'" :size="18" />
+          <div>
+            <strong>
+              {{ dryRun.report.canRun ? 'Сценарий готов к запуску' : 'Нужно исправить шаги' }}
+            </strong>
+            <span>
+              {{ dryRun.report.actionCount }} {{ pluralizeStep(dryRun.report.actionCount) }} ·
+              {{ formatDuration(dryRun.report.estimatedDurationMs) }} ·
+              {{ dryRun.report.errors }} ошибок · {{ dryRun.report.warnings }} предупреждений
+            </span>
+          </div>
+        </div>
+
+        <ol class="dry-run__steps">
+          <li
+            v-for="step in dryRun.report.steps"
+            :key="`${step.index}-${step.deviceId}-${step.instance}`"
+            class="dry-run__step"
+            :data-severity="step.severity"
+          >
+            <span class="dry-run__index">{{ step.index + 1 }}</span>
+            <div class="dry-run__body">
+              <header class="dry-run__row">
+                <strong>{{ step.deviceName }}</strong>
+                <span>{{ formatDelay(step.delayMs) }}</span>
+              </header>
+              <p>{{ step.message }}</p>
+              <code
+                >{{ step.capability }} / {{ step.instance }} = {{ formatValue(step.value) }}</code
+              >
+              <span class="dry-run__status">{{ labelForDeviceStatus(step.deviceStatus) }}</span>
+            </div>
+          </li>
+        </ol>
+      </div>
+      <p v-else class="text--small">Нет данных для проверки.</p>
+
+      <template #footer>
+        <BaseButton variant="ghost" @click="closeDryRun">Закрыть</BaseButton>
+        <BaseButton
+          v-if="dryRun.report"
+          variant="primary"
+          icon-left="arrow-right"
+          :disabled="!dryRun.report.canRun"
+          @click="runFromDryRun"
+        >
+          Запустить
+        </BaseButton>
+      </template>
+    </BaseModal>
+
     <SceneEditor
       v-if="editor.open"
       :mode="editor.mode"
@@ -272,6 +344,7 @@
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
 import type {
   Scene,
+  SceneDryRunReport,
   YandexHomeScenario,
   YandexHomeScenarioDetails,
   YandexHomeTriggerType,
@@ -300,6 +373,7 @@ const devices = useDevicesStore();
 const station = useYandexStationStore();
 const toaster = useToasterStore();
 const root = useTemplateRef<HTMLElement>('root');
+const SCENARIO_PREFLIGHT_MODAL_TITLE = 'Проверка сценария';
 
 const reveal = useSeamlessReveal({
   scope: root,
@@ -549,6 +623,73 @@ async function onSave(draft: Omit<Scene, 'id' | 'createdAt' | 'updatedAt'>): Pro
 
 async function run(id: string): Promise<void> {
   await scenes.run(id);
+}
+
+const dryRun = reactive<{
+  open: boolean;
+  loadingId: string | null;
+  report: SceneDryRunReport | null;
+}>({
+  open: false,
+  loadingId: null,
+  report: null,
+});
+
+async function openDryRun(id: string): Promise<void> {
+  dryRun.loadingId = id;
+  try {
+    dryRun.report = await scenes.dryRun(id);
+    dryRun.open = true;
+  } catch (e) {
+    toaster.push({ kind: 'error', message: (e as Error).message });
+  } finally {
+    dryRun.loadingId = null;
+  }
+}
+
+function closeDryRun(): void {
+  dryRun.open = false;
+  dryRun.report = null;
+}
+
+async function runFromDryRun(): Promise<void> {
+  const report = dryRun.report;
+  if (!report?.canRun) return;
+  closeDryRun();
+  await run(report.sceneId);
+}
+
+function formatDuration(ms: number): string {
+  if (ms <= 0) return 'сразу';
+  if (ms < 1000) return `${ms} мс`;
+  return `${(ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1)} с`;
+}
+
+function formatDelay(ms: number): string {
+  return ms > 0 ? `+${formatDuration(ms)}` : 'сразу';
+}
+
+function formatValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+function labelForDeviceStatus(status: string): string {
+  switch (status) {
+    case 'online':
+      return 'online';
+    case 'offline':
+      return 'offline';
+    case 'unreachable':
+      return 'unreachable';
+    case 'pairing':
+      return 'pairing';
+    case 'missing':
+      return 'missing';
+    default:
+      return status;
+  }
 }
 
 const removeTarget = reactive<{ open: boolean; id: string; name: string }>({
@@ -808,6 +949,124 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--color-text-muted);
   text-transform: lowercase;
+}
+
+.dry-run {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  &__summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--color-border-subtle);
+
+    &[data-state='ok'] {
+      color: var(--color-brand-mint);
+      border-color: rgba(var(--color-brand-mint-rgb), 0.3);
+    }
+    &[data-state='error'] {
+      color: var(--color-danger);
+      border-color: rgba(var(--color-danger-rgb), 0.3);
+    }
+
+    div {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    span {
+      color: var(--color-text-muted);
+      font-size: 12px;
+    }
+  }
+
+  &__steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  &__step {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--color-border-subtle);
+
+    &[data-severity='ok'] {
+      border-color: rgba(var(--color-brand-mint-rgb), 0.22);
+    }
+    &[data-severity='warning'] {
+      border-color: rgba(var(--color-brand-amber-rgb), 0.3);
+    }
+    &[data-severity='error'] {
+      border-color: rgba(var(--color-danger-rgb), 0.3);
+    }
+  }
+
+  &__index {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: var(--font-family-mono);
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-secondary);
+  }
+
+  &__body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    p {
+      margin: 0;
+      color: var(--color-text-secondary);
+      font-size: 13px;
+    }
+    code {
+      width: fit-content;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      color: var(--color-text-muted);
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 5px;
+      padding: 3px 6px;
+    }
+  }
+
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+
+    span {
+      flex-shrink: 0;
+      color: var(--color-text-muted);
+      font-family: var(--font-family-mono);
+      font-size: 12px;
+    }
+  }
+
+  &__status {
+    width: fit-content;
+    color: var(--color-text-muted);
+    font-size: 11px;
+  }
 }
 
 .scene {
