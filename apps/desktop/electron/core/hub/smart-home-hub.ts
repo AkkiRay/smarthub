@@ -259,6 +259,7 @@ export function createSmartHomeHub(deps: SmartHomeHubDeps) {
       deps.sceneService.create(input),
     update: (id: string, patch: Partial<Scene>): Scene => deps.sceneService.update(id, patch),
     remove: (id: string): void => deps.sceneService.remove(id),
+    dryRun: (id: string) => deps.sceneService.dryRun(id),
     run: (id: string): Promise<void> => deps.sceneService.run(id),
   };
 

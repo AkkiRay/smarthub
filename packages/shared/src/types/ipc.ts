@@ -24,7 +24,7 @@ import type {
   DriverId,
   Room,
 } from './device.js';
-import type { Scene } from './scene.js';
+import type { Scene, SceneDryRunReport } from './scene.js';
 import type { DriverDescriptor } from './driver.js';
 import type { DriverCredentials } from './driver-credentials.js';
 import type {
@@ -100,6 +100,7 @@ export interface IpcApi {
     create: (input: Omit<Scene, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Scene>;
     update: (id: string, patch: Partial<Scene>) => Promise<Scene>;
     remove: (id: string) => Promise<void>;
+    dryRun: (id: string) => Promise<SceneDryRunReport>;
     run: (id: string) => Promise<void>;
   };
   drivers: {

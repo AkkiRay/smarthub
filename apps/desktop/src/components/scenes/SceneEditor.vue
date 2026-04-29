@@ -247,6 +247,14 @@ const ON_OFF_OPTIONS: SelectOption[] = [
   { value: 'false', label: 'Выключить' },
 ];
 
+const SCENE_SAFE_QUASAR_INSTANCES = new Set([
+  'phrase_action',
+  'text_action',
+  'voice_action',
+  'tts',
+  'sound_command',
+]);
+
 function hexFromInt(n: number): string {
   const safe = Number.isFinite(n) ? n & 0xffffff : 0xb85dff;
   return '#' + safe.toString(16).padStart(6, '0');
@@ -325,13 +333,22 @@ const deviceOptions = computed<SelectOption[]>(() =>
 function capabilitiesFor(deviceId: string): Array<{ value: string; label: string }> {
   const device = devices.byId.get(deviceId);
   if (!device) return [];
-  return device.capabilities.map((c) => {
-    const instance = c.state?.instance ?? (c.parameters?.['instance'] as string | undefined) ?? '';
-    return {
-      value: `${c.type}::${instance}`,
-      label: capabilityLabel(c.type, instance),
-    };
-  });
+  return device.capabilities
+    .map((c) => {
+      const instance =
+        c.state?.instance ?? (c.parameters?.['instance'] as string | undefined) ?? '';
+      return {
+        type: c.type,
+        instance,
+        value: `${c.type}::${instance}`,
+        label: capabilityLabel(c.type, instance),
+      };
+    })
+    .filter((c) => {
+      if (c.type !== 'devices.capabilities.quasar') return true;
+      return SCENE_SAFE_QUASAR_INSTANCES.has(c.instance);
+    })
+    .map(({ value, label }) => ({ value, label }));
 }
 
 function capabilityOptionsFor(deviceId: string): SelectOption[] {

@@ -31,6 +31,7 @@ import {
 
 type StatusListener = (status: YandexStationStatus) => void;
 type EventListener = (event: YandexStationEvent) => void;
+type YandexStationProbeResult = { ok: boolean; status: YandexStationStatus; error?: string };
 
 export type YandexStationClient = ReturnType<typeof createYandexStationClient>;
 
@@ -486,6 +487,66 @@ export function createYandexStationClient() {
     },
 
     getStatus: (): YandexStationStatus => status,
+
+    async probeConnection(): Promise<YandexStationProbeResult> {
+      const current = status;
+      if (
+        !socket ||
+        socket.readyState !== WebSocket.OPEN ||
+        !creds ||
+        current.connection !== 'connected'
+      ) {
+        return {
+          ok: false,
+          status: current,
+          error: current.lastError ?? 'Station websocket is not connected',
+        };
+      }
+
+      const ws = socket;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const cleanup = (): void => {
+            clearTimeout(timer);
+            ws.off('pong', onPong);
+            ws.off('close', onClose);
+            ws.off('error', onError);
+          };
+          const onPong = (): void => {
+            cleanup();
+            resolve();
+          };
+          const onClose = (code: number): void => {
+            cleanup();
+            reject(new Error(`Socket closed during ping (${code})`));
+          };
+          const onError = (err: Error): void => {
+            cleanup();
+            reject(err);
+          };
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('Station ping timeout'));
+          }, ALICE_TIMEOUT.WS_RESPONSE_MS);
+
+          ws.once('pong', onPong);
+          ws.once('close', onClose);
+          ws.once('error', onError);
+          ws.ping((err: Error | undefined) => {
+            if (!err) return;
+            cleanup();
+            reject(err);
+          });
+        });
+        updateStatus({ lastSeenAt: new Date().toISOString(), lastError: undefined });
+        return { ok: true, status };
+      } catch (e) {
+        const error = getErrorMessage(e);
+        setConnectionState('error', { lastError: error });
+        pushEvent({ kind: 'error', summary: `Station ping failed: ${error}` });
+        return { ok: false, status, error };
+      }
+    },
 
     async connect(input: YandexStationCreds): Promise<YandexStationStatus> {
       manualDisconnect = true;

@@ -244,8 +244,25 @@ async function bootstrap(): Promise<SmartHomeHub> {
   const deviceRegistry = createDeviceRegistry({ deviceStore, driverRegistry });
   const discovery = createDiscoveryService({ driverRegistry, deviceRegistry, settings });
   const polling = createPollingService({ deviceRegistry });
-  const sceneService = createSceneService({ deviceStore, deviceRegistry });
   const yandexStation = createYandexStationClient();
+  const sceneService = createSceneService({
+    deviceStore,
+    deviceRegistry,
+    checkStationAlive: async () => {
+      const result = await yandexStation.probeConnection();
+      return {
+        ok: result.ok,
+        connection: result.status.connection,
+        error: result.error ?? result.status.lastError,
+      };
+    },
+    stopStationMedia: async () => {
+      if (yandexStation.getStatus().connection !== 'connected') return;
+      const result = await yandexStation.sendCommand({ kind: 'stop' });
+      if (!result.ok) throw new Error(result.error ?? 'Station stop command failed');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    },
+  });
   const yandexStationDiscovery = createYandexStationDiscovery();
 
   // AliceBridge инстанцируется до hub'а; колбэки замкнуты на deviceRegistry/sceneService.

@@ -70,6 +70,7 @@ const api: IpcApi = {
     create: (input) => invoke('scenes:create', input),
     update: (id, patch) => invoke('scenes:update', id, patch),
     remove: (id) => invoke('scenes:remove', id),
+    dryRun: (id) => invoke('scenes:dry-run', id),
     run: (id) => invoke('scenes:run', id),
   },
   drivers: {
