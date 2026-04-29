@@ -52,6 +52,8 @@ export interface IpcApi {
     getVersion: () => Promise<string>;
     getPlatform: () => Promise<Platform>;
     getHubInfo: () => Promise<HubInfo>;
+    getDiagnostics: () => Promise<AppDiagnostics>;
+    openLogsFolder: () => Promise<void>;
     openExternal: (url: string) => Promise<void>;
     /** Fire-and-forget report renderer-ошибок в main.log. */
     reportError: (payload: { source: string; message: string; stack?: string }) => void;
@@ -347,6 +349,18 @@ export interface HubInfo {
   platform: Platform;
   pairedDevices: number;
   yandexStationConnected: boolean;
+}
+
+export interface AppDiagnostics {
+  version: string;
+  platform: Platform;
+  nodeVersion: string;
+  electronVersion: string;
+  chromeVersion: string;
+  mockEnabled: boolean;
+  devtoolsEnabled: boolean;
+  logPath: string;
+  userDataPath: string;
 }
 
 /** Фаза сканирования одного драйвера в текущем discovery-cycle. */
