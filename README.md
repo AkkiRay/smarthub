@@ -1,9 +1,8 @@
 # SmartHome Hub
 
-Премиум-десктоп для управления Wi-Fi устройствами умного дома и **колонкой
+Десктоп для управления Wi-Fi устройствами умного дома и **колонкой
 Алисы** прямо с ПК. Полностью **offline-first**: один exe, без внешнего
-backend-а, без Docker, без облаков. Премиум-UI в фирменной палитре Алисы
-(`#6852FF → #A961FF → #FF61E6`), GSAP-анимации, продуманные user flow.
+backend-а, без Docker, без облаков.
 
 [![Latest tag](https://img.shields.io/github/v/tag/AkkiRay/smarthub?label=latest&style=flat&color=8b5cf6&cacheSeconds=120)](https://github.com/AkkiRay/smarthub/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/AkkiRay/smarthub/ci.yml?branch=main&style=flat&label=ci&cacheSeconds=120)](https://github.com/AkkiRay/smarthub/actions/workflows/ci.yml)
